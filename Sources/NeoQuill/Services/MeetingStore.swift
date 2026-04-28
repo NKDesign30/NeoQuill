@@ -126,6 +126,13 @@ final class MeetingStore: ObservableObject {
 
     // MARK: - Writes (vorerst nur intern; später vom RecordingManager genutzt)
 
+    /// Public Insert: schreibt Summary + Detail und published meetings neu.
+    func insert(summary: MeetingSummary, detail: MeetingDetail) {
+        insertSummary(summary)
+        upsertDetail(detail)
+        readBackToPublished()
+    }
+
     private func insertSummary(_ m: MeetingSummary) {
         let sql = """
             INSERT OR REPLACE INTO meeting

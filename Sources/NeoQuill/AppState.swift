@@ -39,6 +39,7 @@ final class AppState: ObservableObject {
     @Published private(set) var liveSession: LiveSession = MockData.liveSession
 
     init() {
+        recorder.store = store
         store.$meetings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in

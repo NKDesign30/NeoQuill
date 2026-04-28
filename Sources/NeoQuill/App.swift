@@ -1,4 +1,5 @@
 import SwiftUI
+import KeyboardShortcuts
 
 @main
 struct NeoQuillApp: App {
@@ -16,9 +17,19 @@ struct NeoQuillApp: App {
                 .frame(minWidth: 1080, idealWidth: 1280, minHeight: 700, idealHeight: 820)
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
+                .onAppear {
+                    KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [weak state] in
+                        Task { @MainActor in await state?.recorder.toggle() }
+                    }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+
+        Settings {
+            SettingsView()
+                .preferredColorScheme(.dark)
+        }
     }
 }
 

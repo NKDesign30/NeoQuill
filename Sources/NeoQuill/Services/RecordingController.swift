@@ -28,6 +28,7 @@ final class RecordingController: ObservableObject {
     private let audioCapture = AudioCapture()
     private let transcriber = LiveTranscriber(modelName: "openai_whisper-tiny")
     private let permissions = PermissionGate()
+    weak var store: MeetingStore?
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
@@ -89,6 +90,7 @@ final class RecordingController: ObservableObject {
         }
 
         do {
+            audioCapture.clearRecording()
             try await audioCapture.start()
             liveLines.removeAll()
             chunkOffset = 0
@@ -109,12 +111,93 @@ final class RecordingController: ObservableObject {
         stopElapsedTimer()
         await audioCapture.stop()
 
-        // Phase 4b: finalen Mix → PostProcessor → MeetingStore.upsertDetail.
-        // Erst mal nur sauberer Idle-Übergang.
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        let snapshot = liveLines
+        let runtime = elapsed
+        let started = startedAt ?? Date()
+        await persistMeeting(lines: snapshot, runtime: runtime, started: started)
+
         state = .idle
         statusText = "Bereit"
     }
+
+    private func persistMeeting(lines: [TranscriptLine], runtime: TimeInterval, started: Date) async {
+        guard let store else { return }
+        let title = generateTitle(from: lines, started: started)
+        let id = "rec-\(Int(started.timeIntervalSince1970))"
+        let durationShort = formatDurationShort(runtime)
+        let timeShort = Self.timeFormatter.string(from: started)
+        let dateShort = Self.dateShortFormatter.string(from: started)
+        let dateLong = Self.dateLongFormatter.string(from: started)
+        let endDate = started.addingTimeInterval(runtime)
+        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
+        let wordCount = lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let group = "Diesen Monat"
+
+        let participants: [Participant] = [
+            .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
+        ]
+
+        let summary = MeetingSummary(
+            id: id, title: title, date: dateShort, time: timeShort,
+            duration: durationShort, platform: .call, wordCount: wordCount,
+            group: group, participantIds: ["NK"], unread: true
+        )
+
+        let detail = MeetingDetail(
+            id: id,
+            title: title,
+            dateLong: dateLong,
+            timeRange: timeRange,
+            duration: durationShort,
+            platform: .call,
+            wordCount: wordCount,
+            participants: participants,
+            tldr: lines.first.map { String($0.body.prefix(220)) }
+                ?? "Aufnahme ohne erkanntes Sprach-Material.",
+            highlights: [],
+            tasks: [],
+            chapters: [],
+            transcript: lines
+        )
+
+        store.insert(summary: summary, detail: detail)
+    }
+
+    private func generateTitle(from lines: [TranscriptLine], started: Date) -> String {
+        if let first = lines.first?.body, !first.isEmpty {
+            let prefix = first.split(separator: " ").prefix(7).joined(separator: " ")
+            return prefix
+        }
+        return "Aufnahme \(Self.timeFormatter.string(from: started))"
+    }
+
+    private func formatDurationShort(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds) / 60
+        let remainder = Int(seconds) % 60
+        if minutes == 0 { return "\(remainder)s" }
+        return "\(minutes)m \(remainder)s"
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "de_DE")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let dateShortFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "de_DE")
+        f.dateFormat = "dd. MMM."
+        return f
+    }()
+
+    private static let dateLongFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "de_DE")
+        f.dateFormat = "EEEE, dd. MMMM"
+        return f
+    }()
 
     // MARK: - Internal wiring
 

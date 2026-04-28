@@ -379,6 +379,23 @@ final class AudioCapture: NSObject, ObservableObject {
         audioLevel = sqrt(sumSquares / Float(max(samples.count, 1)))
     }
 
+    /// Snapshot der bisherigen Recording-Buffer ohne sie zu leeren.
+    /// Nach `stop()` aufrufen, um finales Transkript + Diarization zu bauen.
+    func collectFinalAudio() -> (mic: [Float], sys: [Float], mixed: [Float]) {
+        let mic = micRecording
+        let sys = sysRecording
+        let mixed = getMixedAudio()
+        return (mic, sys, mixed)
+    }
+
+    /// Buffer leeren (vor neuer Aufnahme).
+    func clearRecording() {
+        micRecording.removeAll()
+        sysRecording.removeAll()
+        micBuffer.removeAll()
+        sysBuffer.removeAll()
+    }
+
     private func getMixedAudio() -> [Float] {
         let length = max(micRecording.count, sysRecording.count)
         guard length > 0 else { return [] }
