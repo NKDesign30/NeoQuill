@@ -41,6 +41,7 @@ final class AppState: ObservableObject {
     }
 
     let store = MeetingStore()
+    let speakerStore = SpeakerStore()
     let recorder = RecordingController()
     private var cancellables: Set<AnyCancellable> = []
 
@@ -56,6 +57,7 @@ final class AppState: ObservableObject {
 
     init() {
         recorder.store = store
+        recorder.speakerStore = speakerStore
         store.$meetings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in

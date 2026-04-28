@@ -7,15 +7,41 @@ struct ParticipantBar: View {
     let totalSeconds: Int
     var accent: Color = Neon.brandPrimary
 
+    @EnvironmentObject private var state: AppState
+    @State private var showLabelSheet = false
+
     private var spokeSeconds: Int { Self.parseSpoke(participant.spoke) }
     private var percent: Int {
         guard totalSeconds > 0 else { return 0 }
         return Int((Double(spokeSeconds) / Double(totalSeconds)) * 100.0)
     }
 
+    private var isAnonymous: Bool {
+        participant.name.hasPrefix("Speaker") || participant.id.first == "S"
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Avatar(initials: participant.id, color: participant.color, size: 28)
+            Button {
+                if isAnonymous { showLabelSheet = true }
+            } label: {
+                Avatar(initials: participant.id, color: participant.color, size: 28)
+                    .overlay(alignment: .bottomTrailing) {
+                        if isAnonymous {
+                            Circle()
+                                .fill(Neon.brandPrimary)
+                                .frame(width: 10, height: 10)
+                                .overlay(
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 6, weight: .bold))
+                                        .foregroundStyle(.white)
+                                )
+                                .offset(x: 2, y: 2)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(participant.name)
@@ -40,6 +66,17 @@ struct ParticipantBar: View {
                 }
                 .frame(height: 4)
             }
+        }
+        .sheet(isPresented: $showLabelSheet) {
+            SpeakerLabelSheet(
+                participant: participant,
+                suggestedColors: [0x2EAB73, 0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259],
+                onSave: { name, color in
+                    state.recorder.labelSpeaker(internalId: participant.id, name: name, colorHex: color)
+                    showLabelSheet = false
+                },
+                onDismiss: { showLabelSheet = false }
+            )
         }
     }
 

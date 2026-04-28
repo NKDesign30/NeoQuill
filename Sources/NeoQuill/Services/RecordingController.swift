@@ -31,6 +31,7 @@ final class RecordingController: ObservableObject {
     private let diarizer = SpeakerDiarizer()
     let detector = MeetingDetector()
     weak var store: MeetingStore?
+    weak var speakerStore: SpeakerStore?
 
     private var detectorCancellable: AnyCancellable?
     private var autoDetectActive = false
@@ -131,9 +132,13 @@ final class RecordingController: ObservableObject {
         }
         modelLabel = friendlyModelLabel(model)
 
-        // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal)
+        // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal).
+        // Bekannte Sprecher werden gleich als Bias mitgegeben — Re-Identification.
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
             await diarizer.warmUp()
+            if let known = speakerStore?.fluidAudioSpeakers(), !known.isEmpty {
+                await diarizer.loadKnownSpeakers(known)
+            }
         }
 
         do {
@@ -185,12 +190,18 @@ final class RecordingController: ObservableObject {
         var participants: [Participant] = [
             .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
         ]
+        var pendingEmbeddings: [String: [Float]] = [:]
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
             let captured = audioCapture.collectFinalAudio()
             if captured.sys.count > 16_000 * 5 { // mind. 5s System-Audio
                 let diar = await runDiarization(samples: captured.sys)
                 enrichedLines = mergeSpeakers(lines: lines, diarization: diar)
                 participants = collectParticipants(lines: enrichedLines, baseDuration: durationShort)
+                for entry in diar {
+                    if pendingEmbeddings[entry.speakerId] == nil {
+                        pendingEmbeddings[entry.speakerId] = entry.embedding
+                    }
+                }
             }
         }
 
@@ -218,6 +229,29 @@ final class RecordingController: ObservableObject {
         )
 
         store.insert(summary: summary, detail: detail)
+
+        // Embeddings frisch entdeckter Speaker für später vorhalten — UI-Labeling-Sheet
+        // greift darauf zu, wenn Niko "S1 = Thorsten" tippt.
+        for (speakerId, embedding) in pendingEmbeddings where !embedding.isEmpty {
+            self.lastEmbeddings[speakerId] = embedding
+        }
+    }
+
+    /// Embeddings der letzten Aufnahme — verfügbar für das Speaker-Labeling-Sheet.
+    private(set) var lastEmbeddings: [String: [Float]] = [:]
+
+    /// Niko labelt "S1 → Thorsten" → SpeakerStore + alle bekannten Aufnahmen rückwirkend.
+    func labelSpeaker(internalId: String, name: String, colorHex: UInt32) {
+        guard let speakerStore else { return }
+        let embedding = lastEmbeddings[internalId] ?? []
+        let canonicalId = canonicalize(name: name)
+        speakerStore.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
+    }
+
+    private func canonicalize(name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let initials = trimmed.split(separator: " ").compactMap { $0.first.map(String.init) }.joined()
+        return initials.isEmpty ? trimmed : initials.uppercased()
     }
 
     private func detectedPlatform() -> Platform {
@@ -231,13 +265,25 @@ final class RecordingController: ObservableObject {
     }
 
     /// Diarisiert den System-Audio-Stream und gibt Speaker-Timeline zurück.
-    private func runDiarization(samples: [Float]) async -> [(start: TimeInterval, end: TimeInterval, speakerId: String)] {
+    /// Match gegen bekannte Sprecher (SpeakerStore) → labelt mit dem persistenten Namen
+    /// statt anonymem `S1`/`S2`. Neue Embeddings werden im Store automatisch erfasst,
+    /// sobald Niko sie über das "Wer ist das?"-Sheet labelt.
+    private func runDiarization(samples: [Float]) async -> [(start: TimeInterval, end: TimeInterval, speakerId: String, embedding: [Float])] {
         do {
             let result = try await diarizer.diarize(samples)
             return result.segments.map { seg in
-                (TimeInterval(seg.startTimeSeconds),
-                 TimeInterval(seg.endTimeSeconds),
-                 seg.speakerId)
+                let resolvedId: String
+                if let match = speakerStore?.bestMatch(for: seg.embedding) {
+                    resolvedId = match.id
+                } else {
+                    resolvedId = seg.speakerId
+                }
+                return (
+                    TimeInterval(seg.startTimeSeconds),
+                    TimeInterval(seg.endTimeSeconds),
+                    resolvedId,
+                    seg.embedding
+                )
             }
         } catch {
             NSLog("[Recorder] Diarize failed: \(error)")
@@ -249,15 +295,23 @@ final class RecordingController: ObservableObject {
     /// Mic-Lines bleiben als "NK", Sys-Lines bekommen Speaker-IDs aus Diarization.
     private func mergeSpeakers(
         lines: [TranscriptLine],
-        diarization: [(start: TimeInterval, end: TimeInterval, speakerId: String)]
+        diarization: [(start: TimeInterval, end: TimeInterval, speakerId: String, embedding: [Float])]
     ) -> [TranscriptLine] {
         guard !diarization.isEmpty else { return lines }
         return lines.map { line in
             let secs = parseTimestampSeconds(line.timestamp)
             if let match = diarization.first(where: { secs >= $0.start && secs <= $0.end }) {
-                let label = "S\(match.speakerId.suffix(1))"
+                // Wenn der Speaker bereits einen kanonischen Store-Namen hat (NK, oder
+                // ein labeled Speaker wie "TM" für Thomas), bleib bei dem. Sonst kürze
+                // FluidAudios Anonym-ID zu "S1"/"S2".
+                let resolved: String
+                if match.speakerId.count <= 3 {
+                    resolved = match.speakerId
+                } else {
+                    resolved = "S" + String(match.speakerId.suffix(1))
+                }
                 return TranscriptLine(
-                    who: label,
+                    who: resolved,
                     timestamp: line.timestamp,
                     body: line.body,
                     highlight: line.highlight
