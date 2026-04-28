@@ -96,32 +96,81 @@ final class MeetingStore: ObservableObject {
 
     private func readBackToPublished() {
         var summaries: [MeetingSummary] = []
+        var detailMap: [String: MeetingDetail] = [:]
         var stmt: OpaquePointer?
-        let sql = "SELECT id,title,date_short,time_short,duration,platform,word_count,grouping,unread FROM meeting ORDER BY created_at DESC"
+        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript FROM meeting ORDER BY created_at DESC"
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            let decoder = JSONDecoder()
             while sqlite3_step(stmt) == SQLITE_ROW {
-                let id        = String(cString: sqlite3_column_text(stmt, 0))
-                let title     = String(cString: sqlite3_column_text(stmt, 1))
-                let dateShort = String(cString: sqlite3_column_text(stmt, 2))
-                let timeShort = String(cString: sqlite3_column_text(stmt, 3))
-                let dur       = String(cString: sqlite3_column_text(stmt, 4))
-                let platStr   = String(cString: sqlite3_column_text(stmt, 5))
-                let words     = Int(sqlite3_column_int(stmt, 6))
-                let group     = String(cString: sqlite3_column_text(stmt, 7))
-                let unread    = sqlite3_column_int(stmt, 8) == 1
-                let platform  = Platform(rawValue: platStr) ?? .call
+                let id         = String(cString: sqlite3_column_text(stmt, 0))
+                let title      = String(cString: sqlite3_column_text(stmt, 1))
+                let dateShort  = String(cString: sqlite3_column_text(stmt, 2))
+                let dateLong   = String(cString: sqlite3_column_text(stmt, 3))
+                let timeShort  = String(cString: sqlite3_column_text(stmt, 4))
+                let timeRange  = textOrNil(stmt, 5) ?? ""
+                let dur        = String(cString: sqlite3_column_text(stmt, 6))
+                let platStr    = String(cString: sqlite3_column_text(stmt, 7))
+                let words      = Int(sqlite3_column_int(stmt, 8))
+                let group      = String(cString: sqlite3_column_text(stmt, 9))
+                let unread     = sqlite3_column_int(stmt, 10) == 1
+                let tldr       = textOrNil(stmt, 11) ?? ""
+                let participants  = decode([Participant].self, stmt: stmt, idx: 12, decoder: decoder) ?? []
+                let highlights = decode([Highlight].self,    stmt: stmt, idx: 13, decoder: decoder) ?? []
+                let tasks      = decode([ActionItem].self,   stmt: stmt, idx: 14, decoder: decoder) ?? []
+                let chapters   = decode([Chapter].self,      stmt: stmt, idx: 15, decoder: decoder) ?? []
+                let transcript = decode([TranscriptLine].self, stmt: stmt, idx: 16, decoder: decoder) ?? []
+                let platform   = Platform(rawValue: platStr) ?? .call
+
                 summaries.append(.init(
                     id: id, title: title, date: dateShort, time: timeShort,
                     duration: dur, platform: platform, wordCount: words,
-                    group: group, participantIds: [], unread: unread
+                    group: group, participantIds: participants.map(\.id), unread: unread
                 ))
+                detailMap[id] = MeetingDetail(
+                    id: id, title: title, dateLong: dateLong, timeRange: timeRange,
+                    duration: dur, platform: platform, wordCount: words,
+                    participants: participants, tldr: tldr,
+                    highlights: highlights, tasks: tasks, chapters: chapters, transcript: transcript
+                )
             }
         }
         sqlite3_finalize(stmt)
 
         DispatchQueue.main.async {
             self.meetings = summaries
+            self.details = detailMap
         }
+    }
+
+    private func textOrNil(_ stmt: OpaquePointer?, _ idx: Int32) -> String? {
+        guard let cstr = sqlite3_column_text(stmt, idx) else { return nil }
+        return String(cString: cstr)
+    }
+
+    private func decode<T: Decodable>(_ type: T.Type, stmt: OpaquePointer?, idx: Int32, decoder: JSONDecoder) -> T? {
+        guard let cstr = sqlite3_column_text(stmt, idx) else { return nil }
+        let s = String(cString: cstr)
+        guard !s.isEmpty, let data = s.data(using: .utf8) else { return nil }
+        return try? decoder.decode(type, from: data)
+    }
+
+    func detail(for id: String) -> MeetingDetail? {
+        details[id]
+    }
+
+    func updateTaskStatus(meetingId: String, taskId: String, status: TaskStatus) {
+        guard let d = details[meetingId] else { return }
+        var tasks = d.tasks
+        guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
+        tasks[idx].status = status
+        let upd = MeetingDetail(
+            id: d.id, title: d.title, dateLong: d.dateLong, timeRange: d.timeRange,
+            duration: d.duration, platform: d.platform, wordCount: d.wordCount,
+            participants: d.participants, tldr: d.tldr,
+            highlights: d.highlights, tasks: tasks, chapters: d.chapters, transcript: d.transcript
+        )
+        upsertDetail(upd)
+        readBackToPublished()
     }
 
     // MARK: - Writes (vorerst nur intern; später vom RecordingManager genutzt)

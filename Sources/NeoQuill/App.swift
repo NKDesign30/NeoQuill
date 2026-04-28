@@ -25,6 +25,25 @@ struct NeoQuillApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Neue Aufnahme") {
+                    Task { @MainActor in await state.recorder.toggle() }
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button("Aufnahme starten / stoppen") {
+                    Task { @MainActor in await state.recorder.toggle() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+            }
+            CommandGroup(after: .toolbar) {
+                Button("Editorial") { state.detailLayout = .editorial }
+                    .keyboardShortcut("1", modifiers: [.command, .option])
+                Button("Split") { state.detailLayout = .split }
+                    .keyboardShortcut("2", modifiers: [.command, .option])
+            }
+        }
 
         Settings {
             SettingsView()

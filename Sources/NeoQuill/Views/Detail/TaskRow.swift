@@ -5,16 +5,15 @@ import SwiftUI
 
 struct TaskRow: View {
 
-    @State var task: ActionItem
+    let task: ActionItem
     let participants: [Participant]
     var accent: Color = Neon.brandPrimary
     var isLast: Bool
+    var onToggle: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 12) {
-            Button {
-                task.status = task.status == .done ? .open : .done
-            } label: {
+            Button(action: onToggle) {
                 ZStack {
                     Circle()
                         .stroke(task.status == .done ? accent : Neon.strokeDefault, lineWidth: 1.5)

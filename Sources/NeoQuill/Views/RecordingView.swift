@@ -12,7 +12,7 @@ struct RecordingView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
-                DetailToolbar(title: "Live-Aufnahme")
+                DetailToolbar(title: "Live-Aufnahme", showLayoutSwitch: false)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 36) {

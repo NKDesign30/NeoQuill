@@ -26,8 +26,9 @@ final class RecordingController: ObservableObject {
     // MARK: - Dependencies
 
     private let audioCapture = AudioCapture()
-    private let transcriber = LiveTranscriber(modelName: "openai_whisper-tiny")
+    private let transcriber = LiveTranscriber()
     private let permissions = PermissionGate()
+    private let diarizer = SpeakerDiarizer()
     weak var store: MeetingStore?
 
     private var elapsedTimer: AnyCancellable?
@@ -81,12 +82,20 @@ final class RecordingController: ObservableObject {
             }
         }
 
-        // Modell laden — beim ersten Start lädt WhisperKit ggf. das CoreML-Modell.
-        let loaded = await transcriber.loadModel()
+        // Modell + Sprache aus Settings, sonst Defaults.
+        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-tiny")
+        let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "de")
+        let loaded = await transcriber.loadModel(model: model, language: lang)
         guard loaded else {
             state = .error(message: "WhisperKit-Modell konnte nicht geladen werden.")
             statusText = "Fehler"
             return
+        }
+        modelLabel = friendlyModelLabel(model)
+
+        // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal)
+        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
+            await diarizer.warmUp()
         }
 
         do {
@@ -248,5 +257,15 @@ final class RecordingController: ObservableObject {
     static func formatTimestamp(_ seconds: TimeInterval) -> String {
         let s = max(0, Int(seconds))
         return String(format: "%02d:%02d", s / 60, s % 60)
+    }
+
+    private func friendlyModelLabel(_ raw: String) -> String {
+        switch raw {
+        case "openai_whisper-tiny":   return "Whisper Tiny"
+        case "openai_whisper-base":   return "Whisper Base"
+        case "openai_whisper-small":  return "Whisper Small"
+        case "openai_whisper-medium": return "Whisper Medium"
+        default: return raw
+        }
     }
 }

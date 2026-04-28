@@ -4,20 +4,33 @@ import WhisperKit
 /// Live-Transkription via WhisperKit (CoreML + ANE)
 final class LiveTranscriber: @unchecked Sendable {
     private var whisperKit: WhisperKit?
-    private let modelName: String
+    private(set) var modelName: String
+    private var languageHint: String
     private var isBusy = false
-    private let queue = DispatchQueue(label: "com.neon.quill.transcriber", qos: .userInitiated)
+    private let queue = DispatchQueue(label: "com.neon.neoquill.transcriber", qos: .userInitiated)
 
     /// Callback für neue Segmente
     var onSegment: (@Sendable (TranscriptSegment) -> Void)?
 
-    init(modelName: String = "openai_whisper-tiny") {
+    init(modelName: String = "openai_whisper-tiny", language: String = "de") {
         self.modelName = modelName
+        self.languageHint = language
     }
 
     /// Lädt das WhisperKit-Modell (Download bei erstem Start)
-    func loadModel() async -> Bool {
-        if whisperKit != nil { return true }
+    /// — Falls `model` oder `language` sich geändert haben, wird neu geladen.
+    func loadModel(model: String? = nil, language: String? = nil) async -> Bool {
+        let targetModel = model ?? modelName
+        let targetLang  = language ?? languageHint
+        let needsReload = whisperKit == nil
+            || targetModel != modelName
+            || targetLang != languageHint
+
+        if !needsReload { return true }
+
+        modelName = targetModel
+        languageHint = targetLang
+        whisperKit = nil
 
         do {
             let config = WhisperKitConfig(
@@ -26,10 +39,10 @@ final class LiveTranscriber: @unchecked Sendable {
                 logLevel: .none
             )
             whisperKit = try await WhisperKit(config)
-            print("[Quill] WhisperKit geladen (\(modelName), CoreML/ANE)")
+            print("[NeoQuill] WhisperKit geladen (\(modelName), lang=\(languageHint))")
             return true
         } catch {
-            print("[Quill] WhisperKit laden fehlgeschlagen: \(error)")
+            print("[NeoQuill] WhisperKit laden fehlgeschlagen: \(error)")
             return false
         }
     }

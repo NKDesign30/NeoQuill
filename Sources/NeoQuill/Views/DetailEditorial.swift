@@ -20,7 +20,7 @@ struct DetailEditorial: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DetailToolbar(title: meeting.title)
+            DetailToolbar(title: meeting.title, meeting: meeting)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {

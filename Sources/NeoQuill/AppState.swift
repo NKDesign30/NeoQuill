@@ -25,18 +25,34 @@ enum SidebarDensity: String, CaseIterable {
 final class AppState: ObservableObject {
 
     @Published var viewMode: ViewMode = .detail
-    @Published var detailLayout: DetailLayout = .editorial
-    @Published var density: SidebarDensity = .regular
+    @Published var detailLayout: DetailLayout = AppState.loadLayout()
+    @Published var density: SidebarDensity = AppState.loadDensity()
     @Published var selectedMeetingId: String? = MockData.activeMeeting.id
     @Published var query: String = ""
+
+    private static func loadLayout() -> DetailLayout {
+        let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout) ?? "editorial"
+        return DetailLayout(rawValue: raw) ?? .editorial
+    }
+
+    private static func loadDensity() -> SidebarDensity {
+        let raw = UserDefaults.standard.string(forKey: AppSettings.sidebarDensity) ?? "regular"
+        return SidebarDensity(rawValue: raw) ?? .regular
+    }
 
     let store = MeetingStore()
     let recorder = RecordingController()
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = MockData.meetings
-    @Published private(set) var activeMeeting: MeetingDetail = MockData.activeMeeting
     @Published private(set) var liveSession: LiveSession = MockData.liveSession
+
+    var activeMeeting: MeetingDetail {
+        if let id = selectedMeetingId, let detail = store.detail(for: id) {
+            return detail
+        }
+        return MockData.activeMeeting
+    }
 
     init() {
         recorder.store = store
@@ -45,6 +61,33 @@ final class AppState: ObservableObject {
             .sink { [weak self] in
                 guard let self, !$0.isEmpty else { return }
                 self.meetings = $0
+                self.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        store.$details
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        $detailLayout
+            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.detailLayout) }
+            .store(in: &cancellables)
+        $density
+            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.sidebarDensity) }
+            .store(in: &cancellables)
+
+        // Settings → AppState reaktiv (User schaltet Density in Settings, Sidebar reagiert).
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .throttle(for: .seconds(0.2), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let newDensity = AppState.loadDensity()
+                let newLayout  = AppState.loadLayout()
+                if self.density != newDensity { self.density = newDensity }
+                if self.detailLayout != newLayout { self.detailLayout = newLayout }
             }
             .store(in: &cancellables)
 

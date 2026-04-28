@@ -10,7 +10,7 @@ struct DetailSplit: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DetailToolbar(title: meeting.title)
+            DetailToolbar(title: meeting.title, meeting: meeting)
             HStack(spacing: 0) {
                 transcript
                 Rectangle().fill(Neon.strokeHairline).frame(width: Neon.hairlineWidth)
@@ -103,7 +103,11 @@ struct DetailSplit: View {
                         task: t,
                         participants: meeting.participants,
                         accent: accent,
-                        isLast: idx == meeting.tasks.count - 1
+                        isLast: idx == meeting.tasks.count - 1,
+                        onToggle: {
+                            let next: TaskStatus = t.status == .done ? .open : .done
+                            state.store.updateTaskStatus(meetingId: meeting.id, taskId: t.id, status: next)
+                        }
                     )
                 }
             }

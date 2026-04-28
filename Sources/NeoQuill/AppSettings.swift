@@ -8,6 +8,8 @@ enum AppSettings {
     static let autoDetectMeetings  = "auto_detect_meetings"
     static let speakerDiarization  = "speaker_diarization"
     static let language            = "language"
+    static let sidebarDensity      = "sidebar_density"
+    static let detailLayout        = "detail_layout"
 }
 
 extension UserDefaults {

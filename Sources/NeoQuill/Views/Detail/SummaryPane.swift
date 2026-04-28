@@ -5,6 +5,7 @@ import SwiftUI
 struct SummaryPane: View {
     let meeting: MeetingDetail
     var accent: Color = Neon.brandPrimary
+    @EnvironmentObject private var state: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
@@ -55,7 +56,11 @@ struct SummaryPane: View {
                         task: t,
                         participants: meeting.participants,
                         accent: accent,
-                        isLast: idx == meeting.tasks.count - 1
+                        isLast: idx == meeting.tasks.count - 1,
+                        onToggle: {
+                            let next: TaskStatus = t.status == .done ? .open : .done
+                            state.store.updateTaskStatus(meetingId: meeting.id, taskId: t.id, status: next)
+                        }
                     )
                 }
             }

@@ -29,6 +29,7 @@ private struct AudioSettingsTab: View {
     @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String = ""
     @AppStorage(AppSettings.language)     private var language: String = "de"
     @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool = false
+    @AppStorage(AppSettings.sidebarDensity) private var density: String = "regular"
 
     private let availableModels = [
         ("openai_whisper-tiny",   "Tiny (schnell, ~80 MB)"),
@@ -59,6 +60,14 @@ private struct AudioSettingsTab: View {
                     Text("Deutsch").tag("de")
                     Text("Englisch").tag("en")
                     Text("Auto-Detect").tag("auto")
+                }
+            }
+
+            Section("Sidebar") {
+                Picker("Dichte", selection: $density) {
+                    Text("Kompakt").tag("compact")
+                    Text("Standard").tag("regular")
+                    Text("Komfort").tag("comfy")
                 }
             }
         }
