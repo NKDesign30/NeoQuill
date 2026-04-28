@@ -29,7 +29,11 @@ final class RecordingController: ObservableObject {
     private let transcriber = LiveTranscriber()
     private let permissions = PermissionGate()
     private let diarizer = SpeakerDiarizer()
+    let detector = MeetingDetector()
     weak var store: MeetingStore?
+
+    private var detectorCancellable: AnyCancellable?
+    private var autoDetectActive = false
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
@@ -41,6 +45,40 @@ final class RecordingController: ObservableObject {
         wireTranscriber()
         wireAudioCapture()
         refreshPermissions()
+        applyAutoDetectSetting()
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.applyAutoDetectSetting() }
+        }
+    }
+
+    /// Schaltet MeetingDetector live ein/aus, wenn Settings-Toggle wechselt.
+    func applyAutoDetectSetting() {
+        let wantOn = UserDefaults.standard.boolOr(AppSettings.autoDetectMeetings, default: false)
+        if wantOn && !autoDetectActive {
+            detector.startMonitoring()
+            autoDetectActive = true
+            detectorCancellable = detector.$isInMeeting
+                .removeDuplicates()
+                .sink { [weak self] inMeeting in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if inMeeting && !self.state.isRecording {
+                            await self.start()
+                        } else if !inMeeting && self.state.isRecording {
+                            await self.stop()
+                        }
+                    }
+                }
+        } else if !wantOn && autoDetectActive {
+            detector.stopMonitoring()
+            detectorCancellable?.cancel()
+            detectorCancellable = nil
+            autoDetectActive = false
+        }
     }
 
     func refreshPermissions() {
@@ -142,14 +180,24 @@ final class RecordingController: ObservableObject {
         let wordCount = lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
         let group = "Diesen Monat"
 
-        let participants: [Participant] = [
+        // Phase 7: FluidAudio-Diarize auf System-Audio-Buffer wenn aktiviert.
+        var enrichedLines = lines
+        var participants: [Participant] = [
             .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
         ]
+        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
+            let captured = audioCapture.collectFinalAudio()
+            if captured.sys.count > 16_000 * 5 { // mind. 5s System-Audio
+                let diar = await runDiarization(samples: captured.sys)
+                enrichedLines = mergeSpeakers(lines: lines, diarization: diar)
+                participants = collectParticipants(lines: enrichedLines, baseDuration: durationShort)
+            }
+        }
 
         let summary = MeetingSummary(
             id: id, title: title, date: dateShort, time: timeShort,
-            duration: durationShort, platform: .call, wordCount: wordCount,
-            group: group, participantIds: ["NK"], unread: true
+            duration: durationShort, platform: detectedPlatform(), wordCount: wordCount,
+            group: group, participantIds: participants.map(\.id), unread: true
         )
 
         let detail = MeetingDetail(
@@ -158,18 +206,93 @@ final class RecordingController: ObservableObject {
             dateLong: dateLong,
             timeRange: timeRange,
             duration: durationShort,
-            platform: .call,
+            platform: detectedPlatform(),
             wordCount: wordCount,
             participants: participants,
-            tldr: lines.first.map { String($0.body.prefix(220)) }
+            tldr: enrichedLines.first.map { String($0.body.prefix(220)) }
                 ?? "Aufnahme ohne erkanntes Sprach-Material.",
             highlights: [],
             tasks: [],
             chapters: [],
-            transcript: lines
+            transcript: enrichedLines
         )
 
         store.insert(summary: summary, detail: detail)
+    }
+
+    private func detectedPlatform() -> Platform {
+        switch detector.detectedApp {
+        case .teams:    return .teams
+        case .zoom:     return .zoom
+        case .browser:  return .meet
+        case .facetime, .slack, .discord, .webex, .unknown:
+            return .call
+        }
+    }
+
+    /// Diarisiert den System-Audio-Stream und gibt Speaker-Timeline zurück.
+    private func runDiarization(samples: [Float]) async -> [(start: TimeInterval, end: TimeInterval, speakerId: String)] {
+        do {
+            let result = try await diarizer.diarize(samples)
+            return result.segments.map { seg in
+                (TimeInterval(seg.startTimeSeconds),
+                 TimeInterval(seg.endTimeSeconds),
+                 seg.speakerId)
+            }
+        } catch {
+            NSLog("[Recorder] Diarize failed: \(error)")
+            return []
+        }
+    }
+
+    /// Match TranscriptLines (mit Mono-Timestamps) auf Diarize-Segments.
+    /// Mic-Lines bleiben als "NK", Sys-Lines bekommen Speaker-IDs aus Diarization.
+    private func mergeSpeakers(
+        lines: [TranscriptLine],
+        diarization: [(start: TimeInterval, end: TimeInterval, speakerId: String)]
+    ) -> [TranscriptLine] {
+        guard !diarization.isEmpty else { return lines }
+        return lines.map { line in
+            let secs = parseTimestampSeconds(line.timestamp)
+            if let match = diarization.first(where: { secs >= $0.start && secs <= $0.end }) {
+                let label = "S\(match.speakerId.suffix(1))"
+                return TranscriptLine(
+                    who: label,
+                    timestamp: line.timestamp,
+                    body: line.body,
+                    highlight: line.highlight
+                )
+            }
+            return line
+        }
+    }
+
+    private func parseTimestampSeconds(_ ts: String) -> TimeInterval {
+        let parts = ts.split(separator: ":")
+        guard parts.count == 2,
+              let m = Int(parts[0]), let s = Int(parts[1]) else { return 0 }
+        return TimeInterval(m * 60 + s)
+    }
+
+    private func collectParticipants(
+        lines: [TranscriptLine],
+        baseDuration: String
+    ) -> [Participant] {
+        let speakerIds = Set(lines.map(\.who))
+        let palette: [(String, UInt32)] = [
+            ("NK", 0x2EAB73), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
+            ("S3", 0x409CFF), ("S4", 0xD4845A)
+        ]
+        return speakerIds.compactMap { id in
+            guard let entry = palette.first(where: { $0.0 == id }) else {
+                return Participant(id: id, name: "Speaker \(id)", role: "Erkannt",
+                                   colorHex: 0x8E8E8A, spoke: baseDuration)
+            }
+            let name = id == "NK" ? "Niko Knez" : "Speaker \(id)"
+            let role = id == "NK" ? "NK Design" : "Erkannt"
+            return Participant(id: id, name: name, role: role,
+                               colorHex: entry.1, spoke: baseDuration)
+        }
     }
 
     private func generateTitle(from lines: [TranscriptLine], started: Date) -> String {

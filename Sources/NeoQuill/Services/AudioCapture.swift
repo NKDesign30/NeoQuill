@@ -280,16 +280,21 @@ final class AudioCapture: NSObject, ObservableObject {
         let allMics = discoverySession.devices
         logger.warning("Verfuegbare Mics: \(allMics.map { "\($0.localizedName)" }, privacy: .public)")
 
-        // USB-Mic > Built-in > Default (BlackHole/Virtual NICHT als Mic!)
-        let mic = allMics.first {
-            ($0.localizedName.contains("USB") || $0.localizedName.contains("PodMic")
-             || $0.localizedName.contains("Yeti") || $0.localizedName.contains("Scarlett")
-             || $0.localizedName.contains("Focusrite") || $0.localizedName.contains("NT-USB"))
-            && !$0.localizedName.contains("BlackHole")
-            && !$0.localizedName.contains("Virtual")
-        }
-        ?? allMics.first { $0.localizedName.contains("MacBook") || $0.localizedName.contains("Built") }
-        ?? allMics.first { !$0.localizedName.contains("BlackHole") && !$0.localizedName.contains("Virtual") }
+        // 1. Bevorzugt: User-Wahl aus Settings (UniqueID)
+        let preferredId = UserDefaults.standard.string(forKey: "mic_device_id") ?? ""
+        let userChoice = preferredId.isEmpty ? nil : allMics.first { $0.uniqueID == preferredId }
+
+        // 2. USB-Mic > Built-in > Default (BlackHole/Virtual NICHT als Mic!)
+        let mic = userChoice
+            ?? allMics.first {
+                ($0.localizedName.contains("USB") || $0.localizedName.contains("PodMic")
+                 || $0.localizedName.contains("Yeti") || $0.localizedName.contains("Scarlett")
+                 || $0.localizedName.contains("Focusrite") || $0.localizedName.contains("NT-USB"))
+                && !$0.localizedName.contains("BlackHole")
+                && !$0.localizedName.contains("Virtual")
+            }
+            ?? allMics.first { $0.localizedName.contains("MacBook") || $0.localizedName.contains("Built") }
+            ?? allMics.first { !$0.localizedName.contains("BlackHole") && !$0.localizedName.contains("Virtual") }
 
         guard let mic = mic else {
             logger.error("Kein Mikrofon gefunden!")
