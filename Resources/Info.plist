@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>NeoQuill</string>
+    <key>CFBundleDisplayName</key>
+    <string>NeoQuill</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.neon.neoquill</string>
+    <key>CFBundleExecutable</key>
+    <string>NeoQuill</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>NeoQuill braucht Mikrofon-Zugriff für Meeting-Aufnahmen.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>NeoQuill braucht System-Audio-Zugriff um Meeting-Teilnehmer aufzunehmen.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>NeoQuill liest Kalender-Events für Meeting-Namen und Teilnehmer.</string>
+</dict>
+</plist>
