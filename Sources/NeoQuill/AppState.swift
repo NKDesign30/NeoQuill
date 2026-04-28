@@ -21,6 +21,7 @@ enum SidebarDensity: String, CaseIterable {
     case comfy
 }
 
+@MainActor
 final class AppState: ObservableObject {
 
     @Published var viewMode: ViewMode = .detail
@@ -30,6 +31,7 @@ final class AppState: ObservableObject {
     @Published var query: String = ""
 
     let store = MeetingStore()
+    let recorder = RecordingController()
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = MockData.meetings
@@ -44,6 +46,23 @@ final class AppState: ObservableObject {
                 self.meetings = $0
             }
             .store(in: &cancellables)
+
+        // Recorder-State spiegelt sich in viewMode: recording → RecordingView, sonst Detail.
+        recorder.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                if state.isRecording {
+                    self.viewMode = .recording
+                } else if case .processing = state {
+                    self.viewMode = .recording
+                } else if case .recording = state {
+                    self.viewMode = .recording
+                } else if self.viewMode == .recording {
+                    self.viewMode = .detail
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Actions
@@ -54,11 +73,15 @@ final class AppState: ObservableObject {
     }
 
     func startRecording() {
-        viewMode = .recording
+        Task { await recorder.start() }
     }
 
     func stopRecording() {
-        viewMode = .detail
+        Task { await recorder.stop() }
+    }
+
+    func toggleRecording() {
+        Task { await recorder.toggle() }
     }
 
     func showEmpty() {
@@ -66,9 +89,6 @@ final class AppState: ObservableObject {
         selectedMeetingId = nil
     }
 
-    var statusLabel: String {
-        viewMode == .recording ? "Aufnahme läuft" : "Bereit"
-    }
-
-    var isRecording: Bool { viewMode == .recording }
+    var statusLabel: String { recorder.statusText }
+    var isRecording: Bool { recorder.state.isRecording }
 }

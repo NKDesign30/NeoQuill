@@ -39,7 +39,7 @@ struct RootView: View {
                     case .split:     DetailSplit(meeting: state.activeMeeting)
                     }
                 case .recording:
-                    RecordingView(session: state.liveSession, onStop: state.stopRecording)
+                    RecordingView(recorder: state.recorder, onStop: state.stopRecording)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
