@@ -116,9 +116,13 @@ final class RecordingController: ObservableObject {
     /// dadurch ist die erste Aufnahme nahezu sofort startbereit, statt erst
     /// bei `start()` Sekunden auf den Modell-Download/Decode zu warten.
     func prewarmModels() async {
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-base")
-        let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
-        _ = await transcriber.loadModel(model: model, language: lang)
+        modelLabel = FinalSTTTranscriber.isAvailable ? FinalSTTTranscriber.label : "WhisperKit ANE"
+        if !FinalSTTTranscriber.isAvailable {
+            let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
+            let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+            _ = await transcriber.loadModel(model: model, language: lang)
+            modelLabel = friendlyModelLabel(model)
+        }
 
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
             await diarizer.warmUp()
@@ -173,15 +177,17 @@ final class RecordingController: ObservableObject {
         }
 
         // Modell + Sprache aus Settings, sonst Defaults.
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-base")
+        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
         let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "de")
-        let loaded = await transcriber.loadModel(model: model, language: lang)
-        guard loaded else {
-            state = .error(message: "WhisperKit-Modell konnte nicht geladen werden.")
-            statusText = "Fehler"
-            return
+        if !FinalSTTTranscriber.isAvailable {
+            let loaded = await transcriber.loadModel(model: model, language: lang)
+            guard loaded else {
+                state = .error(message: "WhisperKit-Modell konnte nicht geladen werden.")
+                statusText = "Fehler"
+                return
+            }
         }
-        modelLabel = friendlyModelLabel(model)
+        modelLabel = FinalSTTTranscriber.isAvailable ? FinalSTTTranscriber.label : friendlyModelLabel(model)
 
         // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal).
         // Bekannte Sprecher werden gleich als Bias mitgegeben — Re-Identification.
@@ -247,6 +253,12 @@ final class RecordingController: ObservableObject {
         }
     }
 
+    func reprocessMeeting(_ meetingId: String) {
+        Task { [weak self] in
+            await self?.reprocessMeetingAsync(meetingId)
+        }
+    }
+
     /// Setzt direkt nach Stop ein Provisional-Meeting in den Store, damit
     /// AppState in Detail-View wechselt waehrend die echte Transkription laeuft.
     private func insertProvisionalMeeting(id: String, runtime: TimeInterval, started: Date) {
@@ -283,26 +295,22 @@ final class RecordingController: ObservableObject {
         let id = meetingId
         let durationShort = formatDurationShort(runtime)
         let timeShort = Self.timeFormatter.string(from: started)
-        let dateShort = Self.dateShortFormatter.string(from: started)
         let dateLong = Self.dateLongFormatter.string(from: started)
         let endDate = started.addingTimeInterval(runtime)
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
-        let group = "Diesen Monat"
 
         let captured = audioCapture.collectFinalAudio()
+        let audioURL = persistCapturedAudio(meetingId: id, captured: captured)
 
-        statusText = "Transkribiere"
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
-        // Post-Recording Whisper-Pass — pro Stem getrennt, sequenziell durch
-        // ein einzelnes Modell. Pasrom-Pattern: Mic-Stem → garantiert NK,
-        // Sys-Stem → Remote-Speaker.
-        let micLines = await transcriber.transcribeFull(audioData: captured.mic, speaker: "NK")
-        let sysLines = await transcriber.transcribeFull(audioData: captured.sys, speaker: "S1")
-
-        // Lines zeitlich mergen — Mic + Sys haben gleichen Start-Offset (0).
-        var allLines = (micLines + sysLines).sorted { lhs, rhs in
-            parseTimestampSeconds(lhs.timestamp) < parseTimestampSeconds(rhs.timestamp)
-        }
+        var allLines = await transcribeFinalAudio(
+            mic: captured.mic,
+            system: captured.sys,
+            mixed: captured.mixed,
+            language: lang
+        )
         let provisionalTitle = generateTitle(from: allLines, started: started)
         var participants: [Participant] = [
             .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
@@ -356,10 +364,9 @@ final class RecordingController: ObservableObject {
         }
 
         // 2. Async: WAV speichern + Claude-Summary holen, dann Detail updaten.
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
         let result = await PostProcessor.process(
             meetingId: id,
-            mixedSamples: captured.mixed,
+            mixedSamples: [],
             transcriptLines: enrichedLines,
             locale: lang
         )
@@ -389,7 +396,7 @@ final class RecordingController: ObservableObject {
             tasks: tasks,
             chapters: [],
             transcript: enrichedLines,
-            audioURL: result.audioURL?.path,
+            audioURL: result.audioURL?.path ?? audioURL?.path,
             processing: false
         )
 
@@ -397,6 +404,104 @@ final class RecordingController: ObservableObject {
             finalDetail,
             summaryTitle: result.title.isEmpty ? nil : result.title
         )
+    }
+
+    private func reprocessMeetingAsync(_ meetingId: String) async {
+        guard let store, let detail = store.detail(for: meetingId), !detail.processing else { return }
+        let busy = rebuiltDetail(
+            from: detail,
+            tldr: "Final-STT läuft…",
+            processing: true
+        )
+        store.updateDetail(busy)
+        statusText = "Final-STT läuft"
+
+        let storedAudio = readStoredAudio(meetingId: meetingId, detail: detail)
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        var allLines = await transcribeFinalAudio(
+            mic: storedAudio.mic,
+            system: storedAudio.system,
+            mixed: storedAudio.mixed,
+            language: lang
+        )
+
+        var participants = allLines.isEmpty
+            ? detail.participants
+            : collectParticipants(lines: allLines, baseDuration: detail.duration)
+
+        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false),
+           diarizer.isReady,
+           storedAudio.system.count > 16_000 * 5 {
+            statusText = "Erkenne Sprecher"
+            let diar = await runDiarization(samples: storedAudio.system)
+            allLines = mergeSpeakers(lines: allLines, diarization: diar)
+            participants = collectParticipants(lines: allLines, baseDuration: detail.duration)
+        }
+
+        let wordCount = allLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        guard !allLines.isEmpty else {
+            let empty = rebuiltDetail(
+                from: detail,
+                title: "Aufnahme ohne Sprache",
+                wordCount: 0,
+                participants: participants,
+                tldr: "Keine Sprach-Inhalte erkannt.",
+                highlights: [],
+                tasks: [],
+                transcript: [],
+                audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
+                processing: false
+            )
+            store.updateDetail(empty, summaryTitle: empty.title)
+            statusText = "Bereit"
+            return
+        }
+
+        let transcribed = rebuiltDetail(
+            from: detail,
+            title: generateTitle(from: allLines, started: Date()),
+            wordCount: wordCount,
+            participants: participants,
+            tldr: "KI-Zusammenfassung läuft…",
+            highlights: [],
+            tasks: [],
+            transcript: allLines,
+            audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
+            processing: true
+        )
+        store.updateDetail(transcribed, summaryTitle: transcribed.title)
+
+        statusText = "KI verarbeitet"
+        let result = await PostProcessor.process(
+            meetingId: detail.id,
+            mixedSamples: [],
+            transcriptLines: allLines,
+            locale: lang
+        )
+        let highlights = result.highlights.map { mapAIHighlight($0) }
+        let tasks = result.tasks.enumerated().map { idx, t in
+            ActionItem(
+                id: "\(detail.id)-reprocess-task-\(idx)",
+                who: t.who.isEmpty ? "??" : t.who,
+                task: t.task,
+                due: t.due,
+                status: t.status == "done" ? .done : .open
+            )
+        }
+        let final = rebuiltDetail(
+            from: transcribed,
+            title: result.title.isEmpty ? transcribed.title : result.title,
+            wordCount: wordCount,
+            participants: participants,
+            tldr: result.tldr,
+            highlights: highlights,
+            tasks: tasks,
+            transcript: allLines,
+            audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
+            processing: false
+        )
+        store.updateDetail(final, summaryTitle: result.title.isEmpty ? nil : result.title)
+        statusText = "Bereit"
     }
 
     private func mapAIHighlight(_ ai: HighlightAI) -> Highlight {
@@ -409,21 +514,160 @@ final class RecordingController: ObservableObject {
         return Highlight(label: ai.label, text: ai.text, tone: tone)
     }
 
+    private func persistCapturedAudio(
+        meetingId: String,
+        captured: (mic: [Float], sys: [Float], mixed: [Float])
+    ) -> URL? {
+        do {
+            let mixURL = try AudioWriter.persist(id: meetingId, stem: .mix, samples: captured.mixed)
+            _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: captured.mic)
+            _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: captured.sys)
+            return mixURL
+        } catch {
+            NSLog("[RecordingController] Stem persist failed: \(error)")
+            return nil
+        }
+    }
+
     /// Embeddings der letzten Aufnahme — verfügbar für das Speaker-Labeling-Sheet.
     private(set) var lastEmbeddings: [String: [Float]] = [:]
 
     /// Niko labelt "S1 → Thorsten" → SpeakerStore + alle bekannten Aufnahmen rückwirkend.
-    func labelSpeaker(internalId: String, name: String, colorHex: UInt32) {
-        guard let speakerStore else { return }
+    func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) {
         let embedding = lastEmbeddings[internalId] ?? []
         let canonicalId = canonicalize(name: name)
-        speakerStore.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
+        if !embedding.isEmpty {
+            speakerStore?.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
+        }
+        if let meetingId {
+            store?.relabelSpeaker(
+                meetingId: meetingId,
+                from: internalId,
+                to: canonicalId,
+                name: name,
+                colorHex: colorHex
+            )
+        }
     }
 
     private func canonicalize(name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let initials = trimmed.split(separator: " ").compactMap { $0.first.map(String.init) }.joined()
         return initials.isEmpty ? trimmed : initials.uppercased()
+    }
+
+    private func readStoredAudio(
+        meetingId: String,
+        detail: MeetingDetail
+    ) -> (mic: [Float], system: [Float], mixed: [Float], audioURL: URL?) {
+        let fileManager = FileManager.default
+        let micURL = AudioWriter.url(id: meetingId, stem: .mic)
+        let systemURL = AudioWriter.url(id: meetingId, stem: .system)
+        let derivedMixURL = AudioWriter.url(id: meetingId, stem: .mix)
+        let storedMixURL = detail.audioURL.map { URL(fileURLWithPath: $0) }
+        let mixURL = [storedMixURL, derivedMixURL]
+            .compactMap { $0 }
+            .first { fileManager.fileExists(atPath: $0.path) }
+
+        let mic = fileManager.fileExists(atPath: micURL.path)
+            ? ((try? AudioWriter.readSamples(from: micURL)) ?? [])
+            : []
+        let system = fileManager.fileExists(atPath: systemURL.path)
+            ? ((try? AudioWriter.readSamples(from: systemURL)) ?? [])
+            : []
+        let mixed = mixURL.flatMap { try? AudioWriter.readSamples(from: $0) } ?? []
+        return (mic: mic, system: system, mixed: mixed, audioURL: mixURL)
+    }
+
+    private func transcribeFinalAudio(
+        mic: [Float],
+        system: [Float],
+        mixed: [Float],
+        language: String
+    ) async -> [TranscriptLine] {
+        let micLines = await transcribeFinalStem(audioData: mic, speaker: "NK", language: language)
+        let systemLines = await transcribeFinalStem(audioData: system, speaker: "S1", language: language)
+        var lines = sortedTranscript(micLines + systemLines)
+
+        if transcriptNeedsMixedFallback(lines: lines, totalSamples: max(mic.count, system.count)),
+           !mixed.isEmpty {
+            let mixedLines = await transcribeFinalStem(audioData: mixed, speaker: "S1", language: language)
+            if transcriptWordCount(mixedLines) > transcriptWordCount(lines) {
+                lines = sortedTranscript(mixedLines)
+            }
+        }
+
+        return lines
+    }
+
+    private func sortedTranscript(_ lines: [TranscriptLine]) -> [TranscriptLine] {
+        lines.sorted { lhs, rhs in
+            parseTimestampSeconds(lhs.timestamp) < parseTimestampSeconds(rhs.timestamp)
+        }
+    }
+
+    private func transcriptNeedsMixedFallback(lines: [TranscriptLine], totalSamples: Int) -> Bool {
+        let words = transcriptWordCount(lines)
+        if lines.isEmpty { return true }
+        let seconds = totalSamples / 16_000
+        if seconds >= 12 && words < max(4, seconds / 3) { return true }
+        let uniqueTexts = Set(lines.map { $0.body.lowercased() })
+        if lines.count >= 4 && uniqueTexts.count <= lines.count / 2 { return true }
+        return false
+    }
+
+    private func transcriptWordCount(_ lines: [TranscriptLine]) -> Int {
+        lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+    }
+
+    private func rebuiltDetail(
+        from detail: MeetingDetail,
+        title: String? = nil,
+        wordCount: Int? = nil,
+        participants: [Participant]? = nil,
+        tldr: String? = nil,
+        highlights: [Highlight]? = nil,
+        tasks: [ActionItem]? = nil,
+        transcript: [TranscriptLine]? = nil,
+        audioURL: String? = nil,
+        processing: Bool? = nil
+    ) -> MeetingDetail {
+        MeetingDetail(
+            id: detail.id,
+            title: title ?? detail.title,
+            dateLong: detail.dateLong,
+            timeRange: detail.timeRange,
+            duration: detail.duration,
+            platform: detail.platform,
+            wordCount: wordCount ?? detail.wordCount,
+            participants: participants ?? detail.participants,
+            tldr: tldr ?? detail.tldr,
+            highlights: highlights ?? detail.highlights,
+            tasks: tasks ?? detail.tasks,
+            chapters: detail.chapters,
+            transcript: transcript ?? detail.transcript,
+            audioURL: audioURL ?? detail.audioURL,
+            processing: processing ?? detail.processing
+        )
+    }
+
+    private func transcribeFinalStem(audioData: [Float], speaker: String, language: String) async -> [TranscriptLine] {
+        guard !audioData.isEmpty else { return [] }
+        if FinalSTTTranscriber.isAvailable {
+            do {
+                return try await FinalSTTTranscriber.transcribe(
+                    audioData: audioData,
+                    speaker: speaker,
+                    language: language
+                )
+            } catch {
+                print("[NeoQuill] Final-STT Fallback auf WhisperKit (\(speaker)): \(error)")
+            }
+        }
+        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: language)
+        _ = await transcriber.loadModel(model: model, language: lang)
+        return await transcriber.transcribeFull(audioData: audioData, speaker: speaker)
     }
 
     private func detectedPlatform() -> Platform {
@@ -448,7 +692,7 @@ final class RecordingController: ObservableObject {
                 if let match = speakerStore?.bestMatch(for: seg.embedding) {
                     resolvedId = match.id
                 } else {
-                    resolvedId = seg.speakerId
+                    resolvedId = displaySpeakerId(for: seg.speakerId)
                 }
                 return (
                     TimeInterval(seg.startTimeSeconds),
@@ -480,17 +724,8 @@ final class RecordingController: ObservableObject {
 
             let secs = parseTimestampSeconds(line.timestamp)
             if let match = diarization.first(where: { secs >= $0.start && secs <= $0.end }) {
-                // Wenn der Speaker bereits einen kanonischen Store-Namen hat
-                // (z.B. ein labeled Speaker wie "TM" fuer Thomas), bleib bei dem.
-                // Sonst kuerze FluidAudios Anonym-ID zu "S1"/"S2".
-                let resolved: String
-                if match.speakerId.count <= 3 {
-                    resolved = match.speakerId
-                } else {
-                    resolved = "S" + String(match.speakerId.suffix(1))
-                }
                 return TranscriptLine(
-                    who: resolved,
+                    who: match.speakerId,
                     timestamp: line.timestamp,
                     body: line.body,
                     highlight: line.highlight
@@ -498,6 +733,17 @@ final class RecordingController: ObservableObject {
             }
             return line
         }
+    }
+
+    private func displaySpeakerId(for rawId: String) -> String {
+        let trimmed = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "S1" }
+        let upper = trimmed.uppercased()
+        if upper.hasPrefix("S"), upper.dropFirst().allSatisfy(\.isNumber) { return upper }
+        if let numeric = Int(trimmed) { return "S\(numeric + 1)" }
+        let trailingDigits = String(trimmed.reversed().prefix { $0.isNumber }.reversed())
+        if let numeric = Int(trailingDigits) { return "S\(numeric + 1)" }
+        return upper.count <= 3 ? upper : "S1"
     }
 
     private func parseTimestampSeconds(_ ts: String) -> TimeInterval {
@@ -511,12 +757,20 @@ final class RecordingController: ObservableObject {
         lines: [TranscriptLine],
         baseDuration: String
     ) -> [Participant] {
-        let speakerIds = Set(lines.map(\.who))
+        let speakerIds = Set(lines.map(\.who)).sorted { lhs, rhs in
+            if lhs == "NK" { return true }
+            if rhs == "NK" { return false }
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }
         let palette: [(String, UInt32)] = [
             ("NK", 0x2EAB73), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
             ("S3", 0x409CFF), ("S4", 0xD4845A)
         ]
         return speakerIds.compactMap { id in
+            if let known = speakerStore?.speaker(for: id) {
+                return Participant(id: id, name: known.name, role: "Bekannt",
+                                   colorHex: known.colorHex, spoke: baseDuration)
+            }
             guard let entry = palette.first(where: { $0.0 == id }) else {
                 return Participant(id: id, name: "Speaker \(id)", role: "Erkannt",
                                    colorHex: 0x8E8E8A, spoke: baseDuration)

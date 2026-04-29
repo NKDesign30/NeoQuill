@@ -12,7 +12,7 @@ final class LiveTranscriber: @unchecked Sendable {
     /// Callback für neue Segmente
     var onSegment: (@Sendable (TranscriptSegment) -> Void)?
 
-    init(modelName: String = "openai_whisper-base", language: String = "de") {
+    init(modelName: String = "openai_whisper-small", language: String = "de") {
         self.modelName = modelName
         self.languageHint = language
     }
@@ -52,8 +52,9 @@ final class LiveTranscriber: @unchecked Sendable {
         guard whisperKit != nil else { return }
         guard !isBusy else { return }
 
+        let prepared = Self.prepareForSpeech(audioData)
         // Einfacher Energy-Check — Stille rausfiltern
-        let rms = sqrt(audioData.reduce(0) { $0 + $1 * $1 } / Float(max(audioData.count, 1)))
+        let rms = sqrt(prepared.reduce(0) { $0 + $1 * $1 } / Float(max(prepared.count, 1)))
         guard rms > 0.005 else { return }
 
         isBusy = true
@@ -66,12 +67,13 @@ final class LiveTranscriber: @unchecked Sendable {
             language: lang,
             usePrefillPrompt: true,
             skipSpecialTokens: true,
-            withoutTimestamps: false
+            withoutTimestamps: false,
+            suppressBlank: true
         )
 
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let results = try await kit.transcribe(audioArray: audioData, decodeOptions: options)
+                let results = try await kit.transcribe(audioArray: prepared, decodeOptions: options)
 
                 for result in results {
                     for segment in result.segments {
@@ -115,16 +117,22 @@ final class LiveTranscriber: @unchecked Sendable {
             language: lang,
             usePrefillPrompt: true,
             skipSpecialTokens: true,
-            withoutTimestamps: false
+            withoutTimestamps: false,
+            suppressBlank: true
         )
         do {
-            let results = try await kit.transcribe(audioArray: audioData, decodeOptions: options)
+            let prepared = Self.prepareForSpeech(audioData)
+            guard !prepared.isEmpty else { return [] }
+            let results = try await kit.transcribe(audioArray: prepared, decodeOptions: options)
             var lines: [TranscriptLine] = []
+            var lastText = ""
             for result in results {
                 for segment in result.segments {
                     let raw = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
                     let cleaned = Self.cleanTokens(raw)
                     if cleaned.isEmpty { continue }
+                    if cleaned.caseInsensitiveCompare(lastText) == .orderedSame { continue }
+                    lastText = cleaned
                     let mins = Int(segment.start) / 60
                     let secs = Int(segment.start) % 60
                     let ts = String(format: "%02d:%02d", mins, secs)
@@ -171,6 +179,22 @@ final class LiveTranscriber: @unchecked Sendable {
             s.removeSubrange(r)
         }
         if s.contains("♪") || s.contains("♫") { return "" }
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.range(of: #"^\*[^*]+\*$"#, options: .regularExpression) != nil { return "" }
+        let lower = s.lowercased()
+        let noiseOnly = ["klirren", "musik", "applaus", "lachen", "husten", "räuspern"]
+        if noiseOnly.contains(where: { lower == $0 || lower == "*\($0)*" }) { return "" }
+        return s
+    }
+
+    static func prepareForSpeech(_ samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return [] }
+        let cleaned = samples.map { $0.isFinite ? $0 : 0 }
+        let rms = sqrt(cleaned.reduce(Float(0)) { $0 + $1 * $1 } / Float(cleaned.count))
+        guard rms > 0.00035 else { return [] }
+        let peak = cleaned.reduce(Float(0)) { max($0, abs($1)) }
+        guard peak > 0 else { return [] }
+        let gain = min(Float(16), Float(0.85) / peak)
+        return cleaned.map { min(max($0 * gain, -0.95), 0.95) }
     }
 }

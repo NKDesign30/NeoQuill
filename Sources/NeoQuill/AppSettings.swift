@@ -10,6 +10,17 @@ enum AppSettings {
     static let language            = "language"
     static let sidebarDensity      = "sidebar_density"
     static let detailLayout        = "detail_layout"
+
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            autoDetectMeetings: true,
+            speakerDiarization: true,
+            whisperModel: "openai_whisper-small",
+            language: "de",
+            sidebarDensity: "regular",
+            detailLayout: "editorial",
+        ])
+    }
 }
 
 extension UserDefaults {

@@ -84,6 +84,8 @@ final class MeetingDetector: ObservableObject {
     }
 
     func startMonitoring() {
+        guard timer == nil else { return }
+        runDetectionInBackground()
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.runDetectionInBackground()
         }
@@ -143,7 +145,11 @@ final class MeetingDetector: ObservableObject {
         // Strategie 1: Teams Power Assertion (zuverlaessigste Methode, auch bei gemutetem Mic)
         if Self.hasTeamsPowerAssertion() { return .teams }
 
-        // Strategie 2: Mic aktiv bei einer ANDEREN App (nicht Quill selbst)
+        // Strategie 2: CoreAudio Process-Status. Teams setzt 2026 nicht immer
+        // eine Power Assertion, taucht aber als laufender Audio-Prozess auf.
+        if let app = Self.detectRunningCallAudioProcess() { return app }
+
+        // Strategie 3: Mic aktiv bei einer ANDEREN App (nicht Quill selbst)
         // Wir prüfen ob ein Input-Device IO hat, das NICHT das RØDE/USB-Mic ist
         // (Quill nutzt das RØDE selbst, das wuerde sonst immer triggern)
         let externalMicActive = Self.isMicrophoneInUseExcludingUSB()
@@ -176,6 +182,83 @@ final class MeetingDetector: ObservableObject {
         }
 
         return nil
+    }
+
+    nonisolated private static func detectRunningCallAudioProcess() -> CallApp? {
+        let running = runningAudioBundleIds()
+        guard !running.isEmpty else { return nil }
+        let priority: [CallApp] = [.teams, .zoom, .facetime, .slack, .webex, .discord, .browser]
+        return priority.first { app in
+            app.bundleIdentifiers.contains { target in
+                running.contains { bundleId in
+                    bundleId == target || bundleId.hasPrefix(target + ".")
+                }
+            }
+        }
+    }
+
+    nonisolated private static func runningAudioBundleIds() -> Set<String> {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var dataSize: UInt32 = 0
+        let sizeStatus = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &dataSize
+        )
+        guard sizeStatus == noErr, dataSize > 0 else { return [] }
+
+        let count = Int(dataSize) / MemoryLayout<AudioObjectID>.size
+        var objectIDs = [AudioObjectID](repeating: kAudioObjectUnknown, count: count)
+        let dataStatus = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &dataSize,
+            &objectIDs
+        )
+        guard dataStatus == noErr else { return [] }
+
+        return Set(objectIDs.compactMap { objectID in
+            guard Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningInput)
+                    || Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningOutput)
+                    || Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunning),
+                  let bundleId = Self.readProcessBundleId(objectID)
+            else { return nil }
+            return bundleId
+        })
+    }
+
+    nonisolated private static func readProcessBundleId(_ objectID: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyBundleID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var bundleID: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &bundleID)
+        guard status == noErr, let bundleID else { return nil }
+        let result = bundleID.takeUnretainedValue() as String
+        return result.isEmpty ? nil : result
+    }
+
+    nonisolated private static func readProcessIsRunning(_ objectID: AudioObjectID, selector: AudioObjectPropertySelector) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &value)
+        return status == noErr && value != 0
     }
 
 

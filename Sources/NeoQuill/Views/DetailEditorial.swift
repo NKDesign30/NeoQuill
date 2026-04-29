@@ -41,6 +41,7 @@ struct DetailEditorial: View {
 
             AudioPlayer(
                 totalSeconds: parseDuration(meeting.duration),
+                audioURL: meeting.audioURL,
                 accent: accent,
                 waveformSeed: abs(meeting.id.hashValue) % 9999
             )
@@ -60,11 +61,39 @@ struct DetailEditorial: View {
                 )
             }
             Spacer()
+            transcriptStatusPill
         }
         .padding(.horizontal, 48)
         .background(Neon.surfaceBackground.opacity(0.92))
         .overlay(alignment: .bottom) {
             Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
+        }
+    }
+
+    @ViewBuilder
+    private var transcriptStatusPill: some View {
+        if meeting.processing {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.65)
+                Text("Finalisiert")
+                    .font(.neonMono(10, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(accent.opacity(0.10)))
+        } else if !meeting.transcript.isEmpty {
+            HStack(spacing: 6) {
+                GlyphView(name: .checkCircle, size: 11, color: accent)
+                Text("Final")
+                    .font(.neonMono(10, weight: .semibold))
+                    .foregroundStyle(accent)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(accent.opacity(0.10)))
         }
     }
 

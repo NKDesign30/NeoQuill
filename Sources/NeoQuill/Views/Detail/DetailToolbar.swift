@@ -27,9 +27,10 @@ struct DetailToolbar: View {
                 Rectangle().fill(Neon.strokeHairline).frame(width: 1, height: 18).padding(.horizontal, 4)
             }
 
-            ToolbarButton(icon: .copy,   label: "Kopieren") { copyAction() }
-            ToolbarButton(icon: .export, label: "Export")   { exportAction() }
-            ToolbarButton(icon: .share,  label: "Teilen")   { shareAction() }
+            ToolbarButton(icon: .refresh, label: "Final-STT", active: meeting?.processing == true) { reprocessAction() }
+            ToolbarButton(icon: .copy,    label: "Kopieren") { copyAction() }
+            ToolbarButton(icon: .export,  label: "Export")   { exportAction() }
+            ToolbarButton(icon: .share,   label: "Teilen")   { shareAction() }
 
             Rectangle()
                 .fill(Neon.strokeHairline)
@@ -48,6 +49,11 @@ struct DetailToolbar: View {
     private func copyAction() {
         guard let m = meeting else { return }
         MeetingExporter.copyToPasteboard(m)
+    }
+
+    private func reprocessAction() {
+        guard let m = meeting, !m.processing else { return }
+        state.reprocessMeeting(m.id)
     }
 
     private func exportAction() {

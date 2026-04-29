@@ -62,9 +62,13 @@ final class SpeakerStore: ObservableObject {
         reload()
     }
 
+    func speaker(for id: String) -> LabeledSpeaker? {
+        speakers.first { $0.id == id }
+    }
+
     /// Übergibt alle bekannten Speaker an FluidAudio für Re-Identification beim nächsten Diarize.
     func fluidAudioSpeakers() -> [Speaker] {
-        speakers.map { ls in
+        speakers.filter { !$0.embedding.isEmpty }.map { ls in
             Speaker(
                 id: ls.id,
                 name: ls.name,

@@ -306,11 +306,11 @@ final class ProcessAudioTap: @unchecked Sendable {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var uid: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         let err = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid)
-        guard err == noErr else { throw TapError.formatError }
-        return uid as String
+        guard err == noErr, let uid else { throw TapError.formatError }
+        return uid.takeUnretainedValue() as String
     }
 
     private func readTapFormat(_ tapID: AudioObjectID) throws -> AudioStreamBasicDescription {
@@ -332,11 +332,11 @@ final class ProcessAudioTap: @unchecked Sendable {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        var bundleID: CFString = "" as CFString
-        var size = UInt32(MemoryLayout<CFString>.size)
+        var bundleID: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         let err = AudioObjectGetPropertyData(objectID, &address, 0, nil, &size, &bundleID)
-        guard err == noErr else { return nil }
-        let result = bundleID as String
+        guard err == noErr, let bundleID else { return nil }
+        let result = bundleID.takeUnretainedValue() as String
         return result.isEmpty ? nil : result
     }
 

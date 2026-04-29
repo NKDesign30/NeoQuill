@@ -136,6 +136,10 @@ final class AppState: ObservableObject {
         Task { await recorder.toggle() }
     }
 
+    func reprocessMeeting(_ meetingId: String) {
+        recorder.reprocessMeeting(meetingId)
+    }
+
     func showEmpty() {
         viewMode = .empty
         selectedMeetingId = nil

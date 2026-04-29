@@ -127,12 +127,8 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
             return nil
         }
 
-        guard let format = AVAudioFormat(
-            standardFormatWithSampleRate: asbd.mSampleRate,
-            channels: asbd.mChannelsPerFrame
-        ) else {
-            return nil
-        }
+        guard asbd.mSampleRate > 0 else { return nil }
+        let format = AVAudioFormat(cmAudioFormatDescription: formatDesc)
 
         return try? sampleBuffer.withAudioBufferList { audioBufferList, _ -> AVAudioPCMBuffer? in
             return AVAudioPCMBuffer(

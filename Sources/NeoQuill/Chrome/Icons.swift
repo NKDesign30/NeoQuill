@@ -23,6 +23,7 @@ enum Glyph {
         case stop             = "stop.fill"
         case rewind           = "backward.fill"
         case forward          = "forward.fill"
+        case refresh          = "arrow.triangle.2.circlepath"
         case share            = "square.and.arrow.up"
         case more             = "ellipsis"
         case copy             = "doc.on.doc"

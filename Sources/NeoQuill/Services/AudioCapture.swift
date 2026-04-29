@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreAudio
 import CoreMedia
 import Combine
@@ -41,6 +41,9 @@ final class AudioCapture: NSObject, ObservableObject {
 
     // Mic Capture
     private var micSession: AVCaptureSession?
+    private var micOutput: AVCaptureAudioDataOutput?
+    private var micEngine: AVAudioEngine?
+    private var micFallbackTimer: Timer?
     private let micOutputQueue = DispatchQueue(label: "com.quill.mic-capture", qos: .userInitiated)
     nonisolated(unsafe) var micCallbackCount: Int = 0
     nonisolated(unsafe) var micConverter: AVAudioConverter?
@@ -167,6 +170,13 @@ final class AudioCapture: NSObject, ObservableObject {
                 }
             }
         }
+        if micGranted {
+            micFallbackTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
+                Task { @MainActor in
+                    self?.checkMicFallback()
+                }
+            }
+        }
     }
 
     func startSystemAudioLate() async {
@@ -220,11 +230,40 @@ final class AudioCapture: NSObject, ObservableObject {
         }
     }
 
+    /// AVCapture liefert bei manchen Teams/RØDE-Konstellationen nur die ersten
+    /// Frames und verstummt dann. Dann greifen wir auf AVAudioEngine Default-Input
+    /// zurück, statt am Ende einen leeren Mic-Stem zu speichern.
+    private func checkMicFallback() {
+        guard isCapturing else { return }
+        let micSamples = micRecording.count
+        diagLog("MIC FALLBACK CHECK: mic=\(micSamples) samples after 4s")
+        guard micSamples < 8_000 else {
+            diagLog("MIC OK: \(micSamples) samples after 4s — keeping AVCapture")
+            return
+        }
+
+        logger.warning("Mic-Capture liefert kaum Daten — Fallback auf AVAudioEngine")
+        diagLog("MIC DEAD — switching to AVAudioEngine fallback")
+        micSession?.stopRunning()
+        micSession = nil
+        micOutput = nil
+        micConverter = nil
+
+        do {
+            try startMicEngineFallback()
+        } catch {
+            logger.error("AVAudioEngine Mic-Fallback fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            diagLog("MIC ENGINE FAILED: \(error.localizedDescription)")
+        }
+    }
+
     func stop() async {
         chunkTimer?.invalidate()
         chunkTimer = nil
         tapFallbackTimer?.invalidate()
         tapFallbackTimer = nil
+        micFallbackTimer?.invalidate()
+        micFallbackTimer = nil
 
         processTap?.stop()
         processTap = nil
@@ -236,7 +275,11 @@ final class AudioCapture: NSObject, ObservableObject {
 
         micSession?.stopRunning()
         micSession = nil
+        micOutput = nil
         micConverter = nil
+        micEngine?.inputNode.removeTap(onBus: 0)
+        micEngine?.stop()
+        micEngine = nil
 
         flushChunk(force: true)
 
@@ -324,7 +367,64 @@ final class AudioCapture: NSObject, ObservableObject {
 
         session.startRunning()
         micSession = session
+        micOutput = audioOutput
         logger.warning("Mic-Capture gestartet (\(mic.localizedName, privacy: .public))")
+    }
+
+    private func startMicEngineFallback() throws {
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let sourceFormat = input.outputFormat(forBus: 0)
+        guard sourceFormat.sampleRate > 0, sourceFormat.channelCount > 0 else {
+            throw CaptureError.formatError
+        }
+
+        input.installTap(onBus: 0, bufferSize: 2048, format: sourceFormat) { buffer, _ in
+            guard let samples = Self.convertTo16kMono(buffer) else { return }
+            Task { @MainActor in
+                self.appendAudio(samples, source: "Mic")
+            }
+        }
+        engine.prepare()
+        try engine.start()
+        micEngine = engine
+        currentMicName = currentMicName.isEmpty ? "System-Mikrofon" : "\(currentMicName) · Engine"
+        logger.warning("Mic-Fallback AVAudioEngine gestartet: \(sourceFormat, privacy: .public)")
+        diagLog("MIC ENGINE STARTED: format=\(sourceFormat)")
+    }
+
+    nonisolated private static func convertTo16kMono(_ buffer: AVAudioPCMBuffer) -> [Float]? {
+        let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        )!
+        guard buffer.frameLength > 0,
+              let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else { return nil }
+
+        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+        guard outputFrameCount > 0,
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount)
+        else { return nil }
+
+        var error: NSError?
+        var hasData = true
+        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if hasData {
+                hasData = false
+                outStatus.pointee = .haveData
+                return buffer
+            }
+            outStatus.pointee = .noDataNow
+            return nil
+        }
+
+        guard error == nil,
+              let channel = outputBuffer.floatChannelData?[0],
+              outputBuffer.frameLength > 0 else { return nil }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(outputBuffer.frameLength)))
     }
 
     // MARK: - Buffer Management
@@ -334,9 +434,10 @@ final class AudioCapture: NSObject, ObservableObject {
 
         // NaN/Inf rauswerfen — sonst bricht der RMS-Akkumulator (Mic=NaN im Diag-Log)
         // und WhisperKit kriegt vergiftete Buffer.
-        let cleaned: [Float] = samples.contains { !$0.isFinite }
-            ? samples.map { $0.isFinite ? $0 : 0 }
-            : samples
+        let cleaned: [Float] = samples.map { sample in
+            guard sample.isFinite else { return 0 }
+            return min(max(sample, -1), 1)
+        }
 
         let nonZero = cleaned.contains { $0 != 0.0 }
         if source == "Tap" {
@@ -468,10 +569,7 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
               let asbd = formatDesc.audioStreamBasicDescription else { return }
         guard asbd.mSampleRate > 0 else { return }
 
-        guard let sourceFormat = AVAudioFormat(
-            standardFormatWithSampleRate: asbd.mSampleRate,
-            channels: asbd.mChannelsPerFrame
-        ) else { return }
+        let sourceFormat = AVAudioFormat(cmAudioFormatDescription: formatDesc)
 
         var pcmBuffer: AVAudioPCMBuffer?
         try? sampleBuffer.withAudioBufferList { audioBufferList, _ in

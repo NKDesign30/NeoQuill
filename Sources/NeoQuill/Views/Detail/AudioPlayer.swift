@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 // Sticky 64h Player: Play/Pause | Time | Waveform (120 bars) | Total | Rewind/Forward | Speed.
@@ -5,12 +6,15 @@ import SwiftUI
 struct AudioPlayer: View {
 
     var totalSeconds: Int = 0
+    var audioURL: String?
     var accent: Color = Neon.brandPrimary
     var waveformSeed: Int = 0    // Hash des Meeting-IDs → andere Aufnahme = anderes Pattern
 
     @State private var playing = false
-    @State private var position: Int = 0
+    @State private var position: TimeInterval = 0
     @State private var timer: Timer?
+    @State private var player: AVAudioPlayer?
+    @State private var loadFailed = false
 
     private var bars: [Double] {
         let seed = Double(waveformSeed)
@@ -32,11 +36,11 @@ struct AudioPlayer: View {
     var body: some View {
         HStack(spacing: 14) {
             playPauseButton
-            timeLabel(Self.formatted(seconds: position), tertiary: false)
+            timeLabel(Self.formatted(seconds: Int(position)), tertiary: false)
             waveform
             timeLabel(Self.formatted(seconds: safeTotal), tertiary: true)
-            ToolbarButton(icon: .rewind)
-            ToolbarButton(icon: .forward)
+            ToolbarButton(icon: .rewind) { seek(by: -10) }
+            ToolbarButton(icon: .forward) { seek(by: 10) }
             speedPill
         }
         .padding(.horizontal, 20)
@@ -45,28 +49,23 @@ struct AudioPlayer: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
         }
-        .onDisappear { timer?.invalidate() }
+        .onDisappear { stopTimer(); player?.pause() }
+        .onChange(of: audioURL) { _, _ in resetPlayback() }
     }
 
     private var playPauseButton: some View {
         Button {
-            playing.toggle()
-            timer?.invalidate()
-            if playing {
-                timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                    position = min(safeTotal, position + 1)
-                    if position == safeTotal { playing = false; timer?.invalidate() }
-                }
-            }
+            togglePlayback()
         } label: {
             ZStack {
-                Circle().fill(accent)
+                Circle().fill(canPlay ? accent : Neon.textQuaternary)
                 GlyphView(name: playing ? .pause : .play, size: 14, color: .white)
             }
             .frame(width: 36, height: 36)
             .overlay(Circle().stroke(accent.opacity(0.2), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .disabled(!canPlay)
     }
 
     private func timeLabel(_ text: String, tertiary: Bool) -> some View {
@@ -91,7 +90,7 @@ struct AudioPlayer: View {
             .contentShape(Rectangle())
             .onTapGesture { value in
                 let pct = max(0, min(1, value.x / geo.size.width))
-                position = Int(Double(safeTotal) * pct)
+                seek(to: TimeInterval(safeTotal) * pct)
             }
         }
         .frame(height: 36)
@@ -107,6 +106,84 @@ struct AudioPlayer: View {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
             )
+    }
+
+    private var canPlay: Bool {
+        guard let audioURL, !audioURL.isEmpty else { return false }
+        return !loadFailed
+    }
+
+    private func togglePlayback() {
+        guard canPlay else { return }
+        if player == nil {
+            loadPlayer()
+        }
+        guard let player else { return }
+        if player.isPlaying {
+            player.pause()
+            playing = false
+            stopTimer()
+        } else {
+            player.play()
+            playing = true
+            startTimer()
+        }
+    }
+
+    private func loadPlayer() {
+        guard let audioURL else { return }
+        let url = URL(fileURLWithPath: audioURL)
+        do {
+            let p = try AVAudioPlayer(contentsOf: url)
+            p.prepareToPlay()
+            p.enableRate = true
+            p.rate = 1.0
+            player = p
+            loadFailed = false
+        } catch {
+            NSLog("[AudioPlayer] failed to load \(audioURL): \(error)")
+            loadFailed = true
+            playing = false
+        }
+    }
+
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+            guard let player else { return }
+            position = player.currentTime
+            if !player.isPlaying {
+                playing = false
+                stopTimer()
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func seek(by delta: TimeInterval) {
+        seek(to: position + delta)
+    }
+
+    private func seek(to target: TimeInterval) {
+        if player == nil {
+            loadPlayer()
+        }
+        let clamped = max(0, min(TimeInterval(safeTotal), target))
+        position = clamped
+        player?.currentTime = clamped
+    }
+
+    private func resetPlayback() {
+        stopTimer()
+        player?.stop()
+        player = nil
+        playing = false
+        position = 0
+        loadFailed = false
     }
 
     static func formatted(seconds: Int) -> String {

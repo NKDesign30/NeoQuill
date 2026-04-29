@@ -236,9 +236,65 @@ final class MeetingStore: ObservableObject {
             id: d.id, title: d.title, dateLong: d.dateLong, timeRange: d.timeRange,
             duration: d.duration, platform: d.platform, wordCount: d.wordCount,
             participants: d.participants, tldr: d.tldr,
-            highlights: d.highlights, tasks: tasks, chapters: d.chapters, transcript: d.transcript
+            highlights: d.highlights, tasks: tasks, chapters: d.chapters, transcript: d.transcript,
+            audioURL: d.audioURL, processing: d.processing
         )
         upsertDetail(upd)
+        readBackToPublished()
+    }
+
+    func relabelSpeaker(meetingId: String, from oldId: String, to newId: String, name: String, colorHex: UInt32) {
+        guard let d = details[meetingId] else { return }
+        let existingSpoke = d.participants.first { $0.id == oldId }?.spoke
+            ?? d.participants.first { $0.id == newId }?.spoke
+            ?? "0s"
+        let labeled = Participant(id: newId, name: name, role: "Bekannt", colorHex: colorHex, spoke: existingSpoke)
+
+        var participants = d.participants.filter { $0.id != newId }
+        if let idx = participants.firstIndex(where: { $0.id == oldId }) {
+            participants[idx] = labeled
+        } else {
+            participants.append(labeled)
+        }
+
+        let transcript = d.transcript.map { line in
+            guard line.who == oldId else { return line }
+            return TranscriptLine(
+                who: newId,
+                timestamp: line.timestamp,
+                body: line.body,
+                highlight: line.highlight
+            )
+        }
+        var tasks = d.tasks
+        for idx in tasks.indices where tasks[idx].who == oldId {
+            tasks[idx] = ActionItem(
+                id: tasks[idx].id,
+                who: newId,
+                task: tasks[idx].task,
+                due: tasks[idx].due,
+                status: tasks[idx].status
+            )
+        }
+
+        let updated = MeetingDetail(
+            id: d.id,
+            title: d.title,
+            dateLong: d.dateLong,
+            timeRange: d.timeRange,
+            duration: d.duration,
+            platform: d.platform,
+            wordCount: d.wordCount,
+            participants: participants,
+            tldr: d.tldr,
+            highlights: d.highlights,
+            tasks: tasks,
+            chapters: d.chapters,
+            transcript: transcript,
+            audioURL: d.audioURL,
+            processing: d.processing
+        )
+        upsertDetail(updated)
         readBackToPublished()
     }
 
@@ -279,6 +335,7 @@ final class MeetingStore: ObservableObject {
         let sql = """
             UPDATE meeting SET
               title = ?, date_long = ?, time_range = ?, tldr = ?,
+              word_count = ?,
               participants = ?, highlights = ?, tasks = ?, chapters = ?, transcript = ?,
               audio_url = ?, processing = ?
             WHERE id = ?
@@ -290,14 +347,15 @@ final class MeetingStore: ObservableObject {
         bind(stmt, 2, d.dateLong)
         bind(stmt, 3, d.timeRange)
         bind(stmt, 4, d.tldr)
-        bind(stmt, 5, jsonString(d.participants, encoder))
-        bind(stmt, 6, jsonString(d.highlights,   encoder))
-        bind(stmt, 7, jsonString(d.tasks,        encoder))
-        bind(stmt, 8, jsonString(d.chapters,     encoder))
-        bind(stmt, 9, jsonString(d.transcript,   encoder))
-        if let a = d.audioURL { bind(stmt, 10, a) } else { sqlite3_bind_null(stmt, 10) }
-        sqlite3_bind_int(stmt, 11, d.processing ? 1 : 0)
-        bind(stmt, 12, d.id)
+        sqlite3_bind_int(stmt, 5, Int32(d.wordCount))
+        bind(stmt, 6, jsonString(d.participants, encoder))
+        bind(stmt, 7, jsonString(d.highlights,   encoder))
+        bind(stmt, 8, jsonString(d.tasks,        encoder))
+        bind(stmt, 9, jsonString(d.chapters,     encoder))
+        bind(stmt, 10, jsonString(d.transcript,   encoder))
+        if let a = d.audioURL { bind(stmt, 11, a) } else { sqlite3_bind_null(stmt, 11) }
+        sqlite3_bind_int(stmt, 12, d.processing ? 1 : 0)
+        bind(stmt, 13, d.id)
         sqlite3_step(stmt)
     }
 

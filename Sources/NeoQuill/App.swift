@@ -3,20 +3,12 @@ import SwiftUI
 @main
 struct NeoQuillApp: App {
 
-    @StateObject private var state = AppState()
+    @StateObject private var state: AppState
 
     init() {
         FontRegistrar.registerAll()
-        // SettingsView zeigt diese Defaults an — UserDefaults muss sie kennen,
-        // sonst liest RecordingController `false` und Auto-Detect startet nie.
-        UserDefaults.standard.register(defaults: [
-            AppSettings.autoDetectMeetings: true,
-            AppSettings.speakerDiarization: true,
-            AppSettings.whisperModel: "openai_whisper-base",
-            AppSettings.language: "de",
-            AppSettings.sidebarDensity: "regular",
-            AppSettings.detailLayout: "editorial",
-        ])
+        AppSettings.registerDefaults()
+        _state = StateObject(wrappedValue: AppState())
     }
 
     var body: some Scene {
