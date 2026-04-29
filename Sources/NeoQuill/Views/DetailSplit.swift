@@ -6,6 +6,7 @@ struct DetailSplit: View {
     let meeting: MeetingDetail
     var accent: Color = Neon.brandPrimary
 
+    @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
 
     var body: some View {
@@ -21,7 +22,8 @@ struct DetailSplit: View {
                 totalSeconds: parseDuration(meeting.duration),
                 audioURL: meeting.audioURL,
                 accent: accent,
-                waveformSeed: abs(meeting.id.hashValue) % 9999
+                waveformSeed: abs(meeting.id.hashValue) % 9999,
+                playback: playback
             )
         }
     }

@@ -16,6 +16,7 @@ struct DetailEditorial: View {
     var accent: Color = Neon.brandPrimary
 
     @State private var tab: DetailTab = .summary
+    @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
 
     var body: some View {
@@ -30,7 +31,7 @@ struct DetailEditorial: View {
                         switch tab {
                         case .summary:    SummaryPane(meeting: meeting, accent: accent)
                         case .transcript: TranscriptPane(meeting: meeting, query: $state.query, accent: accent)
-                        case .chapters:   ChaptersPane(meeting: meeting, accent: accent)
+                        case .chapters:   ChaptersPane(meeting: meeting, accent: accent, playback: playback)
                         }
                     }
                     .padding(.horizontal, 48)
@@ -43,7 +44,8 @@ struct DetailEditorial: View {
                 totalSeconds: parseDuration(meeting.duration),
                 audioURL: meeting.audioURL,
                 accent: accent,
-                waveformSeed: abs(meeting.id.hashValue) % 9999
+                waveformSeed: abs(meeting.id.hashValue) % 9999,
+                playback: playback
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

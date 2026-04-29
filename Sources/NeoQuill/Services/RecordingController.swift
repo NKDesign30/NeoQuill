@@ -384,6 +384,14 @@ final class RecordingController: ObservableObject {
                 status: t.status == "done" ? .done : .open
             )
         }
+        let chapters = result.chapters.enumerated().map { idx, c in
+            Chapter(
+                id: "\(id)-ch-\(idx)",
+                timestamp: c.timestamp,
+                label: c.label,
+                duration: c.duration
+            )
+        }
 
         let finalDetail = MeetingDetail(
             id: id,
@@ -397,7 +405,7 @@ final class RecordingController: ObservableObject {
             tldr: result.tldr,
             highlights: highlights,
             tasks: tasks,
-            chapters: [],
+            chapters: chapters,
             transcript: enrichedLines,
             audioURL: result.audioURL?.path ?? audioURL?.path,
             processing: false
@@ -414,6 +422,9 @@ final class RecordingController: ObservableObject {
         let busy = rebuiltDetail(
             from: detail,
             tldr: "Final-STT läuft…",
+            highlights: [],
+            tasks: [],
+            chapters: [],
             processing: true
         )
         store.updateDetail(busy)
@@ -451,6 +462,7 @@ final class RecordingController: ObservableObject {
                 tldr: "Keine Sprach-Inhalte erkannt.",
                 highlights: [],
                 tasks: [],
+                chapters: [],
                 transcript: [],
                 audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
                 processing: false
@@ -491,6 +503,14 @@ final class RecordingController: ObservableObject {
                 status: t.status == "done" ? .done : .open
             )
         }
+        let chapters = result.chapters.enumerated().map { idx, c in
+            Chapter(
+                id: "\(detail.id)-reprocess-ch-\(idx)",
+                timestamp: c.timestamp,
+                label: c.label,
+                duration: c.duration
+            )
+        }
         let final = rebuiltDetail(
             from: transcribed,
             title: result.title.isEmpty ? transcribed.title : result.title,
@@ -499,6 +519,7 @@ final class RecordingController: ObservableObject {
             tldr: result.tldr,
             highlights: highlights,
             tasks: tasks,
+            chapters: chapters,
             transcript: allLines,
             audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
             processing: false
@@ -631,6 +652,7 @@ final class RecordingController: ObservableObject {
         tldr: String? = nil,
         highlights: [Highlight]? = nil,
         tasks: [ActionItem]? = nil,
+        chapters: [Chapter]? = nil,
         transcript: [TranscriptLine]? = nil,
         audioURL: String? = nil,
         processing: Bool? = nil
@@ -647,7 +669,7 @@ final class RecordingController: ObservableObject {
             tldr: tldr ?? detail.tldr,
             highlights: highlights ?? detail.highlights,
             tasks: tasks ?? detail.tasks,
-            chapters: detail.chapters,
+            chapters: chapters ?? detail.chapters,
             transcript: transcript ?? detail.transcript,
             audioURL: audioURL ?? detail.audioURL,
             processing: processing ?? detail.processing

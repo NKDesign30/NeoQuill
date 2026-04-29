@@ -9,6 +9,7 @@ struct AudioPlayer: View {
     var audioURL: String?
     var accent: Color = Neon.brandPrimary
     var waveformSeed: Int = 0    // Hash des Meeting-IDs → andere Aufnahme = anderes Pattern
+    @ObservedObject var playback: AudioPlaybackController
 
     @State private var playing = false
     @State private var position: TimeInterval = 0
@@ -51,6 +52,24 @@ struct AudioPlayer: View {
         }
         .onDisappear { stopTimer(); player?.pause() }
         .onChange(of: audioURL) { _, _ in resetPlayback() }
+        .onChange(of: playback.seekTo) { _, target in
+            guard let target else { return }
+            handleExternalSeek(to: target)
+            playback.clearSeek()
+        }
+    }
+
+    /// Externer Seek von z.B. ChaptersPane: springt zur Sekunde und startet
+    /// die Wiedergabe (User-Erwartung beim Klick auf Kapitel).
+    private func handleExternalSeek(to seconds: TimeInterval) {
+        guard canPlay else { return }
+        if player == nil { loadPlayer() }
+        seek(to: seconds)
+        if player?.isPlaying == false {
+            player?.play()
+            playing = true
+            startTimer()
+        }
     }
 
     private var playPauseButton: some View {

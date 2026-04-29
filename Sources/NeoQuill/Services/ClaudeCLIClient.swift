@@ -9,6 +9,32 @@ struct MeetingSummaryAI: Codable {
     let tldr: String
     let highlights: [HighlightAI]
     let tasks: [TaskAI]
+    let chapters: [ChapterAI]
+
+    // Defensive: wenn Haiku einen Key komplett vergisst, fallen wir auf
+    // sinnvolle Defaults statt den ganzen Decode zu killen. Sonst geht
+    // ein einzelner fehlender Key (z.B. chapters) als nil-Summary zurueck
+    // und der User sieht weder TLDR noch Highlights.
+    enum CodingKeys: String, CodingKey {
+        case title, tldr, highlights, tasks, chapters
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.title      = (try? c.decode(String.self, forKey: .title)) ?? ""
+        self.tldr       = (try? c.decode(String.self, forKey: .tldr)) ?? ""
+        self.highlights = (try? c.decode([HighlightAI].self, forKey: .highlights)) ?? []
+        self.tasks      = (try? c.decode([TaskAI].self, forKey: .tasks)) ?? []
+        self.chapters   = (try? c.decode([ChapterAI].self, forKey: .chapters)) ?? []
+    }
+
+    init(title: String, tldr: String, highlights: [HighlightAI], tasks: [TaskAI], chapters: [ChapterAI]) {
+        self.title = title
+        self.tldr = tldr
+        self.highlights = highlights
+        self.tasks = tasks
+        self.chapters = chapters
+    }
 }
 
 struct HighlightAI: Codable {
@@ -22,6 +48,12 @@ struct TaskAI: Codable {
     let task: String
     let due: String
     let status: String     // "open" / "done"
+}
+
+struct ChapterAI: Codable {
+    let timestamp: String  // "02:14" — Anfang des Themen-Blocks im Audio
+    let label: String      // "Pricing-Diskussion" — 2-5 Worte
+    let duration: String   // "6m" oder "45s"
 }
 
 enum ClaudeCLIClient {
@@ -109,6 +141,11 @@ enum ClaudeCLIClient {
           ],
           "tasks": [
             {"who": "NK", "task": "...", "due": "DD. MMM.", "status": "open"}
+          ],
+          "chapters": [
+            {"timestamp": "00:00", "label": "Begrüßung & Setup", "duration": "1m"},
+            {"timestamp": "01:12", "label": "Pricing-Diskussion", "duration": "6m"},
+            {"timestamp": "07:45", "label": "Tech-Stack-Klärung", "duration": "4m"}
           ]
         }
 
@@ -116,6 +153,12 @@ enum ClaudeCLIClient {
         - tone: "brand" für Entscheidungen, "warning" für Risiken/offene Punkte, "info" für Termine
         - status: nur "open" oder "done"
         - who: Sprecher-Initialen (z.B. NK, SE, TM) — wenn unbekannt: "??"
+        - chapters: Themen-Cluster, ZWINGEND in zeitlicher Reihenfolge.
+          - timestamp MUSS aus dem Transkript kommen (mm:ss vom ersten Line dieses Themas).
+          - label: 2-5 Worte, beschreibt WORÜBER geredet wurde (kein Fließtext).
+          - duration: "Xm" oder "XmYs" oder "Ys" — basierend auf nächstem Kapitel-Start bzw. Meeting-Ende.
+          - Typisch 2-6 Kapitel pro Meeting. Bei sehr kurzen Aufnahmen (< 3 Min) auch nur 1 Kapitel oder leer.
+          - Lieber wenige sinnvolle Kapitel als viele dünne.
         - Wenn ein Feld leer wäre: leere Liste statt erfundene Einträge
         - KEIN Markdown, KEIN Erklärtext, NUR das JSON
 
@@ -132,15 +175,16 @@ enum ClaudeCLIClient {
             trimmed = trimmed.replacingOccurrences(of: "```", with: "")
             trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        // Cut auf erstes { ... letztes }
-        guard let first = trimmed.firstIndex(of: "{"),
-              let last = trimmed.lastIndex(of: "}") else { return nil }
-        let payload = String(trimmed[first...last])
-        guard let data = payload.data(using: .utf8) else { return nil }
+        // Ab erstem `{` parsen — JSONDecoder stoppt beim ersten vollstaendigen
+        // Top-Level-Objekt. Robuster als manuelle `lastIndex(of:"}")`-Range,
+        // die bei `{}` innerhalb von String-Werten falsch zuschneidet.
+        guard let first = trimmed.firstIndex(of: "{") else { return nil }
+        let candidate = String(trimmed[first...])
+        guard let data = candidate.data(using: .utf8) else { return nil }
         do {
             return try JSONDecoder().decode(MeetingSummaryAI.self, from: data)
         } catch {
-            NSLog("[ClaudeCLI] parse failed: \(error) raw=\(payload.prefix(200))")
+            NSLog("[ClaudeCLI] parse failed: \(error) raw=\(candidate.prefix(200))")
             return nil
         }
     }

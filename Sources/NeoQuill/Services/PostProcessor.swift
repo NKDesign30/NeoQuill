@@ -9,6 +9,7 @@ struct PostProcessResult {
     let tldr: String
     let highlights: [HighlightAI]
     let tasks: [TaskAI]
+    let chapters: [ChapterAI]
     let audioURL: URL?
 }
 
@@ -22,9 +23,7 @@ enum PostProcessor {
     ) async -> PostProcessResult {
         let audioURL = persistAudio(meetingId: meetingId, samples: mixedSamples)
 
-        let transcript = transcriptLines
-            .map { "\($0.who) [\($0.timestamp)]: \($0.body)" }
-            .joined(separator: "\n")
+        let transcript = Self.formatTranscriptForPrompt(transcriptLines)
 
         guard !transcript.isEmpty else {
             return PostProcessResult(
@@ -32,6 +31,7 @@ enum PostProcessor {
                 tldr: "Keine Sprach-Inhalte erkannt.",
                 highlights: [],
                 tasks: [],
+                chapters: [],
                 audioURL: audioURL
             )
         }
@@ -43,6 +43,7 @@ enum PostProcessor {
             tldr: ai?.tldr ?? fallbackTldr(from: transcriptLines),
             highlights: ai?.highlights ?? [],
             tasks: ai?.tasks ?? [],
+            chapters: ai?.chapters ?? [],
             audioURL: audioURL
         )
     }
@@ -58,6 +59,23 @@ enum PostProcessor {
             NSLog("[PostProcessor] AudioWriter failed: \(error)")
             return nil
         }
+    }
+
+    /// Formatiert die TranscriptLines fuer den Claude-Prompt und kuerzt
+    /// lange Meetings (>500 Lines) symmetrisch (erste + letzte Lines)
+    /// damit der Prompt unter 100 KB bleibt und der ganze Meeting-Bogen
+    /// (Anfang + Ende) erhalten bleibt.
+    private static let maxLines = 500
+    private static func formatTranscriptForPrompt(_ lines: [TranscriptLine]) -> String {
+        let format: (TranscriptLine) -> String = { "\($0.who) [\($0.timestamp)]: \($0.body)" }
+        if lines.count <= maxLines {
+            return lines.map(format).joined(separator: "\n")
+        }
+        let head = lines.prefix(maxLines / 2).map(format)
+        let tail = lines.suffix(maxLines / 2).map(format)
+        let omitted = lines.count - head.count - tail.count
+        let marker = "\n\n[... \(omitted) Lines des Mittelteils gekuerzt — Anfang und Ende voll ...]\n\n"
+        return (head.joined(separator: "\n")) + marker + (tail.joined(separator: "\n"))
     }
 
     private static func fallbackTitle(from lines: [TranscriptLine]) -> String {
