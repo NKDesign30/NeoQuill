@@ -75,15 +75,59 @@ final class MeetingStore: ObservableObject {
     private func loadAll() {
         if rowCount() == 0 {
             seedMock()
+        } else {
+            // Migration für alte Mock-Seed-Bestände: created_at war früher gleich für
+            // alle Mock-Meetings → falsche Gruppen-Reihenfolge in der Sidebar.
+            // Wir verteilen Timestamps absteigend nach Mock-Index, falls Mocks noch da.
+            fixMockTimestamps()
         }
         readBackToPublished()
     }
 
+    private func fixMockTimestamps() {
+        let base = Date().timeIntervalSince1970
+        for (idx, m) in MockData.meetings.enumerated() {
+            var stmt: OpaquePointer?
+            let sql = "UPDATE meeting SET created_at = ? WHERE id = ?"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
+            sqlite3_bind_double(stmt, 1, base - Double(idx))
+            bind(stmt, 2, m.id)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
+    }
+
     private func seedMock() {
-        for m in MockData.meetings {
-            insertSummary(m)
+        // Descending fake timestamps damit die Sidebar die Mock-Daten in
+        // Insert-Order zeigt (jüngere oben). Production-Aufnahmen nutzen Date().
+        let base = Date().timeIntervalSince1970
+        for (idx, m) in MockData.meetings.enumerated() {
+            insertSummaryWithTimestamp(m, timestamp: base - Double(idx))
         }
         upsertDetail(MockData.activeMeeting)
+    }
+
+    private func insertSummaryWithTimestamp(_ m: MeetingSummary, timestamp: Double) {
+        let sql = """
+            INSERT OR REPLACE INTO meeting
+            (id,title,date_short,date_long,time_short,duration,platform,word_count,grouping,unread,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, m.id)
+        bind(stmt, 2, m.title)
+        bind(stmt, 3, m.date)
+        bind(stmt, 4, m.date)
+        bind(stmt, 5, m.time)
+        bind(stmt, 6, m.duration)
+        bind(stmt, 7, m.platform.rawValue)
+        sqlite3_bind_int(stmt, 8, Int32(m.wordCount))
+        bind(stmt, 9, m.group)
+        sqlite3_bind_int(stmt, 10, m.unread ? 1 : 0)
+        sqlite3_bind_double(stmt, 11, timestamp)
+        sqlite3_step(stmt)
     }
 
     private func rowCount() -> Int {

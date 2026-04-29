@@ -19,12 +19,21 @@ struct Sidebar: View {
             }
         }
         var dict: [String: [MeetingSummary]] = [:]
-        var order: [String] = []
         for m in filtered {
-            if dict[m.group] == nil { order.append(m.group); dict[m.group] = [] }
-            dict[m.group]?.append(m)
+            dict[m.group, default: []].append(m)
         }
-        return order.map { ($0, dict[$0] ?? []) }
+        // Festgelegte Reihenfolge: aktuelles oben, älteres unten.
+        let preferred = ["Heute", "Diese Woche", "Diesen Monat", "Früher"]
+        var ordered: [(String, [MeetingSummary])] = preferred.compactMap { key in
+            guard let group = dict[key], !group.isEmpty else { return nil }
+            return (key, group)
+        }
+        // Unbekannte Gruppen hängen unten an, alphabetisch.
+        let known = Set(preferred)
+        for key in dict.keys.sorted() where !known.contains(key) {
+            ordered.append((key, dict[key] ?? []))
+        }
+        return ordered
     }
 
     var body: some View {
