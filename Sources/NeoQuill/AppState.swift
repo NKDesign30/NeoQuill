@@ -43,6 +43,8 @@ final class AppState: ObservableObject {
     let store = MeetingStore()
     let speakerStore = SpeakerStore()
     let recorder = RecordingController()
+    let dockBadge = DockBadgeService()
+    let menuBar = MenuBarController()
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = MockData.meetings
@@ -58,6 +60,8 @@ final class AppState: ObservableObject {
     init() {
         recorder.store = store
         recorder.speakerStore = speakerStore
+        dockBadge.bind(to: recorder)
+        menuBar.install(with: recorder)
         store.$meetings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
