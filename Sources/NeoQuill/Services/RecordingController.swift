@@ -391,10 +391,12 @@ final class RecordingController: ObservableObject {
         transcriber.onSegment = { [weak self] segment in
             Task { @MainActor in
                 guard let self else { return }
+                let cleaned = LiveTranscriber.cleanTokens(segment.text)
+                guard !cleaned.isEmpty else { return }
                 let line = TranscriptLine(
                     who: "NK",
                     timestamp: Self.formatTimestamp(segment.start),
-                    body: segment.text,
+                    body: cleaned,
                     highlight: false
                 )
                 self.liveLines.append(line)

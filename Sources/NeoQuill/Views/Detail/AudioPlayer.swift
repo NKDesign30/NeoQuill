@@ -4,33 +4,37 @@ import SwiftUI
 
 struct AudioPlayer: View {
 
-    var totalSeconds: Int = 32 * 60 + 14
+    var totalSeconds: Int = 0
     var accent: Color = Neon.brandPrimary
+    var waveformSeed: Int = 0    // Hash des Meeting-IDs → andere Aufnahme = anderes Pattern
 
     @State private var playing = false
-    @State private var position: Int = 127
+    @State private var position: Int = 0
     @State private var timer: Timer?
 
     private var bars: [Double] {
-        (0..<120).map { i in
-            let seed = sin(Double(i) * 0.7) * 0.5
-                + sin(Double(i) * 0.13) * 0.4
-                + cos(Double(i) * 0.31) * 0.3
-            return 0.18 + abs(seed) * 0.7
+        let seed = Double(waveformSeed)
+        return (0..<120).map { i in
+            let v = sin(Double(i) * 0.7 + seed * 0.01) * 0.5
+                + sin(Double(i) * 0.13 + seed * 0.03) * 0.4
+                + cos(Double(i) * 0.31 + seed * 0.07) * 0.3
+            return 0.18 + abs(v) * 0.7
         }
     }
 
     private var progress: Double {
         guard totalSeconds > 0 else { return 0 }
-        return Double(position) / Double(totalSeconds)
+        return min(1.0, Double(position) / Double(totalSeconds))
     }
+
+    private var safeTotal: Int { max(totalSeconds, 1) }
 
     var body: some View {
         HStack(spacing: 14) {
             playPauseButton
             timeLabel(Self.formatted(seconds: position), tertiary: false)
             waveform
-            timeLabel(Self.formatted(seconds: totalSeconds), tertiary: true)
+            timeLabel(Self.formatted(seconds: safeTotal), tertiary: true)
             ToolbarButton(icon: .rewind)
             ToolbarButton(icon: .forward)
             speedPill
@@ -50,8 +54,8 @@ struct AudioPlayer: View {
             timer?.invalidate()
             if playing {
                 timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                    position = min(totalSeconds, position + 1)
-                    if position == totalSeconds { playing = false; timer?.invalidate() }
+                    position = min(safeTotal, position + 1)
+                    if position == safeTotal { playing = false; timer?.invalidate() }
                 }
             }
         } label: {
@@ -87,7 +91,7 @@ struct AudioPlayer: View {
             .contentShape(Rectangle())
             .onTapGesture { value in
                 let pct = max(0, min(1, value.x / geo.size.width))
-                position = Int(Double(totalSeconds) * pct)
+                position = Int(Double(safeTotal) * pct)
             }
         }
         .frame(height: 36)

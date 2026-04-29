@@ -60,20 +60,24 @@ final class LiveTranscriber: @unchecked Sendable {
         let callback = self.onSegment
         let kit = self.whisperKit!
 
+        let lang = languageHint == "auto" ? nil : languageHint
+        let options = DecodingOptions(
+            task: .transcribe,
+            language: lang,
+            usePrefillPrompt: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: false
+        )
+
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let results = try await kit.transcribe(audioArray: audioData)
+                let results = try await kit.transcribe(audioArray: audioData, decodeOptions: options)
 
                 for result in results {
                     for segment in result.segments {
-                        let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let raw = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let text = Self.cleanTokens(raw)
                         if text.isEmpty { continue }
-
-                        // Whisper-Artefakte filtern
-                        let lower = text.lowercased()
-                        if lower.hasPrefix("[") && lower.hasSuffix("]") { continue }
-                        if lower.hasPrefix("(") && lower.hasSuffix(")") { continue }
-                        if lower.contains("♪") || lower.contains("♫") { continue }
 
                         let seg = TranscriptSegment(
                             text: text,
@@ -87,7 +91,7 @@ final class LiveTranscriber: @unchecked Sendable {
                     }
                 }
             } catch {
-                print("[Quill] Transkription fehlgeschlagen: \(error)")
+                print("[NeoQuill] Transkription fehlgeschlagen: \(error)")
             }
 
             let transcriber = self
@@ -100,10 +104,31 @@ final class LiveTranscriber: @unchecked Sendable {
     /// Gibt Ressourcen frei
     func unloadModel() {
         whisperKit = nil
-        print("[Quill] WhisperKit-Modell entladen")
+        print("[NeoQuill] WhisperKit-Modell entladen")
     }
 
     deinit {
         unloadModel()
+    }
+
+    /// Räumt Whisper-Special-Tokens aus dem Output (`<|startoftranscript|>`,
+    /// `<|en|>`, `<|0.00|>`, `<|endoftext|>` etc.) plus die typischen Brackets.
+    static func cleanTokens(_ raw: String) -> String {
+        var s = raw
+        // <|...|> Tokens
+        while let start = s.range(of: "<|"),
+              let end = s.range(of: "|>", range: start.upperBound..<s.endIndex) {
+            s.removeSubrange(start.lowerBound..<end.upperBound)
+        }
+        // [Music], [Applause]
+        if let r = s.range(of: #"^\[.*\]$"#, options: .regularExpression) {
+            s.removeSubrange(r)
+        }
+        // (Hintergrund), (laughter)
+        if let r = s.range(of: #"^\(.*\)$"#, options: .regularExpression) {
+            s.removeSubrange(r)
+        }
+        if s.contains("♪") || s.contains("♫") { return "" }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -28,7 +28,7 @@ private struct AudioSettingsTab: View {
     @AppStorage(AppSettings.whisperModel) private var whisperModel: String = "openai_whisper-tiny"
     @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String = ""
     @AppStorage(AppSettings.language)     private var language: String = "de"
-    @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool = false
+    @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool = true
     @AppStorage(AppSettings.sidebarDensity) private var density: String = "regular"
 
     private let availableModels = [

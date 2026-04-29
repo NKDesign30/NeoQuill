@@ -17,7 +17,11 @@ struct DetailSplit: View {
                 summaryRail
                     .frame(width: 360)
             }
-            AudioPlayer(accent: accent)
+            AudioPlayer(
+                totalSeconds: parseDuration(meeting.duration),
+                accent: accent,
+                waveformSeed: abs(meeting.id.hashValue) % 9999
+            )
         }
     }
 

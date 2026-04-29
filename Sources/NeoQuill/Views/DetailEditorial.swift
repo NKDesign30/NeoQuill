@@ -39,7 +39,11 @@ struct DetailEditorial: View {
                 }
             }
 
-            AudioPlayer(accent: accent)
+            AudioPlayer(
+                totalSeconds: parseDuration(meeting.duration),
+                accent: accent,
+                waveformSeed: abs(meeting.id.hashValue) % 9999
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
