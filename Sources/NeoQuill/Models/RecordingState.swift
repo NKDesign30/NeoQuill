@@ -1,10 +1,12 @@
 import Foundation
 
-// State Machine für eine Aufnahme. NeoWispr-Pattern: idle → preparing → recording →
-// processing → idle. Fehler-Pfad an jeder Stelle möglich.
+// State Machine für eine Aufnahme.
+// idle → detected → preparing → recording → processing → idle
+// Detected: Auto-Detector hat eine Call-App erkannt, Pille fragt User ob aufnehmen.
 
 enum RecordingState: Equatable {
     case idle
+    case detected(app: CallApp)       // Pille zeigt "Aufnehmen?" + ✓ ✗
     case preparing                    // Permission-Check, Model-Load
     case recording(startedAt: Date)
     case processing                   // Stop gedrückt, finales Transcript+Diarize
@@ -19,6 +21,11 @@ enum RecordingState: Equatable {
 
     var isRecording: Bool {
         if case .recording = self { return true }
+        return false
+    }
+
+    var isDetected: Bool {
+        if case .detected = self { return true }
         return false
     }
 }

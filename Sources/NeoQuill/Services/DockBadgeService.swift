@@ -36,7 +36,7 @@ final class DockBadgeService {
             tile.badgeLabel = "…"
         case .processing:
             tile.badgeLabel = "✓"
-        case .idle, .error:
+        case .detected, .idle, .error:
             tile.badgeLabel = nil
         }
         tile.display()

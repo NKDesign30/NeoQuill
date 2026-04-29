@@ -200,9 +200,10 @@ final class MeetingDetector: ObservableObject {
         }
     }
 
-    /// Prüft ob ein Nicht-USB Input Device aktiv IO hat.
-    /// USB-Mics (RØDE etc.) werden ausgeschlossen, da Quill diese selbst nutzt.
-    /// Erkennt: Built-in Mic, virtuelle Audio-Devices (Teams Audio, Slack, etc.)
+    /// Prüft ob irgendein Input Device aktiv IO hat.
+    /// Erkennt: Built-in Mic, USB-Mics (RØDE etc.), Bluetooth, virtuelle Audio-Devices.
+    /// Während Quill selbst recordet, pausiert RecordingController den Detector,
+    /// daher kein Self-Trigger-Loop trotz USB-Detection.
     nonisolated private static func isMicrophoneInUseExcludingUSB() -> Bool {
         // Alle Audio-Devices holen
         var devicesAddress = AudioObjectPropertyAddress(
@@ -230,20 +231,6 @@ final class MeetingDetector: ObservableObject {
             var inputSize: UInt32 = 0
             AudioObjectGetPropertyDataSize(deviceID, &inputAddress, 0, nil, &inputSize)
             guard inputSize > 0 else { continue }
-
-            // USB-Devices ueberspringen (Quill nutzt das RØDE selbst)
-            var transportAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyTransportType,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var transportType: UInt32 = 0
-            var transportSize = UInt32(MemoryLayout<UInt32>.size)
-            AudioObjectGetPropertyData(deviceID, &transportAddress, 0, nil, &transportSize, &transportType)
-            if transportType == kAudioDeviceTransportTypeUSB { continue }
-            // Bluetooth auch ueberspringen (AirPods etc.)
-            if transportType == kAudioDeviceTransportTypeBluetooth ||
-               transportType == kAudioDeviceTransportTypeBluetoothLE { continue }
 
             // Laeuft IO auf diesem Input Device?
             var runningAddress = AudioObjectPropertyAddress(

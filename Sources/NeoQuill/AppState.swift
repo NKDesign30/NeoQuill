@@ -24,10 +24,10 @@ enum SidebarDensity: String, CaseIterable {
 @MainActor
 final class AppState: ObservableObject {
 
-    @Published var viewMode: ViewMode = .detail
+    @Published var viewMode: ViewMode = .empty
     @Published var detailLayout: DetailLayout = AppState.loadLayout()
     @Published var density: SidebarDensity = AppState.loadDensity()
-    @Published var selectedMeetingId: String? = MockData.activeMeeting.id
+    @Published var selectedMeetingId: String? = nil
     @Published var query: String = ""
 
     private static func loadLayout() -> DetailLayout {
@@ -45,16 +45,17 @@ final class AppState: ObservableObject {
     let recorder = RecordingController()
     let dockBadge = DockBadgeService()
     let menuBar = MenuBarController()
+    let pill = FloatingPillController()
     private var cancellables: Set<AnyCancellable> = []
 
-    @Published private(set) var meetings: [MeetingSummary] = MockData.meetings
+    @Published private(set) var meetings: [MeetingSummary] = []
     @Published private(set) var liveSession: LiveSession = MockData.liveSession
 
-    var activeMeeting: MeetingDetail {
-        if let id = selectedMeetingId, let detail = store.detail(for: id) {
-            return detail
-        }
-        return MockData.activeMeeting
+    /// Aktives Meeting — nil wenn nichts selektiert oder Store leer.
+    /// RootView zeigt dann EmptyView.
+    var activeMeeting: MeetingDetail? {
+        guard let id = selectedMeetingId else { return nil }
+        return store.detail(for: id)
     }
 
     init() {
@@ -62,11 +63,24 @@ final class AppState: ObservableObject {
         recorder.speakerStore = speakerStore
         dockBadge.bind(to: recorder)
         menuBar.install(with: recorder)
+        pill.bind(to: recorder)
+
+        // Whisper- und Diarizer-Modelle im Hintergrund laden damit der erste
+        // Recording-Start nahezu sofort funktioniert.
+        Task { [weak recorder] in await recorder?.prewarmModels() }
         store.$meetings
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in
-                guard let self, !$0.isEmpty else { return }
-                self.meetings = $0
+            .sink { [weak self] list in
+                guard let self else { return }
+                self.meetings = list
+                if list.isEmpty {
+                    self.selectedMeetingId = nil
+                    if self.viewMode == .detail { self.viewMode = .empty }
+                } else if self.selectedMeetingId == nil
+                          || !list.contains(where: { $0.id == self.selectedMeetingId }) {
+                    self.selectedMeetingId = list.first?.id
+                    if self.viewMode == .empty { self.viewMode = .detail }
+                }
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -97,22 +111,10 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Recorder-State spiegelt sich in viewMode: recording → RecordingView, sonst Detail.
-        recorder.$state
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                guard let self else { return }
-                if state.isRecording {
-                    self.viewMode = .recording
-                } else if case .processing = state {
-                    self.viewMode = .recording
-                } else if case .recording = state {
-                    self.viewMode = .recording
-                } else if self.viewMode == .recording {
-                    self.viewMode = .detail
-                }
-            }
-            .store(in: &cancellables)
+        // Recorder-State beeinflusst viewMode NICHT mehr — User bleibt
+        // in Detail/Empty waehrend des Recordings. Der Aufnahme-Status
+        // wird ueber die Floating-Pille (NSPanel) angezeigt, nicht im
+        // Hauptfenster.
     }
 
     // MARK: - Actions

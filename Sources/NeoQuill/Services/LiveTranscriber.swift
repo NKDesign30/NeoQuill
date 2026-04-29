@@ -12,7 +12,7 @@ final class LiveTranscriber: @unchecked Sendable {
     /// Callback für neue Segmente
     var onSegment: (@Sendable (TranscriptSegment) -> Void)?
 
-    init(modelName: String = "openai_whisper-tiny", language: String = "de") {
+    init(modelName: String = "openai_whisper-base", language: String = "de") {
         self.modelName = modelName
         self.languageHint = language
     }
@@ -98,6 +98,48 @@ final class LiveTranscriber: @unchecked Sendable {
             await MainActor.run {
                 transcriber?.isBusy = false
             }
+        }
+    }
+
+    /// Post-Recording Transkription — laeuft den Whisper-Pass auf einem
+    /// vollstaendigen Float-Array (statt 2s-Live-Chunks). Vorteile:
+    /// - Kein RMS-Schwellen-Drop bei leisen Mic-Pegeln
+    /// - Whisper sieht den ganzen Kontext (besser als chunk-by-chunk)
+    /// - Kein `isBusy`-Lock-Drop bei parallelen Streams
+    func transcribeFull(audioData: [Float], speaker: String) async -> [TranscriptLine] {
+        guard let kit = whisperKit else { return [] }
+        guard !audioData.isEmpty else { return [] }
+        let lang = languageHint == "auto" ? nil : languageHint
+        let options = DecodingOptions(
+            task: .transcribe,
+            language: lang,
+            usePrefillPrompt: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: false
+        )
+        do {
+            let results = try await kit.transcribe(audioArray: audioData, decodeOptions: options)
+            var lines: [TranscriptLine] = []
+            for result in results {
+                for segment in result.segments {
+                    let raw = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleaned = Self.cleanTokens(raw)
+                    if cleaned.isEmpty { continue }
+                    let mins = Int(segment.start) / 60
+                    let secs = Int(segment.start) % 60
+                    let ts = String(format: "%02d:%02d", mins, secs)
+                    lines.append(TranscriptLine(
+                        who: speaker,
+                        timestamp: ts,
+                        body: cleaned,
+                        highlight: false
+                    ))
+                }
+            }
+            return lines
+        } catch {
+            print("[NeoQuill] Post-Recording-Transkription fehlgeschlagen (\(speaker)): \(error)")
+            return []
         }
     }
 

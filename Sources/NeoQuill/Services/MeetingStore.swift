@@ -22,6 +22,7 @@ final class MeetingStore: ObservableObject {
         self.url = dir.appendingPathComponent("meetings.sqlite")
         open()
         migrate()
+        cleanupGarbageMeetings()
         loadAll()
     }
 
@@ -63,6 +64,10 @@ final class MeetingStore: ObservableObject {
                 transcript    TEXT
             );
         """)
+        // Spalten die später dazugekommen sind. ALTER TABLE ist idempotent
+        // wenn wir den Fehler schlucken — Spalte existiert dann schon.
+        runRaw("ALTER TABLE meeting ADD COLUMN audio_url TEXT;")
+        runRaw("ALTER TABLE meeting ADD COLUMN processing INTEGER NOT NULL DEFAULT 0;")
     }
 
     @discardableResult
@@ -70,17 +75,34 @@ final class MeetingStore: ObservableObject {
         sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
     }
 
+    /// Putzt Meetings aus früheren Test-Runs raus, deren Whisper-Output nicht
+    /// gefiltert wurde — Special-Tokens wie `<|startoftranscript|>` erscheinen
+    /// dann als Titel/TLDR. Idempotent, läuft bei jedem Boot.
+    private func cleanupGarbageMeetings() {
+        runRaw("""
+            DELETE FROM meeting WHERE
+              title LIKE '<|%' OR
+              tldr  LIKE '<|%' OR
+              transcript LIKE '%<|startoftranscript%' OR
+              transcript LIKE '%<|endoftext|%';
+        """)
+    }
+
+    /// Wischt ALLE Aufnahmen weg und re-seedet die Mock-Daten.
+    /// Wird vom Settings-Tab "Berechtigungen" aufgerufen, falls Niko explizit clean machen will.
+    func resetAllMeetings() {
+        runRaw("DELETE FROM meeting;")
+        seedMock()
+        readBackToPublished()
+    }
+
     // MARK: - Seed / Load
 
     private func loadAll() {
-        if rowCount() == 0 {
-            seedMock()
-        } else {
-            // Migration für alte Mock-Seed-Bestände: created_at war früher gleich für
-            // alle Mock-Meetings → falsche Gruppen-Reihenfolge in der Sidebar.
-            // Wir verteilen Timestamps absteigend nach Mock-Index, falls Mocks noch da.
-            fixMockTimestamps()
-        }
+        // Frühere Versionen seedeten Mocks beim ersten Start. Niko will real
+        // aufnehmen, kein Demo-Material — bei leerer DB bleibt die Sidebar leer
+        // (EmptyView greift). Mocks lassen sich über `resetAllMeetings()` aus
+        // den Settings reaktivieren.
         readBackToPublished()
     }
 
@@ -142,7 +164,7 @@ final class MeetingStore: ObservableObject {
         var summaries: [MeetingSummary] = []
         var detailMap: [String: MeetingDetail] = [:]
         var stmt: OpaquePointer?
-        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript FROM meeting ORDER BY created_at DESC"
+        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript,audio_url,processing FROM meeting ORDER BY created_at DESC"
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             let decoder = JSONDecoder()
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -163,6 +185,8 @@ final class MeetingStore: ObservableObject {
                 let tasks      = decode([ActionItem].self,   stmt: stmt, idx: 14, decoder: decoder) ?? []
                 let chapters   = decode([Chapter].self,      stmt: stmt, idx: 15, decoder: decoder) ?? []
                 let transcript = decode([TranscriptLine].self, stmt: stmt, idx: 16, decoder: decoder) ?? []
+                let audioURL   = textOrNil(stmt, 17)
+                let processing = sqlite3_column_int(stmt, 18) == 1
                 let platform   = Platform(rawValue: platStr) ?? .call
 
                 summaries.append(.init(
@@ -174,7 +198,8 @@ final class MeetingStore: ObservableObject {
                     id: id, title: title, dateLong: dateLong, timeRange: timeRange,
                     duration: dur, platform: platform, wordCount: words,
                     participants: participants, tldr: tldr,
-                    highlights: highlights, tasks: tasks, chapters: chapters, transcript: transcript
+                    highlights: highlights, tasks: tasks, chapters: chapters,
+                    transcript: transcript, audioURL: audioURL, processing: processing
                 )
             }
         }
@@ -253,23 +278,44 @@ final class MeetingStore: ObservableObject {
         let encoder = JSONEncoder()
         let sql = """
             UPDATE meeting SET
-              date_long = ?, time_range = ?, tldr = ?,
-              participants = ?, highlights = ?, tasks = ?, chapters = ?, transcript = ?
+              title = ?, date_long = ?, time_range = ?, tldr = ?,
+              participants = ?, highlights = ?, tasks = ?, chapters = ?, transcript = ?,
+              audio_url = ?, processing = ?
             WHERE id = ?
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, d.dateLong)
-        bind(stmt, 2, d.timeRange)
-        bind(stmt, 3, d.tldr)
-        bind(stmt, 4, jsonString(d.participants, encoder))
-        bind(stmt, 5, jsonString(d.highlights,   encoder))
-        bind(stmt, 6, jsonString(d.tasks,        encoder))
-        bind(stmt, 7, jsonString(d.chapters,     encoder))
-        bind(stmt, 8, jsonString(d.transcript,   encoder))
-        bind(stmt, 9, d.id)
+        bind(stmt, 1, d.title)
+        bind(stmt, 2, d.dateLong)
+        bind(stmt, 3, d.timeRange)
+        bind(stmt, 4, d.tldr)
+        bind(stmt, 5, jsonString(d.participants, encoder))
+        bind(stmt, 6, jsonString(d.highlights,   encoder))
+        bind(stmt, 7, jsonString(d.tasks,        encoder))
+        bind(stmt, 8, jsonString(d.chapters,     encoder))
+        bind(stmt, 9, jsonString(d.transcript,   encoder))
+        if let a = d.audioURL { bind(stmt, 10, a) } else { sqlite3_bind_null(stmt, 10) }
+        sqlite3_bind_int(stmt, 11, d.processing ? 1 : 0)
+        bind(stmt, 12, d.id)
         sqlite3_step(stmt)
+    }
+
+    /// Public Update — RecordingController nutzt das nach PostProcessing,
+    /// um Title/TLDR/Highlights/Tasks/AudioURL nachzureichen.
+    func updateDetail(_ detail: MeetingDetail, summaryTitle: String? = nil) {
+        upsertDetail(detail)
+        if let newTitle = summaryTitle {
+            let sql = "UPDATE meeting SET title = ? WHERE id = ?"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+                bind(stmt, 1, newTitle)
+                bind(stmt, 2, detail.id)
+                sqlite3_step(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+        readBackToPublished()
     }
 
     private func jsonString<T: Codable>(_ value: T, _ encoder: JSONEncoder) -> String {

@@ -18,7 +18,7 @@ final class RecordingController: ObservableObject {
     @Published private(set) var state: RecordingState = .idle
     @Published private(set) var liveLines: [TranscriptLine] = []
     @Published private(set) var elapsed: TimeInterval = 0
-    @Published private(set) var device: String = "Built-in Mic"
+    @Published private(set) var device: String = "Mikrofon"
     @Published private(set) var modelLabel: String = "WhisperKit ANE"
     @Published private(set) var statusText: String = "Bereit"
     @Published private(set) var hasMicPermission: Bool = false
@@ -26,6 +26,8 @@ final class RecordingController: ObservableObject {
     // MARK: - Dependencies
 
     private let audioCapture = AudioCapture()
+    /// Single Whisper-Instance fuer Post-Recording. Mic- und Sys-Stem laufen
+    /// sequenziell durch. Ein Modell = halbe RAM-Last + kein ANE-Konflikt.
     private let transcriber = LiveTranscriber()
     private let permissions = PermissionGate()
     private let diarizer = SpeakerDiarizer()
@@ -34,11 +36,13 @@ final class RecordingController: ObservableObject {
     weak var speakerStore: SpeakerStore?
 
     private var detectorCancellable: AnyCancellable?
+    private var deviceCancellable: AnyCancellable?
     private var autoDetectActive = false
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
-    private var chunkOffset: TimeInterval = 0
+    private var micChunkOffset: TimeInterval = 0
+    private var sysChunkOffset: TimeInterval = 0
 
     // MARK: - Lifecycle
 
@@ -57,6 +61,8 @@ final class RecordingController: ObservableObject {
     }
 
     /// Schaltet MeetingDetector live ein/aus, wenn Settings-Toggle wechselt.
+    /// Detector bleibt waehrend Recording AKTIV — Auto-Stop bei Aufgelegt
+    /// soll funktionieren. Self-Trigger wird durch State-Check verhindert.
     func applyAutoDetectSetting() {
         let wantOn = UserDefaults.standard.boolOr(AppSettings.autoDetectMeetings, default: false)
         if wantOn && !autoDetectActive {
@@ -67,11 +73,7 @@ final class RecordingController: ObservableObject {
                 .sink { [weak self] inMeeting in
                     Task { @MainActor in
                         guard let self else { return }
-                        if inMeeting && !self.state.isRecording {
-                            await self.start()
-                        } else if !inMeeting && self.state.isRecording {
-                            await self.stop()
-                        }
+                        self.handleDetectorChange(inMeeting: inMeeting)
                     }
                 }
         } else if !wantOn && autoDetectActive {
@@ -80,6 +82,55 @@ final class RecordingController: ObservableObject {
             detectorCancellable = nil
             autoDetectActive = false
         }
+    }
+
+    /// Reagiert auf Detector-State-Aenderungen.
+    /// - inMeeting=true + idle → Pille zeigen, User entscheidet
+    /// - inMeeting=true + bereits recording → ignorieren
+    /// - inMeeting=false + recording → automatisch stoppen
+    /// - inMeeting=false + detected (User hat noch nicht entschieden) → Pille weg
+    private func handleDetectorChange(inMeeting: Bool) {
+        if inMeeting {
+            if case .idle = state {
+                let app = detector.detectedApp
+                state = .detected(app: app)
+                statusText = "Meeting erkannt: \(app.rawValue)"
+            }
+        } else {
+            if state.isRecording {
+                Task { await self.stop() }
+            } else if case .detected = state {
+                state = .idle
+                statusText = "Bereit"
+            }
+        }
+    }
+
+    /// User hat in der Pille auf "Aufnehmen" geklickt — Recording starten.
+    func acceptDetection() async {
+        guard case .detected = state else { return }
+        await start()
+    }
+
+    /// Laedt Whisper- und Diarizer-Modelle im Hintergrund nach App-Start —
+    /// dadurch ist die erste Aufnahme nahezu sofort startbereit, statt erst
+    /// bei `start()` Sekunden auf den Modell-Download/Decode zu warten.
+    func prewarmModels() async {
+        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-base")
+        let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        _ = await transcriber.loadModel(model: model, language: lang)
+
+        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
+            await diarizer.warmUp()
+        }
+    }
+
+    /// User hat in der Pille auf "Ablehnen" geklickt — Detection fuer
+    /// diesen Call ignorieren bis er endet und ein neuer beginnt.
+    func dismissDetection() {
+        guard case .detected = state else { return }
+        state = .idle
+        statusText = "Ignoriert — wartet auf neues Meeting"
     }
 
     func refreshPermissions() {
@@ -122,7 +173,7 @@ final class RecordingController: ObservableObject {
         }
 
         // Modell + Sprache aus Settings, sonst Defaults.
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-tiny")
+        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-base")
         let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "de")
         let loaded = await transcriber.loadModel(model: model, language: lang)
         guard loaded else {
@@ -143,13 +194,24 @@ final class RecordingController: ObservableObject {
 
         do {
             audioCapture.clearRecording()
+            // BundleIds vor `start()` setzen — sonst tappt der ProcessTap einen
+            // generischen Stereo-Mix statt gezielt Teams/Zoom. Bei Auto-Detect liefert
+            // der Detector bereits die App, sonst probieren wir einmal `detectOnce`.
+            if detector.detectedApp == .unknown {
+                detector.detectOnce()
+            }
+            audioCapture.targetBundleIds = detector.detectedApp.bundleIdentifiers
             try await audioCapture.start()
             liveLines.removeAll()
-            chunkOffset = 0
+            micChunkOffset = 0
+            sysChunkOffset = 0
             startedAt = Date()
             state = .recording(startedAt: startedAt!)
             statusText = "Aufnahme läuft"
             startElapsedTimer()
+            // Detector laeuft WEITER waehrend Recording — Auto-Stop bei
+            // aufgelegtem Call braucht den. Self-Trigger wird durch
+            // `handleDetectorChange` via State-Check verhindert.
         } catch {
             state = .error(message: "Audio-Capture fehlgeschlagen: \(error.localizedDescription)")
             statusText = "Fehler"
@@ -163,40 +225,98 @@ final class RecordingController: ObservableObject {
         stopElapsedTimer()
         await audioCapture.stop()
 
-        let snapshot = liveLines
         let runtime = elapsed
         let started = startedAt ?? Date()
-        await persistMeeting(lines: snapshot, runtime: runtime, started: started)
+
+        // UI sofort entlasten: Provisional-Detail einsetzen + State auf idle,
+        // sodass die RecordingView verlassen und die Detail-View mit
+        // "Wird transkribiert…" angezeigt wird. Whisper + Claude laufen im
+        // Hintergrund und updaten das Detail wenn fertig.
+        let meetingId = "rec-\(Int(started.timeIntervalSince1970))"
+        insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started)
 
         state = .idle
         statusText = "Bereit"
+        // Detector wurde nicht pausiert — kein Resume noetig. Self-Trigger
+        // verhindert via State-Check in `handleDetectorChange`.
+
+        // Heavy Lifting im Hintergrund — Whisper auf Stems, FluidAudio-Diarize,
+        // Claude-Summary. Updated das Provisional-Detail Schritt fuer Schritt.
+        Task { [weak self] in
+            await self?.persistMeeting(meetingId: meetingId, runtime: runtime, started: started)
+        }
     }
 
-    private func persistMeeting(lines: [TranscriptLine], runtime: TimeInterval, started: Date) async {
+    /// Setzt direkt nach Stop ein Provisional-Meeting in den Store, damit
+    /// AppState in Detail-View wechselt waehrend die echte Transkription laeuft.
+    private func insertProvisionalMeeting(id: String, runtime: TimeInterval, started: Date) {
         guard let store else { return }
-        let title = generateTitle(from: lines, started: started)
-        let id = "rec-\(Int(started.timeIntervalSince1970))"
         let durationShort = formatDurationShort(runtime)
         let timeShort = Self.timeFormatter.string(from: started)
         let dateShort = Self.dateShortFormatter.string(from: started)
         let dateLong = Self.dateLongFormatter.string(from: started)
         let endDate = started.addingTimeInterval(runtime)
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
-        let wordCount = lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let provisionalTitle = "Aufnahme \(timeShort)"
+        let participants: [Participant] = [
+            .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
+        ]
+
+        let summary = MeetingSummary(
+            id: id, title: provisionalTitle, date: dateShort, time: timeShort,
+            duration: durationShort, platform: detectedPlatform(), wordCount: 0,
+            group: "Diesen Monat", participantIds: ["NK"], unread: true
+        )
+        let provisional = MeetingDetail(
+            id: id, title: provisionalTitle, dateLong: dateLong, timeRange: timeRange,
+            duration: durationShort, platform: detectedPlatform(), wordCount: 0,
+            participants: participants,
+            tldr: "Wird transkribiert…",
+            highlights: [], tasks: [], chapters: [],
+            transcript: [], audioURL: nil, processing: true
+        )
+        store.insert(summary: summary, detail: provisional)
+    }
+
+    private func persistMeeting(meetingId: String, runtime: TimeInterval, started: Date) async {
+        guard let store else { return }
+        let id = meetingId
+        let durationShort = formatDurationShort(runtime)
+        let timeShort = Self.timeFormatter.string(from: started)
+        let dateShort = Self.dateShortFormatter.string(from: started)
+        let dateLong = Self.dateLongFormatter.string(from: started)
+        let endDate = started.addingTimeInterval(runtime)
+        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
         let group = "Diesen Monat"
 
-        // Phase 7: FluidAudio-Diarize auf System-Audio-Buffer wenn aktiviert.
-        var enrichedLines = lines
+        let captured = audioCapture.collectFinalAudio()
+
+        statusText = "Transkribiere"
+
+        // Post-Recording Whisper-Pass — pro Stem getrennt, sequenziell durch
+        // ein einzelnes Modell. Pasrom-Pattern: Mic-Stem → garantiert NK,
+        // Sys-Stem → Remote-Speaker.
+        let micLines = await transcriber.transcribeFull(audioData: captured.mic, speaker: "NK")
+        let sysLines = await transcriber.transcribeFull(audioData: captured.sys, speaker: "S1")
+
+        // Lines zeitlich mergen — Mic + Sys haben gleichen Start-Offset (0).
+        var allLines = (micLines + sysLines).sorted { lhs, rhs in
+            parseTimestampSeconds(lhs.timestamp) < parseTimestampSeconds(rhs.timestamp)
+        }
+        let provisionalTitle = generateTitle(from: allLines, started: started)
         var participants: [Participant] = [
             .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
         ]
+
+        // FluidAudio-Diarize auf System-Audio (>= 5s) — labelt S1 ggf. um in S2/S3
+        // bzw. matcht gegen bekannte Speaker (Re-ID via SpeakerStore).
         var pendingEmbeddings: [String: [Float]] = [:]
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
-            let captured = audioCapture.collectFinalAudio()
-            if captured.sys.count > 16_000 * 5 { // mind. 5s System-Audio
+            if captured.sys.count > 16_000 * 5 {
+                statusText = "Erkenne Sprecher"
                 let diar = await runDiarization(samples: captured.sys)
-                enrichedLines = mergeSpeakers(lines: lines, diarization: diar)
-                participants = collectParticipants(lines: enrichedLines, baseDuration: durationShort)
+                allLines = mergeSpeakers(lines: allLines, diarization: diar)
+                participants = collectParticipants(lines: allLines, baseDuration: durationShort)
                 for entry in diar {
                     if pendingEmbeddings[entry.speakerId] == nil {
                         pendingEmbeddings[entry.speakerId] = entry.embedding
@@ -205,36 +325,88 @@ final class RecordingController: ObservableObject {
             }
         }
 
-        let summary = MeetingSummary(
-            id: id, title: title, date: dateShort, time: timeShort,
-            duration: durationShort, platform: detectedPlatform(), wordCount: wordCount,
-            group: group, participantIds: participants.map(\.id), unread: true
-        )
+        let enrichedLines = allLines
+        let wordCount = enrichedLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
 
-        let detail = MeetingDetail(
+        // Detail mit echten Lines updaten (Provisional ist schon eingefuegt).
+        let transcribed = MeetingDetail(
             id: id,
-            title: title,
+            title: provisionalTitle,
             dateLong: dateLong,
             timeRange: timeRange,
             duration: durationShort,
             platform: detectedPlatform(),
             wordCount: wordCount,
             participants: participants,
-            tldr: enrichedLines.first.map { String($0.body.prefix(220)) }
-                ?? "Aufnahme ohne erkanntes Sprach-Material.",
+            tldr: "KI-Zusammenfassung läuft…",
             highlights: [],
             tasks: [],
             chapters: [],
-            transcript: enrichedLines
+            transcript: enrichedLines,
+            audioURL: nil,
+            processing: true
         )
-
-        store.insert(summary: summary, detail: detail)
+        store.updateDetail(transcribed, summaryTitle: provisionalTitle)
+        statusText = "KI verarbeitet"
 
         // Embeddings frisch entdeckter Speaker für später vorhalten — UI-Labeling-Sheet
         // greift darauf zu, wenn Niko "S1 = Thorsten" tippt.
         for (speakerId, embedding) in pendingEmbeddings where !embedding.isEmpty {
             self.lastEmbeddings[speakerId] = embedding
         }
+
+        // 2. Async: WAV speichern + Claude-Summary holen, dann Detail updaten.
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        let result = await PostProcessor.process(
+            meetingId: id,
+            mixedSamples: captured.mixed,
+            transcriptLines: enrichedLines,
+            locale: lang
+        )
+
+        let highlights = result.highlights.map { mapAIHighlight($0) }
+        let tasks = result.tasks.enumerated().map { idx, t in
+            ActionItem(
+                id: "\(id)-task-\(idx)",
+                who: t.who.isEmpty ? "??" : t.who,
+                task: t.task,
+                due: t.due,
+                status: t.status == "done" ? .done : .open
+            )
+        }
+
+        let finalDetail = MeetingDetail(
+            id: id,
+            title: result.title.isEmpty ? provisionalTitle : result.title,
+            dateLong: dateLong,
+            timeRange: timeRange,
+            duration: durationShort,
+            platform: detectedPlatform(),
+            wordCount: wordCount,
+            participants: participants,
+            tldr: result.tldr,
+            highlights: highlights,
+            tasks: tasks,
+            chapters: [],
+            transcript: enrichedLines,
+            audioURL: result.audioURL?.path,
+            processing: false
+        )
+
+        store.updateDetail(
+            finalDetail,
+            summaryTitle: result.title.isEmpty ? nil : result.title
+        )
+    }
+
+    private func mapAIHighlight(_ ai: HighlightAI) -> Highlight {
+        let tone: HighlightTone
+        switch ai.tone.lowercased() {
+        case "warning":  tone = .warning
+        case "info":     tone = .info
+        default:         tone = .brand
+        }
+        return Highlight(label: ai.label, text: ai.text, tone: tone)
     }
 
     /// Embeddings der letzten Aufnahme — verfügbar für das Speaker-Labeling-Sheet.
@@ -292,18 +464,25 @@ final class RecordingController: ObservableObject {
     }
 
     /// Match TranscriptLines (mit Mono-Timestamps) auf Diarize-Segments.
-    /// Mic-Lines bleiben als "NK", Sys-Lines bekommen Speaker-IDs aus Diarization.
+    /// Source-Aware: Mic-Lines (`who == "NK"`) bleiben **immer** NK, weil sie
+    /// bereits aus dem Mic-Stream kommen — der ist garantiert Niko. Nur Lines
+    /// aus dem System-Audio-Stream werden mit Speaker-IDs aus Diarization
+    /// geupdated. Pattern aus `tonton-golio/meeting-recorder`: separate Stems
+    /// → keine Cross-Source-Verwechslung.
     private func mergeSpeakers(
         lines: [TranscriptLine],
         diarization: [(start: TimeInterval, end: TimeInterval, speakerId: String, embedding: [Float])]
     ) -> [TranscriptLine] {
         guard !diarization.isEmpty else { return lines }
         return lines.map { line in
+            // Mic-Stream-Lines unangetastet lassen — der Mic ist immer Niko.
+            guard line.who != "NK" else { return line }
+
             let secs = parseTimestampSeconds(line.timestamp)
             if let match = diarization.first(where: { secs >= $0.start && secs <= $0.end }) {
-                // Wenn der Speaker bereits einen kanonischen Store-Namen hat (NK, oder
-                // ein labeled Speaker wie "TM" für Thomas), bleib bei dem. Sonst kürze
-                // FluidAudios Anonym-ID zu "S1"/"S2".
+                // Wenn der Speaker bereits einen kanonischen Store-Namen hat
+                // (z.B. ein labeled Speaker wie "TM" fuer Thomas), bleib bei dem.
+                // Sonst kuerze FluidAudios Anonym-ID zu "S1"/"S2".
                 let resolved: String
                 if match.speakerId.count <= 3 {
                     resolved = match.speakerId
@@ -388,34 +567,27 @@ final class RecordingController: ObservableObject {
     // MARK: - Internal wiring
 
     private func wireTranscriber() {
-        transcriber.onSegment = { [weak self] segment in
-            Task { @MainActor in
-                guard let self else { return }
-                let cleaned = LiveTranscriber.cleanTokens(segment.text)
-                guard !cleaned.isEmpty else { return }
-                let line = TranscriptLine(
-                    who: "NK",
-                    timestamp: Self.formatTimestamp(segment.start),
-                    body: cleaned,
-                    highlight: false
-                )
-                self.liveLines.append(line)
-                if self.liveLines.count > 200 {
-                    self.liveLines.removeFirst(self.liveLines.count - 200)
-                }
-            }
-        }
+        // Post-Recording-Architektur — Live-Callbacks bewusst NICHT mehr verdrahtet.
+        // Whisper laeuft beim Stop einmal pro Stem (Mic + Sys) ueber das volle
+        // Float-Array statt chunk-weise. Vorteile: keine RMS-Drops bei leisem
+        // Mic-Pegel, kein isBusy-Lock-Konflikt zwischen Streams, mehr Kontext
+        // fuer Whisper (-> bessere Transkription).
     }
 
     private func wireAudioCapture() {
-        audioCapture.onAudioChunk = { [weak self] samples in
-            Task { @MainActor in
-                guard let self, self.state.isRecording else { return }
-                let offset = self.chunkOffset
-                self.chunkOffset += Double(samples.count) / 16000.0
-                self.transcriber.transcribe(audioData: samples, offset: offset)
+        // Mic + Sys werden in AudioCapture in `micRecording`/`sysRecording`
+        // gepuffert. Wir lassen die Live-Callbacks bewusst leer — der finale
+        // Whisper-Pass laeuft erst in `persistMeeting` ueber `collectFinalAudio`.
+        audioCapture.onMicChunk = nil
+        audioCapture.onSysChunk = nil
+
+        // UI-Header bekommt den echten Mic-Namen statt "Built-in Mic" hardcoded.
+        deviceCancellable = audioCapture.$currentMicName
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] name in
+                guard let self, !name.isEmpty else { return }
+                self.device = name
             }
-        }
     }
 
     private func startElapsedTimer() {

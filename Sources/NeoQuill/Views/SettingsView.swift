@@ -1,8 +1,7 @@
 import SwiftUI
-import KeyboardShortcuts
 import AVFoundation
 
-// Settings-Scene: Audio (Mic+Whisper-Modell) · KI (Diarization) · Hotkeys · Permissions.
+// Settings-Scene: Audio (Mic+Whisper-Modell) · KI (Diarization) · Permissions.
 // Apple-HIG-Form mit Neon-Tokens für Status, sonst Standard-Look.
 
 struct SettingsView: View {
@@ -14,9 +13,6 @@ struct SettingsView: View {
             AIIntelligenceTab()
                 .tabItem { Label("KI", systemImage: "sparkles") }
 
-            HotkeyTab()
-                .tabItem { Label("Hotkeys", systemImage: "command") }
-
             PermissionsTab()
                 .tabItem { Label("Berechtigungen", systemImage: "lock.shield") }
         }
@@ -25,7 +21,7 @@ struct SettingsView: View {
 }
 
 private struct AudioSettingsTab: View {
-    @AppStorage(AppSettings.whisperModel) private var whisperModel: String = "openai_whisper-tiny"
+    @AppStorage(AppSettings.whisperModel) private var whisperModel: String = "openai_whisper-base"
     @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String = ""
     @AppStorage(AppSettings.language)     private var language: String = "de"
     @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool = true
@@ -99,25 +95,10 @@ private struct AIIntelligenceTab: View {
     }
 }
 
-private struct HotkeyTab: View {
-    var body: some View {
-        Form {
-            Section("Global") {
-                KeyboardShortcuts.Recorder("Aufnahme starten / stoppen", name: .toggleRecording)
-            }
-            Section {
-                Text("Standardmäßig ⌥ + R. Wirkt systemweit, auch wenn NeoQuill im Hintergrund ist.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .padding(.horizontal, 16)
-    }
-}
-
 private struct PermissionsTab: View {
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    @EnvironmentObject private var state: AppState
+    @State private var showResetConfirm = false
 
     var body: some View {
         Form {
@@ -140,9 +121,30 @@ private struct PermissionsTab: View {
                     }
                 }
             }
+            Section("Daten") {
+                Text("Setzt alle Aufnahmen zurück und re-seedet die Mock-Daten.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Button("Aufnahmen zurücksetzen") {
+                    showResetConfirm = true
+                }
+                .foregroundStyle(Neon.statusError)
+            }
         }
         .formStyle(.grouped)
         .padding(.horizontal, 16)
+        .confirmationDialog(
+            "Alle Aufnahmen löschen?",
+            isPresented: $showResetConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Ja, alles wischen", role: .destructive) {
+                state.store.resetAllMeetings()
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Setzt die Sidebar auf die Mock-Daten zurück. Real aufgenommene Meetings gehen verloren.")
+        }
     }
 }
 

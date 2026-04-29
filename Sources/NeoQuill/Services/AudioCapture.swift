@@ -36,6 +36,8 @@ final class AudioCapture: NSObject, ObservableObject {
     @Published var hasSystemAudio = false
     @Published var audioTooQuiet: Bool = false
     @Published var systemAudioTooQuiet: Bool = false
+    /// Echter Name des Mics das gerade läuft — für UI-Header (`Built-in Mic` ist hardcoded raus).
+    @Published var currentMicName: String = ""
 
     // Mic Capture
     private var micSession: AVCaptureSession?
@@ -76,8 +78,12 @@ final class AudioCapture: NSObject, ObservableObject {
     private let levelGuardWarmupSamples = 3 * 16000  // 3 Sekunden bei 16kHz
     private let quietThreshold: Float = 0.001
 
-    /// Callback wenn genuegend Audio fuer Transkription gesammelt
-    var onAudioChunk: (([Float]) -> Void)?
+    /// Callback fuer Mic-Chunks (eigene Stimme → Speaker NK).
+    var onMicChunk: (([Float]) -> Void)?
+    /// Callback fuer System-Audio-Chunks (Remote-Teilnehmer via ProcessTap → Speaker S1).
+    /// Vorher: System-Audio wurde nur akkumuliert und beim Stop gemixt — Live-Transkript
+    /// hatte deshalb nie die Teams-Stimme.
+    var onSysChunk: (([Float]) -> Void)?
 
     private let minChunkSamples = 2 * 16000
     private let maxChunkSamples = 8 * 16000
@@ -307,6 +313,8 @@ final class AudioCapture: NSObject, ObservableObject {
         guard session.canAddInput(input) else { throw CaptureError.formatError }
         session.addInput(input)
 
+        currentMicName = mic.localizedName
+
         let audioOutput = AVCaptureAudioDataOutput()
         guard session.canAddOutput(audioOutput) else { throw CaptureError.formatError }
         session.addOutput(audioOutput)
@@ -324,24 +332,30 @@ final class AudioCapture: NSObject, ObservableObject {
     fileprivate func appendAudio(_ samples: [Float], source: String) {
         guard !samples.isEmpty else { return }
 
-        let nonZero = samples.contains { $0 != 0.0 }
-        if source == "Tap" {
-            sysBuffer.append(contentsOf: samples)
-            sysRecording.append(contentsOf: samples)
-        } else {
-            micBuffer.append(contentsOf: samples)
-            micRecording.append(contentsOf: samples)
-        }
-        if nonZero { nonZeroSamplesTotal += samples.count }
+        // NaN/Inf rauswerfen — sonst bricht der RMS-Akkumulator (Mic=NaN im Diag-Log)
+        // und WhisperKit kriegt vergiftete Buffer.
+        let cleaned: [Float] = samples.contains { !$0.isFinite }
+            ? samples.map { $0.isFinite ? $0 : 0 }
+            : samples
 
-        // RMS-Akkumulation für Level-Guard
-        let sumSquares = samples.reduce(Float(0)) { $0 + $1 * $1 }
+        let nonZero = cleaned.contains { $0 != 0.0 }
+        if source == "Tap" {
+            sysBuffer.append(contentsOf: cleaned)
+            sysRecording.append(contentsOf: cleaned)
+        } else {
+            micBuffer.append(contentsOf: cleaned)
+            micRecording.append(contentsOf: cleaned)
+        }
+        if nonZero { nonZeroSamplesTotal += cleaned.count }
+
+        // RMS-Akkumulation für Level-Guard — auf cleaned[] damit NaN den Akku nicht killt.
+        let sumSquares = cleaned.reduce(Float(0)) { $0 + $1 * $1 }
         if source == "Tap" {
             tapRmsAccum += sumSquares
-            tapRmsSampleCount += samples.count
+            tapRmsSampleCount += cleaned.count
         } else {
             micRmsAccum += sumSquares
-            micRmsSampleCount += samples.count
+            micRmsSampleCount += cleaned.count
         }
 
         let now = Date()
@@ -349,8 +363,8 @@ final class AudioCapture: NSObject, ObservableObject {
             lastDebugLog = now
             let micSec = micRecording.count / 16000
             let sysSec = sysRecording.count / 16000
-            let rms = sqrt(sumSquares / Float(max(samples.count, 1)))
-            let maxVal = samples.map { abs($0) }.max() ?? 0
+            let rms = sqrt(sumSquares / Float(max(cleaned.count, 1)))
+            let maxVal = cleaned.map { abs($0) }.max() ?? 0
             logger.warning("Mic: \(self.micRecording.count, privacy: .public) (\(micSec, privacy: .public)s), Tap: \(self.sysRecording.count, privacy: .public) (\(sysSec, privacy: .public)s), src=\(source, privacy: .public), rms=\(String(format: "%.6f", rms), privacy: .public), max=\(String(format: "%.6f", maxVal), privacy: .public)")
             // File-Log alle 30s für Diagnose
             if (micSec + sysSec) % 30 < 6 {
@@ -381,7 +395,7 @@ final class AudioCapture: NSObject, ObservableObject {
 
         guard now.timeIntervalSince(lastLevelUpdate) > 0.1 else { return }
         lastLevelUpdate = now
-        audioLevel = sqrt(sumSquares / Float(max(samples.count, 1)))
+        audioLevel = sqrt(sumSquares / Float(max(cleaned.count, 1)))
     }
 
     /// Snapshot der bisherigen Recording-Buffer ohne sie zu leeren.
@@ -420,16 +434,24 @@ final class AudioCapture: NSObject, ObservableObject {
     }
 
     private func flushChunk(force: Bool = false) {
-        let count = micBuffer.count
-        guard count >= minChunkSamples || (force && count > 0) else { return }
+        // Mic-Stream
+        let micCount = micBuffer.count
+        if micCount >= minChunkSamples || (force && micCount > 0) {
+            let chunkSize = min(micCount, maxChunkSamples)
+            let chunk = Array(micBuffer.prefix(chunkSize))
+            micBuffer.removeFirst(chunkSize)
+            onMicChunk?(chunk)
+        }
 
-        let chunkSize = min(count, maxChunkSamples)
-        let chunk = Array(micBuffer.prefix(chunkSize))
-        micBuffer.removeFirst(chunkSize)
-        let sysRemove = min(chunkSize, sysBuffer.count)
-        if sysRemove > 0 { sysBuffer.removeFirst(sysRemove) }
-
-        onAudioChunk?(chunk)
+        // Sys-Stream (Teams/Zoom-Remote-Stimme) — eigener Push, damit Whisper ihn
+        // ueberhaupt sieht. Vorher wurde `sysBuffer` nur stillschweigend geleert.
+        let sysCount = sysBuffer.count
+        if sysCount >= minChunkSamples || (force && sysCount > 0) {
+            let chunkSize = min(sysCount, maxChunkSamples)
+            let chunk = Array(sysBuffer.prefix(chunkSize))
+            sysBuffer.removeFirst(chunkSize)
+            onSysChunk?(chunk)
+        }
     }
 }
 

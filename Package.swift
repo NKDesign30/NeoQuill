@@ -7,7 +7,6 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.5.0"),
-        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.3.0"),
     ],
     targets: [
         .executableTarget(
@@ -15,7 +14,6 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
-                .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ],
             path: "Sources/NeoQuill",
             resources: [

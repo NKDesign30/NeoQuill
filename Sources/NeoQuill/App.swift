@@ -1,5 +1,4 @@
 import SwiftUI
-import KeyboardShortcuts
 
 @main
 struct NeoQuillApp: App {
@@ -8,6 +7,16 @@ struct NeoQuillApp: App {
 
     init() {
         FontRegistrar.registerAll()
+        // SettingsView zeigt diese Defaults an — UserDefaults muss sie kennen,
+        // sonst liest RecordingController `false` und Auto-Detect startet nie.
+        UserDefaults.standard.register(defaults: [
+            AppSettings.autoDetectMeetings: true,
+            AppSettings.speakerDiarization: true,
+            AppSettings.whisperModel: "openai_whisper-base",
+            AppSettings.language: "de",
+            AppSettings.sidebarDensity: "regular",
+            AppSettings.detailLayout: "editorial",
+        ])
     }
 
     var body: some Scene {
@@ -17,11 +26,6 @@ struct NeoQuillApp: App {
                 .frame(minWidth: 1080, idealWidth: 1280, minHeight: 700, idealHeight: 820)
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
-                .onAppear {
-                    KeyboardShortcuts.onKeyDown(for: .toggleRecording) { [weak state] in
-                        Task { @MainActor in await state?.recorder.toggle() }
-                    }
-                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -47,6 +51,7 @@ struct NeoQuillApp: App {
 
         Settings {
             SettingsView()
+                .environmentObject(state)
                 .preferredColorScheme(.dark)
         }
     }
@@ -64,9 +69,13 @@ struct RootView: View {
                 case .empty:
                     EmptyView()
                 case .detail:
-                    switch state.detailLayout {
-                    case .editorial: DetailEditorial(meeting: state.activeMeeting)
-                    case .split:     DetailSplit(meeting: state.activeMeeting)
+                    if let meeting = state.activeMeeting {
+                        switch state.detailLayout {
+                        case .editorial: DetailEditorial(meeting: meeting)
+                        case .split:     DetailSplit(meeting: meeting)
+                        }
+                    } else {
+                        EmptyView()
                     }
                 case .recording:
                     RecordingView(recorder: state.recorder, onStop: state.stopRecording)

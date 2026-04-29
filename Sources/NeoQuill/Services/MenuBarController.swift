@@ -134,6 +134,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 elapsed.title = "Vorbereiten …"
             case .processing:
                 elapsed.title = "Verarbeiten …"
+            case .detected(let app):
+                elapsed.title = "Erkannt: " + app.rawValue
             case .error(let msg):
                 elapsed.title = "Fehler: " + msg.prefix(40)
             case .idle:

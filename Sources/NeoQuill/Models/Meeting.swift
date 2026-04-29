@@ -105,6 +105,8 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
     let tasks: [ActionItem]
     let chapters: [Chapter]
     let transcript: [TranscriptLine]
+    var audioURL: String? = nil    // Pfad zur WAV-Datei in Application Support
+    var processing: Bool = false   // KI-Summary läuft noch
 
     var participantCount: Int { participants.count }
     var openTasks: Int { tasks.filter { $0.status == .open }.count }

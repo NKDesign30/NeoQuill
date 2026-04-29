@@ -61,6 +61,7 @@ struct RecordingView: View {
         case .preparing:   return "STARTET …"
         case .recording:   return "LIVE · WIRD AUFGENOMMEN"
         case .processing:  return "VERARBEITEN …"
+        case .detected(let app): return "ERKANNT · \(app.rawValue.uppercased())"
         case .error(let m): return "FEHLER · \(m.prefix(60))"
         case .idle:        return "BEREIT"
         }
