@@ -22,6 +22,8 @@ final class RecordingController: ObservableObject {
     @Published private(set) var modelLabel: String = "WhisperKit ANE"
     @Published private(set) var statusText: String = "Bereit"
     @Published private(set) var hasMicPermission: Bool = false
+    /// Live-Audio-Level (RMS, 0..~1) — UI-Header/Pille zeigt Live-Bars.
+    @Published private(set) var audioLevel: Float = 0
 
     // MARK: - Dependencies
 
@@ -37,6 +39,7 @@ final class RecordingController: ObservableObject {
 
     private var detectorCancellable: AnyCancellable?
     private var deviceCancellable: AnyCancellable?
+    private var levelCancellable: AnyCancellable?
     private var autoDetectActive = false
 
     private var elapsedTimer: AnyCancellable?
@@ -841,6 +844,13 @@ final class RecordingController: ObservableObject {
             .sink { [weak self] name in
                 guard let self, !name.isEmpty else { return }
                 self.device = name
+            }
+
+        // Live-Audio-Level fuer die Pille (Bars im Recording-Modus).
+        levelCancellable = audioCapture.$audioLevel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] level in
+                self?.audioLevel = level
             }
     }
 

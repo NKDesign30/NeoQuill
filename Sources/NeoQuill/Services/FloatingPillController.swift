@@ -20,6 +20,7 @@ final class FloatingPillController {
     private var hosting: NSHostingView<MeetingPill>?
     private var stateCancellable: AnyCancellable?
     private var elapsedCancellable: AnyCancellable?
+    private var levelCancellable: AnyCancellable?
     private weak var recorder: RecordingController?
 
     // Live-State fuer die SwiftUI-View — beobachtet die Pille via Bindings.
@@ -39,6 +40,12 @@ final class FloatingPillController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] elapsed in
                 self?.pillState.elapsedSeconds = Int(elapsed)
+            }
+
+        levelCancellable = recorder.$audioLevel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] level in
+                self?.pillState.audioLevel = level
             }
     }
 
@@ -124,6 +131,7 @@ final class MeetingPillState: ObservableObject {
 
     @Published var mode: Mode = .preparing
     @Published var elapsedSeconds: Int = 0
+    @Published var audioLevel: Float = 0
 
     var onAccept: () -> Void = {}
     var onDismiss: () -> Void = {}
