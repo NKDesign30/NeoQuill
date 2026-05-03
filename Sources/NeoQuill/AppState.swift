@@ -31,6 +31,24 @@ final class AppState: ObservableObject {
     @Published var query: String = ""
     @Published var showProfileOnboarding: Bool = false
     @Published var pendingTranscriptDetection: TranscriptDetectionEvent?
+    @Published var transientNotice: String?
+
+    private var transientNoticeTask: Task<Void, Never>?
+
+    func notify(_ message: String, dismissAfter seconds: TimeInterval = 4) {
+        transientNotice = message
+        transientNoticeTask?.cancel()
+        transientNoticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.transientNotice = nil }
+        }
+    }
+
+    func dismissNotice() {
+        transientNoticeTask?.cancel()
+        transientNotice = nil
+    }
 
     struct TranscriptDetectionEvent: Identifiable, Equatable {
         let id = UUID()

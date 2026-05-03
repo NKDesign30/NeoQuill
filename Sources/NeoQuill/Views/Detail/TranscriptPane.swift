@@ -78,6 +78,7 @@ private struct TranscriptRow: View {
                     Text(participant?.name ?? line.who)
                         .font(.neonBody(13, weight: .medium))
                         .foregroundStyle(Neon.textPrimary)
+                    SpeakerSourceBadge(source: line.speakerSource, confidence: line.confidence)
                     if line.highlight {
                         Text("● ENTSCHEIDUNG")
                             .font(.neonMono(9, weight: .semibold))

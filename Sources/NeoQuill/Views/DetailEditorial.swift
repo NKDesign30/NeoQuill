@@ -53,6 +53,10 @@ struct DetailEditorial: View {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .top) {
+            TransientNoticeBanner()
+                .animation(.easeInOut(duration: 0.25), value: state.transientNotice)
+        }
     }
 
     private var tabsBar: some View {
