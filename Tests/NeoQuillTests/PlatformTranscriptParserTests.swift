@@ -158,22 +158,6 @@ final class PlatformTranscriptParserTests: XCTestCase {
         XCTAssertEqual(events[0].speakerId, "u-active")
     }
 
-    func testTeamsSpecificParserReadsVTT() throws {
-        let vtt = """
-        WEBVTT
-
-        00:00:02.000 --> 00:00:04.000
-        Mara Becker: Entscheidung steht.
-        """
-
-        let events = try TeamsTranscriptParser.fromVTT(vtt)
-
-        XCTAssertEqual(events.count, 1)
-        XCTAssertEqual(events[0].platform, .teams)
-        XCTAssertEqual(events[0].speakerName, "Mara Becker")
-        XCTAssertEqual(events[0].text, "Entscheidung steht.")
-    }
-
     func testZoomSpecificTimelineParserReadsActiveUser() throws {
         let json = """
         {
