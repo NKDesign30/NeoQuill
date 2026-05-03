@@ -8,6 +8,7 @@ enum AppSettings {
     static let autoDetectMeetings  = "auto_detect_meetings"
     static let speakerDiarization  = "speaker_diarization"
     static let liveCaptionCapture  = "live_caption_capture"
+    static let autoWatchDownloadsForTranscripts = "auto_watch_downloads_for_transcripts"
     static let ownerDisplayName    = "owner_display_name"
     static let ownerRole           = "owner_role"
     static let profileOnboarded    = "profile_onboarded"
@@ -20,6 +21,7 @@ enum AppSettings {
             autoDetectMeetings: true,
             speakerDiarization: true,
             liveCaptionCapture: false,
+            autoWatchDownloadsForTranscripts: false,
             ownerDisplayName: "",
             ownerRole: "Eigene Stimme",
             profileOnboarded: false,

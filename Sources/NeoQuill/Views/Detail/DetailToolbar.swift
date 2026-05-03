@@ -10,6 +10,8 @@ struct DetailToolbar: View {
     var showLayoutSwitch: Bool = true
 
     @EnvironmentObject private var state: AppState
+    @State private var showImportSheet = false
+    @State private var importError: String?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -27,10 +29,11 @@ struct DetailToolbar: View {
                 Rectangle().fill(Neon.strokeHairline).frame(width: 1, height: 18).padding(.horizontal, 4)
             }
 
-            ToolbarButton(icon: .refresh, label: "Final-STT", active: meeting?.processing == true) { reprocessAction() }
-            ToolbarButton(icon: .copy,    label: "Kopieren") { copyAction() }
-            ToolbarButton(icon: .export,  label: "Export")   { exportAction() }
-            ToolbarButton(icon: .share,   label: "Teilen")   { shareAction() }
+            ToolbarButton(icon: .refresh,  label: "Final-STT", active: meeting?.processing == true) { reprocessAction() }
+            ToolbarButton(icon: .download, label: "Importieren") { importAction() }
+            ToolbarButton(icon: .copy,     label: "Kopieren") { copyAction() }
+            ToolbarButton(icon: .export,   label: "Export")   { exportAction() }
+            ToolbarButton(icon: .share,    label: "Teilen")   { shareAction() }
 
             Rectangle()
                 .fill(Neon.strokeHairline)
@@ -44,6 +47,27 @@ struct DetailToolbar: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
         }
+        .sheet(isPresented: $showImportSheet) {
+            if let m = meeting {
+                ImportTranscriptSheet(meetingId: m.id, meetingTitle: m.title) { result in
+                    switch result {
+                    case .success:
+                        importError = nil
+                    case .failure(let error):
+                        importError = error.localizedDescription
+                    }
+                    showImportSheet = false
+                }
+            }
+        }
+        .alert("Import fehlgeschlagen", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK", role: .cancel) { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
     }
 
     private func copyAction() {
@@ -54,6 +78,11 @@ struct DetailToolbar: View {
     private func reprocessAction() {
         guard let m = meeting, !m.processing else { return }
         state.reprocessMeeting(m.id)
+    }
+
+    private func importAction() {
+        guard meeting != nil else { return }
+        showImportSheet = true
     }
 
     private func exportAction() {

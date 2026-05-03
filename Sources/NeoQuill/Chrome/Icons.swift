@@ -28,6 +28,7 @@ enum Glyph {
         case more             = "ellipsis"
         case copy             = "doc.on.doc"
         case export           = "arrow.up.forward.square"
+        case download         = "square.and.arrow.down"
         case link             = "link"
         case tag              = "tag"
         case people           = "person.2.fill"

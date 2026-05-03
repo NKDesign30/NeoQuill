@@ -30,6 +30,14 @@ final class AppState: ObservableObject {
     @Published var selectedMeetingId: String? = nil
     @Published var query: String = ""
     @Published var showProfileOnboarding: Bool = false
+    @Published var pendingTranscriptDetection: TranscriptDetectionEvent?
+
+    struct TranscriptDetectionEvent: Identifiable, Equatable {
+        let id = UUID()
+        let fileURL: URL
+        let hint: TranscriptDownloadWatcher.Hint
+        let detectedAt: Date
+    }
 
     private static func loadLayout() -> DetailLayout {
         let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout) ?? "editorial"
@@ -118,6 +126,36 @@ final class AppState: ObservableObject {
         // Hauptfenster.
         showProfileOnboarding = !UserDefaults.standard.boolOr(AppSettings.profileOnboarded, default: false)
         CaptionDebugDumper.installIfEnabled()
+        TranscriptDownloadWatcher.installIfEnabled()
+
+        NotificationCenter.default.publisher(for: .transcriptCandidateDetected)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                self?.handleDetection(note)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleDetection(_ note: Notification) {
+        guard let info = note.userInfo,
+              let fileURL = info["fileURL"] as? URL,
+              let rawHint = info["hint"] as? String,
+              let hint = TranscriptDownloadWatcher.Hint(rawValue: rawHint)
+        else { return }
+        let detectedAt = info["detectedAt"] as? Date ?? Date()
+        pendingTranscriptDetection = TranscriptDetectionEvent(
+            fileURL: fileURL,
+            hint: hint,
+            detectedAt: detectedAt
+        )
+    }
+
+    func dismissPendingTranscriptDetection() {
+        pendingTranscriptDetection = nil
+    }
+
+    func candidateMeetingIds(for event: TranscriptDetectionEvent) -> [String] {
+        TranscriptDownloadWatcher.candidateMeetingIds(for: event.detectedAt, meetings: meetings)
     }
 
     // MARK: - Actions
@@ -141,6 +179,18 @@ final class AppState: ObservableObject {
 
     func reprocessMeeting(_ meetingId: String) {
         recorder.reprocessMeeting(meetingId)
+    }
+
+    /// Importiert ein Plattform-Transkript (Teams VTT/Metadata, Meet Entries, Zoom Timeline/VTT)
+    /// und triggert ein Reprocess des angegebenen Meetings, das die Plattform-Events in den
+    /// Merger durchreicht. Wirft Fehler aus dem Format-Detektor; der eigentliche Re-Merge
+    /// laeuft asynchron im RecordingController.
+    @discardableResult
+    func importPlatformTranscript(meetingId: String, fileURL: URL) throws -> PlatformImportService.Outcome {
+        let fallback = store.detail(for: meetingId)?.platform ?? .meet
+        let outcome = try PlatformImportService.detectAndParse(url: fileURL, fallbackPlatform: fallback)
+        recorder.applyPlatformImport(meetingId: meetingId, events: outcome.events)
+        return outcome
     }
 
     func completeProfileOnboarding(name: String, role: String) {

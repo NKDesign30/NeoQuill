@@ -16,6 +16,7 @@ struct DetailEditorial: View {
     var accent: Color = Neon.brandPrimary
 
     @State private var tab: DetailTab = .summary
+    @State private var showImportSheet = false
     @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
 
@@ -26,6 +27,9 @@ struct DetailEditorial: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HeaderHero(meeting: meeting, accent: accent)
+                    if hasOnlyAnonymousSpeakers {
+                        anonymousSpeakerBanner
+                    }
                     tabsBar
                     Group {
                         switch tab {
@@ -96,6 +100,44 @@ struct DetailEditorial: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Capsule().fill(accent.opacity(0.10)))
+        }
+    }
+
+    private var hasOnlyAnonymousSpeakers: Bool {
+        let anonymousIds: Set<String> = ["S1", "S2", "S3", "S4"]
+        let nonLocal = meeting.participants.filter { !LocalSpeakerProfile.isLocalSpeakerId($0.id) }
+        guard !nonLocal.isEmpty else { return false }
+        return nonLocal.allSatisfy { anonymousIds.contains($0.id) }
+    }
+
+    @ViewBuilder
+    private var anonymousSpeakerBanner: some View {
+        HStack(spacing: 12) {
+            GlyphView(name: .download, size: 14, color: accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Echte Speaker-Namen importieren?")
+                    .font(.neonBody(13, weight: .medium))
+                    .foregroundStyle(Neon.textPrimary)
+                Text("Wenn du das offizielle Teams/Meet/Zoom-Transkript hast, ersetzen wir die S1/S2-Stubs.")
+                    .font(.neonBody(11))
+                    .foregroundStyle(Neon.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Button("Transkript wählen") { showImportSheet = true }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+        }
+        .padding(.horizontal, 48)
+        .padding(.vertical, 12)
+        .background(accent.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(accent.opacity(0.18)).frame(height: 1)
+        }
+        .sheet(isPresented: $showImportSheet) {
+            ImportTranscriptSheet(meetingId: meeting.id, meetingTitle: meeting.title) { _ in
+                showImportSheet = false
+            }
         }
     }
 
