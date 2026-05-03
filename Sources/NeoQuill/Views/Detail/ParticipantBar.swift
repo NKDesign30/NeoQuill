@@ -72,12 +72,18 @@ struct ParticipantBar: View {
                 participant: participant,
                 suggestedColors: [0x2EAB73, 0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259],
                 onSave: { name, color in
-                    state.recorder.labelSpeaker(
+                    let migrated = state.recorder.labelSpeaker(
                         internalId: participant.id,
                         name: name,
                         colorHex: color,
                         meetingId: state.selectedMeetingId
                     )
+                    if migrated > 0 {
+                        let suffix = migrated == 1 ? "weiteres Meeting" : "weitere Meetings"
+                        state.notify("\(name) in \(migrated) \(suffix) erkannt")
+                    } else {
+                        state.notify("\(name) gespeichert")
+                    }
                     showLabelSheet = false
                 },
                 onDismiss: { showLabelSheet = false }

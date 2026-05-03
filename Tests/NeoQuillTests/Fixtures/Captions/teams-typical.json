@@ -1,0 +1,53 @@
+{
+  "platform": "TEAMS",
+  "snapshots": [
+    {
+      "offsetSeconds": 1.2,
+      "candidates": [
+        {
+          "bundleIdentifier": "com.microsoft.teams2",
+          "speakerName": "Sarah Ebner",
+          "text": "Wir starten mit dem Pricing-Punkt.",
+          "rawText": "Sarah Ebner: Wir starten mit dem Pricing-Punkt.",
+          "estimatedDuration": 2.4
+        }
+      ]
+    },
+    {
+      "offsetSeconds": 4.1,
+      "candidates": [
+        {
+          "bundleIdentifier": "com.microsoft.teams2",
+          "speakerName": "Tom Friedrich",
+          "text": "Ich uebernehme den Rollout am Freitag.",
+          "rawText": "Tom Friedrich: Ich uebernehme den Rollout am Freitag.",
+          "estimatedDuration": 2.7
+        }
+      ]
+    },
+    {
+      "offsetSeconds": 4.9,
+      "candidates": [
+        {
+          "bundleIdentifier": "com.microsoft.teams2",
+          "speakerName": "Tom Friedrich",
+          "text": "Ich uebernehme den Rollout am Freitag.",
+          "rawText": "Tom Friedrich: Ich uebernehme den Rollout am Freitag.",
+          "estimatedDuration": 2.7
+        }
+      ]
+    },
+    {
+      "offsetSeconds": 7.5,
+      "candidates": [
+        {
+          "bundleIdentifier": "com.microsoft.teams2",
+          "speakerName": null,
+          "text": "Klingt gut, dann machen wir das so.",
+          "rawText": "Klingt gut, dann machen wir das so.",
+          "estimatedDuration": 1.8
+        }
+      ]
+    }
+  ]
+}

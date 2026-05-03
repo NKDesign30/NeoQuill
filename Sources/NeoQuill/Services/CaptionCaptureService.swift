@@ -87,6 +87,48 @@ final class CaptionCaptureService: ObservableObject {
         events
     }
 
+    /// Erzwingt einen Reset und spielt eine vorgespeicherte Fixture in
+    /// genau derselben Pipeline ab wie die Live-AX-Polling-Schleife.
+    /// Nur fuer QA / Tests gedacht — kein Permission-Check, keine UserDefaults.
+    func replayFixture(_ fixture: CaptionFixture, startedAt: Date = Date()) -> [CaptionEvent] {
+        timer?.cancel()
+        timer = nil
+        self.startedAt = startedAt
+        events.removeAll()
+        seenFingerprints.removeAll()
+        noCaptionPollCount = 0
+        state = .listening(fixture.platform)
+        CaptionFixtureReplayer.replay(fixture) { [weak self] offset, candidates in
+            self?.consumeReplayedCandidates(candidates, offsetSeconds: offset, platform: fixture.platform)
+        }
+        return events
+    }
+
+    private func consumeReplayedCandidates(
+        _ candidates: [CaptionCandidate],
+        offsetSeconds: TimeInterval,
+        platform: Platform
+    ) {
+        guard let startedAt else { return }
+        for candidate in candidates {
+            let fingerprint = CaptionTextParser.fingerprint(candidate: candidate, platform: platform)
+            guard !seenFingerprints.contains(fingerprint) else { continue }
+            seenFingerprints.insert(fingerprint)
+            let observed = startedAt.addingTimeInterval(offsetSeconds)
+            events.append(CaptionEvent(
+                platform: platform,
+                appBundleIdentifier: candidate.bundleIdentifier,
+                speakerName: candidate.speakerName,
+                text: candidate.text,
+                startSeconds: offsetSeconds,
+                endSeconds: offsetSeconds + candidate.estimatedDuration,
+                observedAt: observed,
+                confidence: candidate.speakerName == nil ? 0.45 : 0.88,
+                rawPayload: candidate.rawText
+            ))
+        }
+    }
+
     private func poll() {
         guard let startedAt else { return }
         let platform = activeApp.platform

@@ -15,6 +15,8 @@ enum AppSettings {
     static let language            = "language"
     static let sidebarDensity      = "sidebar_density"
     static let detailLayout        = "detail_layout"
+    static let voiceIdEnrolled     = "voice_id_enrolled"
+    static let calendarParticipantPool = "calendar_participant_pool"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -29,6 +31,8 @@ enum AppSettings {
             language: "de",
             sidebarDensity: "regular",
             detailLayout: "editorial",
+            voiceIdEnrolled: false,
+            calendarParticipantPool: true,
         ])
     }
 }

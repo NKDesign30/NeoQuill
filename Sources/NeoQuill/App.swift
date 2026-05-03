@@ -19,10 +19,12 @@ struct NeoQuillApp: App {
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
                 .sheet(isPresented: $state.showProfileOnboarding) {
-                    ProfileOnboardingView { name, role in
-                        state.completeProfileOnboarding(name: name, role: role)
-                    }
+                    OnboardingWizard(onFinish: {
+                        state.completeOnboardingFromWizard()
+                    })
+                    .environmentObject(state)
                     .preferredColorScheme(.dark)
+                    .interactiveDismissDisabled()
                 }
                 .sheet(item: $state.pendingTranscriptDetection) { event in
                     MatchTranscriptSheet(

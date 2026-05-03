@@ -50,17 +50,3 @@ final class SpeakerDiarizer: ObservableObject {
         try manager.extractSpeakerEmbedding(from: samples)
     }
 }
-
-// Adapter: DiarizationResult → unsere TranscriptSegments mit Speaker-Labels.
-// Implementation kommt mit dem Wire-Up in Phase 4.
-extension SpeakerDiarizer {
-
-    static func mapToTranscriptSegments(
-        _ diarization: DiarizationResult,
-        transcript: [TranscriptSegment]
-    ) -> [TranscriptSegment] {
-        // Stub: korrigiert die `speaker`-Felder anhand des Diarization-Timelines.
-        // TODO: präzises Time-Alignment + Speaker-Labels (Phase 4).
-        transcript
-    }
-}

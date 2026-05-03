@@ -31,6 +31,24 @@ final class AppState: ObservableObject {
     @Published var query: String = ""
     @Published var showProfileOnboarding: Bool = false
     @Published var pendingTranscriptDetection: TranscriptDetectionEvent?
+    @Published var transientNotice: String?
+
+    private var transientNoticeTask: Task<Void, Never>?
+
+    func notify(_ message: String, dismissAfter seconds: TimeInterval = 4) {
+        transientNotice = message
+        transientNoticeTask?.cancel()
+        transientNoticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.transientNotice = nil }
+        }
+    }
+
+    func dismissNotice() {
+        transientNoticeTask?.cancel()
+        transientNotice = nil
+    }
 
     struct TranscriptDetectionEvent: Identifiable, Equatable {
         let id = UUID()
@@ -55,6 +73,10 @@ final class AppState: ObservableObject {
     let dockBadge = DockBadgeService()
     let menuBar = MenuBarController()
     let pill = FloatingPillController()
+    let voiceIdEnrollment: VoiceIdEnrollmentService
+    let calendar = CalendarParticipantsService()
+    let cloudOAuth = CloudOAuthService()
+    let cloudReconcile: PlatformReconcileService
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
@@ -70,6 +92,8 @@ final class AppState: ObservableObject {
     init() {
         recorder.store = store
         recorder.speakerStore = speakerStore
+        voiceIdEnrollment = VoiceIdEnrollmentService(diarizer: recorder.diarizer, speakerStore: speakerStore)
+        cloudReconcile = PlatformReconcileService(oauth: cloudOAuth)
         dockBadge.bind(to: recorder)
         menuBar.install(with: recorder)
         pill.bind(to: recorder)
@@ -202,6 +226,17 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(trimmedRole.isEmpty ? "Eigene Stimme" : trimmedRole, forKey: AppSettings.ownerRole)
         UserDefaults.standard.set(true, forKey: AppSettings.profileOnboarded)
         showProfileOnboarding = false
+    }
+
+    /// Wird vom OnboardingWizard aufgerufen — der State persistiert dort
+    /// bereits selbst, wir muessen nur das Sheet schliessen + freundlich
+    /// in den Default-View-Mode wechseln.
+    func completeOnboardingFromWizard() {
+        showProfileOnboarding = false
+        if viewMode == .empty {
+            viewMode = .empty // bleibt EmptyView, Recording startet User selbst
+        }
+        notify("Setup abgeschlossen — bereit fuer dein erstes Meeting.", dismissAfter: 6)
     }
 
     func showEmpty() {
