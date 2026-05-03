@@ -117,6 +117,7 @@ final class AppState: ObservableObject {
         // wird ueber die Floating-Pille (NSPanel) angezeigt, nicht im
         // Hauptfenster.
         showProfileOnboarding = !UserDefaults.standard.boolOr(AppSettings.profileOnboarded, default: false)
+        CaptionDebugDumper.installIfEnabled()
     }
 
     // MARK: - Actions

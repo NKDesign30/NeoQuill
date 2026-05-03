@@ -105,7 +105,7 @@ final class CaptionCaptureService: ObservableObject {
         let candidates = running.flatMap { extractCaptionCandidates(from: $0) }
         var appended = 0
         for candidate in candidates {
-            let fingerprint = Self.fingerprint(candidate: candidate, platform: platform)
+            let fingerprint = CaptionTextParser.fingerprint(candidate: candidate, platform: platform)
             guard !seenFingerprints.contains(fingerprint) else { continue }
             seenFingerprints.insert(fingerprint)
             let now = Date()
@@ -141,9 +141,9 @@ final class CaptionCaptureService: ObservableObject {
         let texts = windows.flatMap { window in
             collectText(from: window, depth: 0, budget: 220)
         }
-        let uniqueTexts = Array(Set(texts.map(Self.normalizeVisibleText))).filter { !$0.isEmpty }
+        let uniqueTexts = Array(Set(texts.map(CaptionTextParser.normalizeVisibleText))).filter { !$0.isEmpty }
         return uniqueTexts.compactMap { text in
-            parseCaptionCandidate(text, bundleIdentifier: app.bundleIdentifier)
+            CaptionTextParser.parseCandidate(text, bundleIdentifier: app.bundleIdentifier)
         }
     }
 
@@ -152,7 +152,7 @@ final class CaptionCaptureService: ObservableObject {
         var output: [String] = []
         for attribute in [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute] {
             if let value = copyStringAttribute(element, attribute as CFString),
-               Self.isUsefulVisibleText(value) {
+               CaptionTextParser.isUsefulVisibleText(value) {
                 output.append(value)
             }
         }
@@ -164,29 +164,6 @@ final class CaptionCaptureService: ObservableObject {
             remaining = max(0, remaining - childText.count)
         }
         return output
-    }
-
-    private func parseCaptionCandidate(_ raw: String, bundleIdentifier: String?) -> CaptionCandidate? {
-        let text = Self.normalizeVisibleText(raw)
-        guard Self.isProbableCaptionText(text) else { return nil }
-
-        if let split = Self.splitSpeakerAndText(text) {
-            return CaptionCandidate(
-                bundleIdentifier: bundleIdentifier,
-                speakerName: split.speaker,
-                text: split.text,
-                rawText: raw,
-                estimatedDuration: Self.estimatedDuration(for: split.text)
-            )
-        }
-
-        return CaptionCandidate(
-            bundleIdentifier: bundleIdentifier,
-            speakerName: nil,
-            text: text,
-            rawText: raw,
-            estimatedDuration: Self.estimatedDuration(for: text)
-        )
     }
 
     private func copyStringAttribute(_ element: AXUIElement, _ attribute: CFString) -> String? {
@@ -205,89 +182,6 @@ final class CaptionCaptureService: ObservableObject {
         return array
     }
 
-    private static func splitSpeakerAndText(_ text: String) -> (speaker: String, text: String)? {
-        let lines = text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        if lines.count >= 2,
-           isProbableSpeakerName(lines[0]) {
-            let body = lines.dropFirst().joined(separator: " ")
-            if isProbableCaptionText(body) {
-                return (lines[0], body)
-            }
-        }
-
-        guard let colon = text.firstIndex(of: ":") else { return nil }
-        let speaker = String(text[..<colon]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = String(text[text.index(after: colon)...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isProbableSpeakerName(speaker), isProbableCaptionText(body) else { return nil }
-        return (speaker, body)
-    }
-
-    private static func isProbableSpeakerName(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (2...64).contains(trimmed.count) else { return false }
-        let lower = trimmed.lowercased()
-        if lower.contains("caption") || lower.contains("untertitel") || lower.contains("transcript") { return false }
-        let words = trimmed.split(separator: " ")
-        return words.count <= 5 && trimmed.rangeOfCharacter(from: .letters) != nil
-    }
-
-    private static func isUsefulVisibleText(_ text: String) -> Bool {
-        let normalized = normalizeVisibleText(text)
-        guard (2...420).contains(normalized.count) else { return false }
-        let lower = normalized.lowercased()
-        let blockedFragments = [
-            "microphone", "camera", "share screen", "raise hand", "leave",
-            "mikrofon", "kamera", "bildschirm", "teilnehmen", "verlassen",
-            "calendar", "chat", "reaction", "reaktion", "settings"
-        ]
-        return !blockedFragments.contains { lower.contains($0) }
-    }
-
-    private static func isProbableCaptionText(_ text: String) -> Bool {
-        let normalized = normalizeVisibleText(text)
-        guard (4...360).contains(normalized.count) else { return false }
-        guard normalized.rangeOfCharacter(from: .letters) != nil else { return false }
-        let wordCount = normalized.split(separator: " ").count
-        if wordCount >= 3 { return true }
-        return normalized.contains(".") || normalized.contains("?") || normalized.contains("!")
-    }
-
-    private static func normalizeVisibleText(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "\u{00a0}", with: " ")
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func fingerprint(candidate: CaptionCandidate, platform: Platform) -> String {
-        [
-            platform.rawValue,
-            candidate.speakerName?.lowercased() ?? "",
-            candidate.text.lowercased()
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
-        ].joined(separator: "|")
-    }
-
-    private static func estimatedDuration(for text: String) -> TimeInterval {
-        let words = max(1, text.split(separator: " ").count)
-        return min(8.0, max(1.2, Double(words) / 2.4))
-    }
-}
-
-private struct CaptionCandidate {
-    let bundleIdentifier: String?
-    let speakerName: String?
-    let text: String
-    let rawText: String
-    let estimatedDuration: TimeInterval
 }
 
 private extension CallApp {

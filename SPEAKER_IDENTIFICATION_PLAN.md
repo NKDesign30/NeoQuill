@@ -39,11 +39,13 @@ MVP: lokale Caption-Erfassung + Merge in NeoQuills Transcript. Danach API-Reconc
 - [x] Spezifische Provider-Parser ergänzt: `TeamsTranscriptParser`, `GoogleMeetTranscriptParser`, `ZoomTranscriptParser`.
 - [x] `TranscriptMerger` erweitert: Platform-API-Events gewinnen vor Live-Captions.
 - [x] Parser-Fixture-Tests für Teams VTT/metadataContent, Google Meet Entries, Zoom Timeline.
+- [x] Caption-Textparser extrahiert und getestet: Speaker-Splitting, UI-Control-Filter, Dedupe-Fingerprint.
+- [x] Optionaler AX-Debug-Dump hinter UserDefault `caption_debug_dump`.
 - [x] Personenbezogene Demo-/Produktstrings bereinigt.
 - [x] `swift build` grün.
-- [x] `swift test` grün: 11 Tests, 0 Fehler.
+- [x] `swift test` grün: 47 Tests, 0 Fehler.
 - [ ] Echte Teams/Zoom/Meet Live-QA mit aktiven Captions.
-- [ ] Dedizierte Unit Tests für AX-Caption-Dedupe.
+- [x] Dedizierte Unit Tests für AX-Caption-Dedupe.
 - [ ] Teams Graph OAuth/API-Abruf.
 - [ ] Google Meet OAuth/API-Abruf.
 - [ ] Zoom OAuth/API-Abruf.
