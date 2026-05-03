@@ -34,14 +34,19 @@ MVP: lokale Caption-Erfassung + Merge in NeoQuills Transcript. Danach API-Reconc
 - [x] Caption-Namen werden als Speaker-Identität/Alias im `SpeakerStore` gespeichert.
 - [x] `SpeakerStore` v2 gebaut: Aliase + mehrere Embeddings pro Speaker, Legacy-Embedding-Migration.
 - [x] Unit Tests für `TranscriptMerger` und Legacy-`TranscriptLine`-Migration.
+- [x] `PlatformTranscriptEvent` Modell angelegt.
+- [x] Parser ohne OAuth gebaut: Teams/Zoom WebVTT, Teams `metadataContent`, Google Meet Entries+Participants, Zoom Timeline.
+- [x] Spezifische Provider-Parser ergänzt: `TeamsTranscriptParser`, `GoogleMeetTranscriptParser`, `ZoomTranscriptParser`.
+- [x] `TranscriptMerger` erweitert: Platform-API-Events gewinnen vor Live-Captions.
+- [x] Parser-Fixture-Tests für Teams VTT/metadataContent, Google Meet Entries, Zoom Timeline.
 - [x] Personenbezogene Demo-/Produktstrings bereinigt.
 - [x] `swift build` grün.
-- [x] `swift test` grün: 4 Tests, 0 Fehler.
+- [x] `swift test` grün: 11 Tests, 0 Fehler.
 - [ ] Echte Teams/Zoom/Meet Live-QA mit aktiven Captions.
 - [ ] Dedizierte Unit Tests für AX-Caption-Dedupe.
-- [ ] Teams Graph Import.
-- [ ] Google Meet Import.
-- [ ] Zoom Transcript/Timeline Import.
+- [ ] Teams Graph OAuth/API-Abruf.
+- [ ] Google Meet OAuth/API-Abruf.
+- [ ] Zoom OAuth/API-Abruf.
 
 ## Ist-Zustand in NeoQuill
 
@@ -668,9 +673,9 @@ Manual QA:
 6. [x] Recording Flow an Merger anschließen.
 7. [x] UI-Status minimal anzeigen.
 8. [x] SpeakerStore v2.
-9. [ ] Teams Graph Import.
-10. [ ] Meet Import.
-11. [ ] Zoom Import.
+9. [x] Parser-Grundlage für Teams Graph Import.
+10. [x] Parser-Grundlage für Meet Import.
+11. [x] Parser-Grundlage für Zoom Import.
 
 ## Risiken
 
