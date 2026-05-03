@@ -95,6 +95,8 @@ struct MeetingPill: View {
                 Text("Ignorieren")
                     .font(.neonBody(12, weight: .medium))
                     .foregroundStyle(Neon.textSecondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 14)
                     .frame(height: 30)
                     .background(
@@ -112,7 +114,9 @@ struct MeetingPill: View {
                         .font(.system(size: 11, weight: .semibold))
                     Text("Aufnehmen")
                         .font(.neonBody(12, weight: .semibold))
+                        .lineLimit(1)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .frame(height: 30)
@@ -125,7 +129,6 @@ struct MeetingPill: View {
                         )
                     )
                 )
-                .shadow(color: Neon.brandPrimary.opacity(0.4), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
         }
