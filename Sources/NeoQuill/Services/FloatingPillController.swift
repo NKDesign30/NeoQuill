@@ -86,8 +86,11 @@ final class FloatingPillController {
         let host = NSHostingView(rootView: pill)
         host.translatesAutoresizingMaskIntoConstraints = false
 
+        // Panel anfangs für den größten Modus, danach shrinken wir auf die
+        // SwiftUI-fittingSize damit Window-Rect und Pille deckungsgleich sind
+        // (kein toter Window-Raum mehr → kein "kastiger" Effekt um die Pille).
         let p = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 56),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 48),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -95,16 +98,11 @@ final class FloatingPillController {
         p.isFloatingPanel = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        // Kein System-Window-Shadow: MeetingPill rendert eigenen Shadow um die
-        // Capsule. hasShadow=true wuerde einen rechteckigen Outline um die
-        // Window-Bounds zeichnen, der durch das transparente Background als
-        // Doppel-Frame sichtbar wird.
         p.hasShadow = false
         p.backgroundColor = .clear
         p.isOpaque = false
         p.isMovableByWindowBackground = true
         p.contentView = host
-        // Auto-size auf SwiftUI-Inhalt
         host.frame = p.contentView?.bounds ?? .zero
         host.autoresizingMask = [.width, .height]
 
@@ -113,7 +111,13 @@ final class FloatingPillController {
     }
 
     private func positionAtTopCenter(panel: NSPanel) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = NSScreen.main, let host = hosting else { return }
+        // Window-Frame an SwiftUI-fittingSize angleichen.
+        host.layoutSubtreeIfNeeded()
+        let fitting = host.fittingSize
+        if fitting.width > 0, fitting.height > 0 {
+            panel.setContentSize(fitting)
+        }
         let visible = screen.visibleFrame
         let panelSize = panel.frame.size
         let x = visible.midX - panelSize.width / 2
