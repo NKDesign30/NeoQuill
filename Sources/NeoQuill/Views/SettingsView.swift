@@ -14,10 +14,95 @@ struct SettingsView: View {
             AIIntelligenceTab()
                 .tabItem { Label("KI", systemImage: "sparkles") }
 
+            CloudIntegrationsTab()
+                .tabItem { Label("Cloud", systemImage: "cloud.fill") }
+
             PermissionsTab()
                 .tabItem { Label("Berechtigungen", systemImage: "lock.shield") }
         }
-        .frame(width: 560, height: 420)
+        .frame(width: 580, height: 460)
+    }
+}
+
+private struct CloudIntegrationsTab: View {
+    @EnvironmentObject private var state: AppState
+    @State private var lastError: String?
+
+    var body: some View {
+        Form {
+            ForEach(CloudProvider.allCases, id: \.self) { provider in
+                Section(provider.displayName) {
+                    let connected = state.cloudOAuth.connectedProviders.contains(provider)
+                    let configured = CloudOAuthCatalog.config(for: provider).isConfigured
+                    LabeledContent("Status") {
+                        Text(statusLabel(connected: connected, configured: configured))
+                            .foregroundStyle(connected ? Neon.brandPrimary : Neon.statusError)
+                    }
+                    HStack {
+                        if connected {
+                            Button("Verbindung trennen") {
+                                state.cloudOAuth.signOut(provider)
+                            }
+                            .foregroundStyle(Neon.statusError)
+                        } else {
+                            Button(configured ? "Mit \(provider.displayName) anmelden" : "App-Registrierung fehlt") {
+                                Task { await signIn(provider) }
+                            }
+                            .disabled(!configured)
+                        }
+                    }
+                    if !configured {
+                        Text(configHintText(provider: provider))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(scopeText(provider: provider))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if let lastError {
+                Section("Letzter Fehler") {
+                    Text(lastError)
+                        .font(.callout)
+                        .foregroundStyle(Neon.statusError)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 16)
+    }
+
+    private func statusLabel(connected: Bool, configured: Bool) -> String {
+        if connected { return "Verbunden" }
+        if !configured { return "App-Registrierung fehlt" }
+        return "Nicht verbunden"
+    }
+
+    private func configHintText(provider: CloudProvider) -> String {
+        switch provider {
+        case .teams:
+            return "Microsoft Entra App registrieren, Client-ID als Info.plist-Key 'NeoQuillTeamsClientId' eintragen + Redirect-URI 'neoquill://oauth/teams'."
+        case .meet:
+            return "Google Cloud OAuth-Client (macOS) anlegen, Client-ID als 'NeoQuillMeetClientId' eintragen + Redirect-URI 'neoquill://oauth/meet'."
+        case .zoom:
+            return "Zoom Marketplace OAuth-App anlegen, Client-ID als 'NeoQuillZoomClientId' eintragen + Redirect-URI 'neoquill://oauth/zoom'."
+        }
+    }
+
+    private func scopeText(provider: CloudProvider) -> String {
+        let scopes = CloudOAuthCatalog.config(for: provider).scopes.joined(separator: ", ")
+        return "Scopes: \(scopes)"
+    }
+
+    private func signIn(_ provider: CloudProvider) async {
+        do {
+            try await state.cloudOAuth.signIn(provider)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 }
 

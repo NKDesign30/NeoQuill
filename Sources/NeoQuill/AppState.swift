@@ -75,6 +75,8 @@ final class AppState: ObservableObject {
     let pill = FloatingPillController()
     let voiceIdEnrollment: VoiceIdEnrollmentService
     let calendar = CalendarParticipantsService()
+    let cloudOAuth = CloudOAuthService()
+    let cloudReconcile: PlatformReconcileService
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
@@ -91,6 +93,7 @@ final class AppState: ObservableObject {
         recorder.store = store
         recorder.speakerStore = speakerStore
         voiceIdEnrollment = VoiceIdEnrollmentService(diarizer: recorder.diarizer, speakerStore: speakerStore)
+        cloudReconcile = PlatformReconcileService(oauth: cloudOAuth)
         dockBadge.bind(to: recorder)
         menuBar.install(with: recorder)
         pill.bind(to: recorder)
