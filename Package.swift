@@ -39,7 +39,10 @@ let package = Package(
         .testTarget(
             name: "NeoQuillTests",
             dependencies: ["NeoQuill"],
-            path: "Tests/NeoQuillTests"
+            path: "Tests/NeoQuillTests",
+            resources: [
+                .copy("Fixtures"),
+            ]
         ),
     ]
 )
