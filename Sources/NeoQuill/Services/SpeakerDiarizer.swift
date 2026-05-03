@@ -8,7 +8,7 @@ import FluidAudio
 // Auto-Re-Identification bei zukünftigen Calls.
 //
 // Architektur für Teams-Calls:
-//   - Mic-Stream (AVAudioEngine)            → garantiert Niko, kein Diarize nötig.
+//   - Mic-Stream (AVAudioEngine)            → lokale Stimme, kein Diarize nötig.
 //   - Teams-Process-Audio (ProcessAudioTap) → Remote-Teilnehmer, hier diarisieren.
 
 @MainActor
@@ -45,7 +45,7 @@ final class SpeakerDiarizer: ObservableObject {
         return try await manager.performCompleteDiarization(samples, sampleRate: 16_000, atTime: startOffset)
     }
 
-    /// Single-Speaker-Embedding extrahieren — z.B. um Niko ein Label zuzuordnen.
+    /// Single-Speaker-Embedding extrahieren — z.B. um einen Speaker zu labeln.
     func embedding(for samples: [Float]) throws -> [Float] {
         try manager.extractSpeakerEmbedding(from: samples)
     }

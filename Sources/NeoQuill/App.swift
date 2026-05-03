@@ -18,6 +18,12 @@ struct NeoQuillApp: App {
                 .frame(minWidth: 1080, idealWidth: 1280, minHeight: 700, idealHeight: 820)
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
+                .sheet(isPresented: $state.showProfileOnboarding) {
+                    ProfileOnboardingView { name, role in
+                        state.completeProfileOnboarding(name: name, role: role)
+                    }
+                    .preferredColorScheme(.dark)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)

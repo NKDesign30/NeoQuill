@@ -1,6 +1,6 @@
 import SwiftUI
 
-// "Wer ist das?"-Sheet — Niko klickt auf einen anonymen Speaker (S1/S2/...) in der
+// "Wer ist das?"-Sheet — User klickt auf einen anonymen Speaker (S1/S2/...) in der
 // Detail-View und tippt den echten Namen ein. Wird im SpeakerStore mit dem aktuellen
 // Embedding persistiert → beim nächsten Call automatisch wiedererkannt.
 

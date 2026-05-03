@@ -81,7 +81,7 @@ final class AudioCapture: NSObject, ObservableObject {
     private let levelGuardWarmupSamples = 3 * 16000  // 3 Sekunden bei 16kHz
     private let quietThreshold: Float = 0.001
 
-    /// Callback fuer Mic-Chunks (eigene Stimme → Speaker NK).
+    /// Callback fuer Mic-Chunks (eigene Stimme → lokaler Speaker).
     var onMicChunk: (([Float]) -> Void)?
     /// Callback fuer System-Audio-Chunks (Remote-Teilnehmer via ProcessTap → Speaker S1).
     /// Vorher: System-Audio wurde nur akkumuliert und beim Stop gemixt — Live-Transkript

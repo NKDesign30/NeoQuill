@@ -36,5 +36,10 @@ let package = Package(
                 .linkedLibrary("sqlite3"),
             ]
         ),
+        .testTarget(
+            name: "NeoQuillTests",
+            dependencies: ["NeoQuill"],
+            path: "Tests/NeoQuillTests"
+        ),
     ]
 )

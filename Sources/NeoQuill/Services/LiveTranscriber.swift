@@ -136,10 +136,16 @@ final class LiveTranscriber: @unchecked Sendable {
                     let mins = Int(segment.start) / 60
                     let secs = Int(segment.start) % 60
                     let ts = String(format: "%02d:%02d", mins, secs)
+                    let isLocalSpeaker = LocalSpeakerProfile.isLocalSpeakerId(speaker)
                     lines.append(TranscriptLine(
                         who: speaker,
+                        displayName: isLocalSpeaker ? LocalSpeakerProfile.displayName : nil,
                         timestamp: ts,
+                        startSeconds: TimeInterval(segment.start),
+                        endSeconds: TimeInterval(segment.end),
                         body: cleaned,
+                        source: isLocalSpeaker ? .mic : .system,
+                        speakerSource: isLocalSpeaker ? .microphoneOwner : .unknown,
                         highlight: false
                     ))
                 }

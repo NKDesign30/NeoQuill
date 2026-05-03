@@ -29,6 +29,7 @@ final class AppState: ObservableObject {
     @Published var density: SidebarDensity = AppState.loadDensity()
     @Published var selectedMeetingId: String? = nil
     @Published var query: String = ""
+    @Published var showProfileOnboarding: Bool = false
 
     private static func loadLayout() -> DetailLayout {
         let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout) ?? "editorial"
@@ -115,6 +116,7 @@ final class AppState: ObservableObject {
         // in Detail/Empty waehrend des Recordings. Der Aufnahme-Status
         // wird ueber die Floating-Pille (NSPanel) angezeigt, nicht im
         // Hauptfenster.
+        showProfileOnboarding = !UserDefaults.standard.boolOr(AppSettings.profileOnboarded, default: false)
     }
 
     // MARK: - Actions
@@ -138,6 +140,17 @@ final class AppState: ObservableObject {
 
     func reprocessMeeting(_ meetingId: String) {
         recorder.reprocessMeeting(meetingId)
+    }
+
+    func completeProfileOnboarding(name: String, role: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedName.isEmpty {
+            UserDefaults.standard.set(trimmedName, forKey: AppSettings.ownerDisplayName)
+        }
+        UserDefaults.standard.set(trimmedRole.isEmpty ? "Eigene Stimme" : trimmedRole, forKey: AppSettings.ownerRole)
+        UserDefaults.standard.set(true, forKey: AppSettings.profileOnboarded)
+        showProfileOnboarding = false
     }
 
     func showEmpty() {
