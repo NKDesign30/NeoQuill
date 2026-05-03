@@ -351,7 +351,11 @@ final class RecordingController: ObservableObject {
         if !captionEvents.isEmpty || !diarizationSegments.isEmpty {
             allLines = mergeSpeakers(lines: allLines, captionEvents: captionEvents, diarization: diarizationSegments)
             persistCaptionIdentities(from: allLines, platform: detectedPlatform())
-            participants = collectParticipants(lines: allLines, baseDuration: durationShort)
+            participants = collectParticipants(
+                lines: allLines,
+                baseDuration: durationShort,
+                diarizationSegments: diarizationSegments
+            )
         }
 
         let enrichedLines = allLines
@@ -479,7 +483,11 @@ final class RecordingController: ObservableObject {
                 platformEvents: platformEvents,
                 diarization: diarSegments
             )
-            participants = collectParticipants(lines: allLines, baseDuration: detail.duration)
+            participants = collectParticipants(
+                lines: allLines,
+                baseDuration: detail.duration,
+                diarizationSegments: diarSegments
+            )
         }
         if !platformEvents.isEmpty {
             persistPlatformIdentities(from: allLines, platform: detail.platform)
@@ -753,7 +761,9 @@ final class RecordingController: ObservableObject {
     private func runDiarization(samples: [Float]) async -> [DiarizedSpeakerSegment] {
         do {
             let result = try await diarizer.diarize(samples)
-            return result.segments.map { seg in
+            return result.segments.compactMap { seg in
+                let duration = TimeInterval(seg.endTimeSeconds - seg.startTimeSeconds)
+                guard duration >= Self.minDiarizationSegmentDuration else { return nil }
                 let resolvedId: String
                 let source: SpeakerIdentitySource
                 let confidence: Double
@@ -780,6 +790,8 @@ final class RecordingController: ObservableObject {
             return []
         }
     }
+
+    static let minDiarizationSegmentDuration: TimeInterval = 1.2
 
     /// Match TranscriptLines (mit Mono-Timestamps) auf Diarize-Segments.
     /// Source-Aware: Mic-Lines bleiben die lokale Person, weil sie
@@ -821,7 +833,8 @@ final class RecordingController: ObservableObject {
 
     private func collectParticipants(
         lines: [TranscriptLine],
-        baseDuration: String
+        baseDuration: String,
+        diarizationSegments: [DiarizedSpeakerSegment] = []
     ) -> [Participant] {
         let displayNames = Dictionary(
             lines.compactMap { line -> (String, String)? in
@@ -841,24 +854,75 @@ final class RecordingController: ObservableObject {
             (LocalSpeakerProfile.id, LocalSpeakerProfile.colorHex), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
             ("S3", 0x409CFF), ("S4", 0xD4845A)
         ]
+        let spokeBySpeaker = Self.spokenDurations(
+            speakerIds: speakerIds,
+            lines: lines,
+            diarizationSegments: diarizationSegments,
+            fallback: baseDuration
+        )
         return speakerIds.compactMap { id in
+            let spoke = spokeBySpeaker[id] ?? baseDuration
             if let known = speakerStore?.speaker(for: id) {
                 return Participant(id: id, name: known.name, role: "Bekannt",
-                                   colorHex: known.colorHex, spoke: baseDuration)
+                                   colorHex: known.colorHex, spoke: spoke)
             }
             if let displayName = displayNames[id] {
                 return Participant(id: id, name: displayName, role: "Caption",
-                                   colorHex: colorHex(forSpeakerId: id), spoke: baseDuration)
+                                   colorHex: colorHex(forSpeakerId: id), spoke: spoke)
             }
             guard let entry = palette.first(where: { $0.0 == id }) else {
                 return Participant(id: id, name: "Speaker \(id)", role: "Erkannt",
-                                   colorHex: colorHex(forSpeakerId: id), spoke: baseDuration)
+                                   colorHex: colorHex(forSpeakerId: id), spoke: spoke)
             }
             let name = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.displayName : "Speaker \(id)"
             let role = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.role : "Erkannt"
             return Participant(id: id, name: name, role: role,
-                               colorHex: entry.1, spoke: baseDuration)
+                               colorHex: entry.1, spoke: spoke)
         }
+    }
+
+    /// Berechnet Sprechanteile pro Speaker. Diarization-Segmente sind die
+    /// genaueste Quelle (entstehen direkt aus Audio-Energie). Fallback:
+    /// Summe der TranscriptLine-Dauern. Letzter Fallback: `baseDuration`
+    /// String, damit die UI nicht leer bleibt.
+    nonisolated static func spokenDurations(
+        speakerIds: [String],
+        lines: [TranscriptLine],
+        diarizationSegments: [DiarizedSpeakerSegment],
+        fallback: String
+    ) -> [String: String] {
+        var diarTotals: [String: TimeInterval] = [:]
+        for segment in diarizationSegments {
+            let duration = max(0, segment.end - segment.start)
+            guard duration > 0 else { continue }
+            diarTotals[segment.speakerId, default: 0] += duration
+        }
+
+        var lineTotals: [String: TimeInterval] = [:]
+        for line in lines {
+            let duration = max(0, line.endSeconds - line.startSeconds)
+            guard duration > 0 else { continue }
+            lineTotals[line.who, default: 0] += duration
+        }
+
+        var result: [String: String] = [:]
+        for id in speakerIds {
+            if let seconds = diarTotals[id] {
+                result[id] = formatSpoke(seconds: seconds)
+            } else if let seconds = lineTotals[id] {
+                result[id] = formatSpoke(seconds: seconds)
+            } else {
+                result[id] = fallback
+            }
+        }
+        return result
+    }
+
+    nonisolated static func formatSpoke(seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let minutes = total / 60
+        let remainder = total % 60
+        return "\(minutes)m \(remainder)s"
     }
 
     private func persistCaptionIdentities(from lines: [TranscriptLine], platform: Platform) {

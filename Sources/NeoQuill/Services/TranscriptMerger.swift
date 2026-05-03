@@ -158,12 +158,15 @@ enum TranscriptMerger {
         for line: TranscriptLine,
         in segments: [DiarizedSpeakerSegment]
     ) -> DiarizedSpeakerSegment? {
-        segments.max { lhs, rhs in
+        let usable = segments.filter { ($0.end - $0.start) >= minDiarizationMatchDuration }
+        return usable.max { lhs, rhs in
             overlapScore(line: line, segment: lhs) < overlapScore(line: line, segment: rhs)
         }.flatMap { segment in
             overlapScore(line: line, segment: segment) > 0 ? segment : nil
         }
     }
+
+    static let minDiarizationMatchDuration: TimeInterval = 0.8
 
     private static func overlapScore(line: TranscriptLine, segment: DiarizedSpeakerSegment) -> Double {
         let lineEnd = max(line.endSeconds, line.startSeconds + 0.8)
