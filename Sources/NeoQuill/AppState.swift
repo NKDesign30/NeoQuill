@@ -118,6 +118,7 @@ final class AppState: ObservableObject {
         // Hauptfenster.
         showProfileOnboarding = !UserDefaults.standard.boolOr(AppSettings.profileOnboarded, default: false)
         CaptionDebugDumper.installIfEnabled()
+        TranscriptDownloadWatcher.installIfEnabled()
     }
 
     // MARK: - Actions

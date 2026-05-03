@@ -86,6 +86,7 @@ private struct AudioSettingsTab: View {
 private struct AIIntelligenceTab: View {
     @AppStorage(AppSettings.speakerDiarization) private var diarize: Bool = true
     @AppStorage(AppSettings.liveCaptionCapture) private var liveCaptionCapture: Bool = false
+    @AppStorage(AppSettings.autoWatchDownloadsForTranscripts) private var watchDownloads: Bool = false
 
     var body: some View {
         Form {
@@ -98,6 +99,19 @@ private struct AIIntelligenceTab: View {
             Section("Live-Captions") {
                 Toggle("Meeting-Captions lokal lesen", isOn: $liveCaptionCapture)
                 Text("Liest sichtbare Captions aus Teams, Zoom oder Google Meet lokal per macOS Accessibility. Hilft bei echten Namen.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Plattform-Transkripte") {
+                Toggle("Transkripte im Downloads-Ordner automatisch erkennen", isOn: $watchDownloads)
+                    .onChange(of: watchDownloads) { _, newValue in
+                        if newValue {
+                            TranscriptDownloadWatcher.startWatching()
+                        } else {
+                            TranscriptDownloadWatcher.stopWatching()
+                        }
+                    }
+                Text("NeoQuill prüft Dateinamen wie teams-transcript-*.vtt oder zoom-timeline-*.json. Inhalte verlassen den Mac nicht.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
