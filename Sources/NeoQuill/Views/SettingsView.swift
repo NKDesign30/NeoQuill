@@ -318,7 +318,7 @@ private struct PermissionsTab: View {
     }
 }
 
-private enum MicEnumerator {
+enum MicEnumerator {
     struct Device: Identifiable { let id: String; let name: String }
 
     static func list() -> [Device] {
