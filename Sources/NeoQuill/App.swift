@@ -24,6 +24,15 @@ struct NeoQuillApp: App {
                     }
                     .preferredColorScheme(.dark)
                 }
+                .sheet(item: $state.pendingTranscriptDetection) { event in
+                    MatchTranscriptSheet(
+                        fileURL: event.fileURL,
+                        hint: event.hint,
+                        detectedAt: event.detectedAt,
+                        candidateMeetingIds: state.candidateMeetingIds(for: event)
+                    )
+                    .environmentObject(state)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
