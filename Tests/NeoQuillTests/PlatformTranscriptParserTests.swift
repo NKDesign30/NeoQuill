@@ -111,6 +111,53 @@ final class PlatformTranscriptParserTests: XCTestCase {
         XCTAssertEqual(events[0].startSeconds, 12.5, accuracy: 0.001)
     }
 
+    func testZoomTimelineHandlesEndTsField() throws {
+        let json = """
+        {
+          "timeline": [
+            {
+              "speaker_name": "Chris Wagner",
+              "user_id": "zoom-user-1",
+              "text": "Rollout bleibt bei Freitag.",
+              "ts": "2026-05-03T12:00:00.000Z",
+              "end_ts": "2026-05-03T12:00:04.500Z"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
+
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].platform, .zoom)
+        XCTAssertEqual(events[0].startSeconds, 0, accuracy: 0.001)
+        XCTAssertEqual(events[0].endSeconds, 4.5, accuracy: 0.001)
+    }
+
+    func testZoomTimelineExtractsActiveUserFromUsersArray() throws {
+        let json = """
+        {
+          "timeline": [
+            {
+              "ts": "2026-05-03T12:00:00.000Z",
+              "end_ts": "2026-05-03T12:00:02.000Z",
+              "text": "Ich nehme das mit.",
+              "users": [
+                { "user_id": "u-passive", "user_name": "Stille Beobachterin", "talking": false },
+                { "user_id": "u-active", "user_name": "Chris Wagner", "talking": true }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
+
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].speakerName, "Chris Wagner")
+        XCTAssertEqual(events[0].speakerId, "u-active")
+    }
+
     func testTeamsSpecificParserReadsVTT() throws {
         let vtt = """
         WEBVTT

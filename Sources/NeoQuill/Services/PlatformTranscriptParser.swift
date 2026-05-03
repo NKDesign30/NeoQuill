@@ -64,15 +64,35 @@ enum PlatformTranscriptParser {
     }
 
     static func parseZoomTimeline(_ data: Data) throws -> [PlatformTranscriptEvent] {
-        try parseGenericJSON(
-            data,
-            platform: .zoom,
-            textKeys: ["text", "content", "transcript"],
-            speakerKeys: ["speakerName", "speaker_name", "speaker", "userName", "username", "name"],
-            speakerIdKeys: ["speakerId", "speaker_id", "userId", "user_id"],
-            startKeys: ["startTime", "start_time", "start", "ts"],
-            endKeys: ["endTime", "end_time", "end"]
-        )
+        let root = try jsonRoot(data)
+        let dicts = candidateDictionaries(root, preferredKeys: ["transcriptEntries", "entries", "segments", "timeline", "items"])
+        let rawEvents: [RawPlatformEvent] = dicts.compactMap { dict in
+            guard let text = firstString(dict, keys: ["text", "content", "transcript"])?.nilIfEmpty else {
+                return nil
+            }
+            let (speakerName, speakerId) = zoomSpeakerFields(from: dict)
+            return RawPlatformEvent(
+                speakerName: speakerName,
+                speakerId: speakerId,
+                text: text,
+                start: firstTimeValue(dict, keys: ["startTime", "start_time", "start", "ts"]),
+                end: firstTimeValue(dict, keys: ["endTime", "end_time", "end", "end_ts"]),
+                rawPayload: jsonString(dict)
+            )
+        }
+        return normalize(rawEvents, platform: .zoom)
+    }
+
+    private static func zoomSpeakerFields(from dict: [String: Any]) -> (name: String?, id: String?) {
+        if let users = dict["users"] as? [[String: Any]], !users.isEmpty {
+            let active = users.first { ($0["talking"] as? Bool ?? false) } ?? users.first
+            let name = active.flatMap { firstString($0, keys: ["user_name", "userName", "name", "speakerName", "speaker"]) }
+            let id = active.flatMap { firstString($0, keys: ["user_id", "userId", "speakerId", "speaker_id", "id"]) }
+            return (name, id)
+        }
+        let name = firstString(dict, keys: ["speakerName", "speaker_name", "speaker", "userName", "username", "name"])
+        let id = firstString(dict, keys: ["speakerId", "speaker_id", "userId", "user_id"])
+        return (name, id)
     }
 
     private static func parseGenericJSON(
