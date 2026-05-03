@@ -44,6 +44,7 @@ MVP: lokale Caption-Erfassung + Merge in NeoQuills Transcript. Danach API-Reconc
 - [x] Personenbezogene Demo-/Produktstrings bereinigt.
 - [x] `swift build` grün.
 - [x] `swift test` grün: 47 Tests, 0 Fehler.
+- [x] QA-Workflow + AX-Rollen-Mapping dokumentiert: `SPEAKER_ID_HANDOFF.md` (jq-Snippets, Aktivierung, Plattform-spezifische AX-Patterns).
 - [ ] Echte Teams/Zoom/Meet Live-QA mit aktiven Captions.
 - [x] Dedizierte Unit Tests für AX-Caption-Dedupe.
 - [ ] Teams Graph OAuth/API-Abruf.
