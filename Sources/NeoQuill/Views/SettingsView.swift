@@ -87,9 +87,31 @@ private struct AIIntelligenceTab: View {
     @AppStorage(AppSettings.speakerDiarization) private var diarize: Bool = true
     @AppStorage(AppSettings.liveCaptionCapture) private var liveCaptionCapture: Bool = false
     @AppStorage(AppSettings.autoWatchDownloadsForTranscripts) private var watchDownloads: Bool = false
+    @AppStorage(AppSettings.voiceIdEnrolled) private var voiceIdEnrolled: Bool = false
+    @AppStorage(AppSettings.calendarParticipantPool) private var calendarPool: Bool = true
+    @EnvironmentObject private var state: AppState
+    @State private var showVoiceIdSheet = false
 
     var body: some View {
         Form {
+            Section("Eigene Stimme") {
+                LabeledContent("Voice-ID Status") {
+                    Text(voiceIdEnrolled ? "Eingerichtet" : "Nicht eingerichtet")
+                        .foregroundStyle(voiceIdEnrolled ? Neon.brandPrimary : Neon.statusError)
+                }
+                Button(voiceIdEnrolled ? "Stimme neu einrichten" : "Stimme einrichten") {
+                    showVoiceIdSheet = true
+                }
+                Text("Einmal vorlesen, dann erkennt NeoQuill deine Stimme automatisch in jedem Meeting — ersetzt anonyme S1-Marker mit deinem Namen.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Kalender-Hinweise") {
+                Toggle("Teilnehmer aus Kalender als Pool nutzen", isOn: $calendarPool)
+                Text("Bei aktivem Meeting werden die Kalender-Teilnehmer als Hinweis-Pool fuer unklare Speaker verwendet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Section("Speaker-Detection") {
                 Toggle("Speaker-Diarization (FluidAudio)", isOn: $diarize)
                 Text("Erkennt automatisch wer wann spricht. Modelle (~140 MB) werden beim ersten Aktivieren geladen.")
@@ -124,6 +146,12 @@ private struct AIIntelligenceTab: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 16)
+        .sheet(isPresented: $showVoiceIdSheet) {
+            VoiceIdOnboardingSheet(
+                enrollment: state.voiceIdEnrollment,
+                onDismiss: { showVoiceIdSheet = false }
+            )
+        }
     }
 }
 

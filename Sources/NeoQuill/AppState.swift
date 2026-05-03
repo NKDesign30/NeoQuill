@@ -73,6 +73,8 @@ final class AppState: ObservableObject {
     let dockBadge = DockBadgeService()
     let menuBar = MenuBarController()
     let pill = FloatingPillController()
+    let voiceIdEnrollment: VoiceIdEnrollmentService
+    let calendar = CalendarParticipantsService()
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
@@ -88,6 +90,7 @@ final class AppState: ObservableObject {
     init() {
         recorder.store = store
         recorder.speakerStore = speakerStore
+        voiceIdEnrollment = VoiceIdEnrollmentService(diarizer: recorder.diarizer, speakerStore: speakerStore)
         dockBadge.bind(to: recorder)
         menuBar.install(with: recorder)
         pill.bind(to: recorder)

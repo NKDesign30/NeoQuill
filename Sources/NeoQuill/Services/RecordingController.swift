@@ -35,7 +35,7 @@ final class RecordingController: ObservableObject {
     /// sequenziell durch. Ein Modell = halbe RAM-Last + kein ANE-Konflikt.
     private let transcriber = LiveTranscriber()
     private let permissions = PermissionGate()
-    private let diarizer = SpeakerDiarizer()
+    let diarizer = SpeakerDiarizer()
     let detector = MeetingDetector()
     weak var store: MeetingStore?
     weak var speakerStore: SpeakerStore?
