@@ -159,7 +159,7 @@ struct VoiceVisual: View {
             speakerCard
             strangerCard
         }
-        .frame(maxWidth: 320)
+        .frame(width: 340)
     }
 
     private var speakerCard: some View {
@@ -280,23 +280,26 @@ struct VoiceSampleBars: View {
     let accent: Color
     let isActive: Bool
     let isDone: Bool
+    var barCount: Int = 56
     @State private var tick: Int = 0
 
     private let timer = Timer.publish(every: 0.09, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
-            HStack(spacing: 2) {
-                ForEach(0..<64, id: \.self) { i in
+            let spacing: CGFloat = 3
+            let totalSpacing = CGFloat(barCount - 1) * spacing
+            let barWidth = max(2, (geo.size.width - totalSpacing) / CGFloat(barCount))
+            HStack(alignment: .center, spacing: spacing) {
+                ForEach(0..<barCount, id: \.self) { i in
                     let h = barHeight(for: i)
                     Capsule()
                         .fill(barColor(for: i))
-                        .frame(width: max(2, geo.size.width / 80), height: max(2, h * geo.size.height))
-                        .opacity(isActive ? 0.5 + h * 0.5 : (isDone ? 0.85 : 0.4))
-                        .frame(maxWidth: .infinity)
+                        .frame(width: barWidth, height: max(3, h * geo.size.height))
+                        .opacity(isActive ? 0.55 + h * 0.45 : (isDone ? 0.9 : 0.4))
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .center)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .onReceive(timer) { _ in
             if isActive { tick &+= 1 }
