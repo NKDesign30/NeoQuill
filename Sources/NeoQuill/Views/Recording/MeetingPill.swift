@@ -109,9 +109,10 @@ struct MeetingPill: View {
             .fixedSize()
 
             Button(action: state.onAccept) {
-                HStack(spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     Image(systemName: "record.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.neonBody(12, weight: .semibold))
+                        .imageScale(.medium)
                     Text("Aufnehmen")
                         .font(.neonBody(12, weight: .semibold))
                         .lineLimit(1)
