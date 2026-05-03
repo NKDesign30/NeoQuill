@@ -143,6 +143,18 @@ final class AppState: ObservableObject {
         recorder.reprocessMeeting(meetingId)
     }
 
+    /// Importiert ein Plattform-Transkript (Teams VTT/Metadata, Meet Entries, Zoom Timeline/VTT)
+    /// und triggert ein Reprocess des angegebenen Meetings, das die Plattform-Events in den
+    /// Merger durchreicht. Wirft Fehler aus dem Format-Detektor; der eigentliche Re-Merge
+    /// laeuft asynchron im RecordingController.
+    @discardableResult
+    func importPlatformTranscript(meetingId: String, fileURL: URL) throws -> PlatformImportService.Outcome {
+        let fallback = store.detail(for: meetingId)?.platform ?? .meet
+        let outcome = try PlatformImportService.detectAndParse(url: fileURL, fallbackPlatform: fallback)
+        recorder.applyPlatformImport(meetingId: meetingId, events: outcome.events)
+        return outcome
+    }
+
     func completeProfileOnboarding(name: String, role: String) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
