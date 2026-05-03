@@ -21,6 +21,8 @@ final class RecordingController: ObservableObject {
     @Published private(set) var device: String = "Mikrofon"
     @Published private(set) var modelLabel: String = "WhisperKit ANE"
     @Published private(set) var statusText: String = "Bereit"
+    @Published private(set) var captionStatusText: String = "Captions aus"
+    @Published private(set) var captionEventCount: Int = 0
     @Published private(set) var hasMicPermission: Bool = false
     /// Live-Audio-Level (RMS, 0..~1) — UI-Header/Pille zeigt Live-Bars.
     @Published private(set) var audioLevel: Float = 0
@@ -28,6 +30,7 @@ final class RecordingController: ObservableObject {
     // MARK: - Dependencies
 
     private let audioCapture = AudioCapture()
+    private let captionCapture = CaptionCaptureService()
     /// Single Whisper-Instance fuer Post-Recording. Mic- und Sys-Stem laufen
     /// sequenziell durch. Ein Modell = halbe RAM-Last + kein ANE-Konflikt.
     private let transcriber = LiveTranscriber()
@@ -40,6 +43,8 @@ final class RecordingController: ObservableObject {
     private var detectorCancellable: AnyCancellable?
     private var deviceCancellable: AnyCancellable?
     private var levelCancellable: AnyCancellable?
+    private var captionStateCancellable: AnyCancellable?
+    private var captionEventsCancellable: AnyCancellable?
     private var autoDetectActive = false
 
     private var elapsedTimer: AnyCancellable?
@@ -52,6 +57,7 @@ final class RecordingController: ObservableObject {
     init() {
         wireTranscriber()
         wireAudioCapture()
+        wireCaptionCapture()
         refreshPermissions()
         applyAutoDetectSetting()
         NotificationCenter.default.addObserver(
@@ -218,6 +224,7 @@ final class RecordingController: ObservableObject {
             state = .recording(startedAt: startedAt!)
             statusText = "Aufnahme läuft"
             startElapsedTimer()
+            startCaptionCapture(startedAt: startedAt!, app: detector.detectedApp)
             // Detector laeuft WEITER waehrend Recording — Auto-Stop bei
             // aufgelegtem Call braucht den. Self-Trigger wird durch
             // `handleDetectorChange` via State-Check verhindert.
@@ -236,6 +243,7 @@ final class RecordingController: ObservableObject {
 
         let runtime = elapsed
         let started = startedAt ?? Date()
+        let captionEvents = captionCapture.stop()
 
         // UI sofort entlasten: Provisional-Detail einsetzen + State auf idle,
         // sodass die RecordingView verlassen und die Detail-View mit
@@ -252,7 +260,12 @@ final class RecordingController: ObservableObject {
         // Heavy Lifting im Hintergrund — Whisper auf Stems, FluidAudio-Diarize,
         // Claude-Summary. Updated das Provisional-Detail Schritt fuer Schritt.
         Task { [weak self] in
-            await self?.persistMeeting(meetingId: meetingId, runtime: runtime, started: started)
+            await self?.persistMeeting(
+                meetingId: meetingId,
+                runtime: runtime,
+                started: started,
+                captionEvents: captionEvents
+            )
         }
     }
 
@@ -273,14 +286,12 @@ final class RecordingController: ObservableObject {
         let endDate = started.addingTimeInterval(runtime)
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
         let provisionalTitle = "Aufnahme \(timeShort)"
-        let participants: [Participant] = [
-            .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
-        ]
+        let participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
 
         let summary = MeetingSummary(
             id: id, title: provisionalTitle, date: dateShort, time: timeShort,
             duration: durationShort, platform: detectedPlatform(), wordCount: 0,
-            group: "Diesen Monat", participantIds: ["NK"], unread: true
+            group: "Diesen Monat", participantIds: [LocalSpeakerProfile.id], unread: true
         )
         let provisional = MeetingDetail(
             id: id, title: provisionalTitle, dateLong: dateLong, timeRange: timeRange,
@@ -293,7 +304,12 @@ final class RecordingController: ObservableObject {
         store.insert(summary: summary, detail: provisional)
     }
 
-    private func persistMeeting(meetingId: String, runtime: TimeInterval, started: Date) async {
+    private func persistMeeting(
+        meetingId: String,
+        runtime: TimeInterval,
+        started: Date,
+        captionEvents: [CaptionEvent]
+    ) async {
         guard let store else { return }
         let id = meetingId
         let durationShort = formatDurationShort(runtime)
@@ -315,25 +331,27 @@ final class RecordingController: ObservableObject {
             language: lang
         )
         let provisionalTitle = generateTitle(from: allLines, started: started)
-        var participants: [Participant] = [
-            .init(id: "NK", name: "Niko Knez", role: "NK Design", colorHex: 0x2EAB73, spoke: durationShort)
-        ]
+        var participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
 
+        var pendingEmbeddings: [String: [Float]] = [:]
+        var diarizationSegments: [DiarizedSpeakerSegment] = []
         // FluidAudio-Diarize auf System-Audio (>= 5s) — labelt S1 ggf. um in S2/S3
         // bzw. matcht gegen bekannte Speaker (Re-ID via SpeakerStore).
-        var pendingEmbeddings: [String: [Float]] = [:]
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
             if captured.sys.count > 16_000 * 5 {
                 statusText = "Erkenne Sprecher"
-                let diar = await runDiarization(samples: captured.sys)
-                allLines = mergeSpeakers(lines: allLines, diarization: diar)
-                participants = collectParticipants(lines: allLines, baseDuration: durationShort)
-                for entry in diar {
+                diarizationSegments = await runDiarization(samples: captured.sys)
+                for entry in diarizationSegments {
                     if pendingEmbeddings[entry.speakerId] == nil {
                         pendingEmbeddings[entry.speakerId] = entry.embedding
                     }
                 }
             }
+        }
+        if !captionEvents.isEmpty || !diarizationSegments.isEmpty {
+            allLines = mergeSpeakers(lines: allLines, captionEvents: captionEvents, diarization: diarizationSegments)
+            persistCaptionIdentities(from: allLines, platform: detectedPlatform())
+            participants = collectParticipants(lines: allLines, baseDuration: durationShort)
         }
 
         let enrichedLines = allLines
@@ -361,7 +379,7 @@ final class RecordingController: ObservableObject {
         statusText = "KI verarbeitet"
 
         // Embeddings frisch entdeckter Speaker für später vorhalten — UI-Labeling-Sheet
-        // greift darauf zu, wenn Niko "S1 = Thorsten" tippt.
+        // greift darauf zu, wenn der User "S1 = Thorsten" tippt.
         for (speakerId, embedding) in pendingEmbeddings where !embedding.isEmpty {
             self.lastEmbeddings[speakerId] = embedding
         }
@@ -448,7 +466,7 @@ final class RecordingController: ObservableObject {
            storedAudio.system.count > 16_000 * 5 {
             statusText = "Erkenne Sprecher"
             let diar = await runDiarization(samples: storedAudio.system)
-            allLines = mergeSpeakers(lines: allLines, diarization: diar)
+            allLines = mergeSpeakers(lines: allLines, captionEvents: [], diarization: diar)
             participants = collectParticipants(lines: allLines, baseDuration: detail.duration)
         }
 
@@ -556,7 +574,7 @@ final class RecordingController: ObservableObject {
     /// Embeddings der letzten Aufnahme — verfügbar für das Speaker-Labeling-Sheet.
     private(set) var lastEmbeddings: [String: [Float]] = [:]
 
-    /// Niko labelt "S1 → Thorsten" → SpeakerStore + alle bekannten Aufnahmen rückwirkend.
+    /// User labelt "S1 → Thorsten" → SpeakerStore + bekannte Aufnahme rückwirkend.
     func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) {
         let embedding = lastEmbeddings[internalId] ?? []
         let canonicalId = canonicalize(name: name)
@@ -609,7 +627,7 @@ final class RecordingController: ObservableObject {
         mixed: [Float],
         language: String
     ) async -> [TranscriptLine] {
-        let micLines = await transcribeFinalStem(audioData: mic, speaker: "NK", language: language)
+        let micLines = await transcribeFinalStem(audioData: mic, speaker: LocalSpeakerProfile.id, language: language)
         let systemLines = await transcribeFinalStem(audioData: system, speaker: "S1", language: language)
         var lines = sortedTranscript(micLines + systemLines)
 
@@ -708,22 +726,30 @@ final class RecordingController: ObservableObject {
     /// Diarisiert den System-Audio-Stream und gibt Speaker-Timeline zurück.
     /// Match gegen bekannte Sprecher (SpeakerStore) → labelt mit dem persistenten Namen
     /// statt anonymem `S1`/`S2`. Neue Embeddings werden im Store automatisch erfasst,
-    /// sobald Niko sie über das "Wer ist das?"-Sheet labelt.
-    private func runDiarization(samples: [Float]) async -> [(start: TimeInterval, end: TimeInterval, speakerId: String, embedding: [Float])] {
+    /// sobald der User sie über das "Wer ist das?"-Sheet labelt.
+    private func runDiarization(samples: [Float]) async -> [DiarizedSpeakerSegment] {
         do {
             let result = try await diarizer.diarize(samples)
             return result.segments.map { seg in
                 let resolvedId: String
+                let source: SpeakerIdentitySource
+                let confidence: Double
                 if let match = speakerStore?.bestMatch(for: seg.embedding) {
                     resolvedId = match.id
+                    source = .knownVoice
+                    confidence = Double(match.score)
                 } else {
                     resolvedId = displaySpeakerId(for: seg.speakerId)
+                    source = .diarization
+                    confidence = 0.72
                 }
-                return (
-                    TimeInterval(seg.startTimeSeconds),
-                    TimeInterval(seg.endTimeSeconds),
-                    resolvedId,
-                    seg.embedding
+                return DiarizedSpeakerSegment(
+                    start: TimeInterval(seg.startTimeSeconds),
+                    end: TimeInterval(seg.endTimeSeconds),
+                    speakerId: resolvedId,
+                    embedding: seg.embedding,
+                    speakerSource: source,
+                    confidence: confidence
                 )
             }
         } catch {
@@ -733,31 +759,21 @@ final class RecordingController: ObservableObject {
     }
 
     /// Match TranscriptLines (mit Mono-Timestamps) auf Diarize-Segments.
-    /// Source-Aware: Mic-Lines (`who == "NK"`) bleiben **immer** NK, weil sie
-    /// bereits aus dem Mic-Stream kommen — der ist garantiert Niko. Nur Lines
+    /// Source-Aware: Mic-Lines bleiben die lokale Person, weil sie
+    /// bereits aus dem Mic-Stream kommen. Nur Lines
     /// aus dem System-Audio-Stream werden mit Speaker-IDs aus Diarization
     /// geupdated. Pattern aus `tonton-golio/meeting-recorder`: separate Stems
     /// → keine Cross-Source-Verwechslung.
     private func mergeSpeakers(
         lines: [TranscriptLine],
-        diarization: [(start: TimeInterval, end: TimeInterval, speakerId: String, embedding: [Float])]
+        captionEvents: [CaptionEvent],
+        diarization: [DiarizedSpeakerSegment]
     ) -> [TranscriptLine] {
-        guard !diarization.isEmpty else { return lines }
-        return lines.map { line in
-            // Mic-Stream-Lines unangetastet lassen — der Mic ist immer Niko.
-            guard line.who != "NK" else { return line }
-
-            let secs = parseTimestampSeconds(line.timestamp)
-            if let match = diarization.first(where: { secs >= $0.start && secs <= $0.end }) {
-                return TranscriptLine(
-                    who: match.speakerId,
-                    timestamp: line.timestamp,
-                    body: line.body,
-                    highlight: line.highlight
-                )
-            }
-            return line
-        }
+        TranscriptMerger.merge(
+            audioLines: lines,
+            captionEvents: captionEvents,
+            diarization: diarization
+        )
     }
 
     private func displaySpeakerId(for rawId: String) -> String {
@@ -782,13 +798,22 @@ final class RecordingController: ObservableObject {
         lines: [TranscriptLine],
         baseDuration: String
     ) -> [Participant] {
+        let displayNames = Dictionary(
+            lines.compactMap { line -> (String, String)? in
+                guard let name = line.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !name.isEmpty
+                else { return nil }
+                return (line.who, name)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
         let speakerIds = Set(lines.map(\.who)).sorted { lhs, rhs in
-            if lhs == "NK" { return true }
-            if rhs == "NK" { return false }
+            if LocalSpeakerProfile.isLocalSpeakerId(lhs) { return true }
+            if LocalSpeakerProfile.isLocalSpeakerId(rhs) { return false }
             return lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
         let palette: [(String, UInt32)] = [
-            ("NK", 0x2EAB73), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
+            (LocalSpeakerProfile.id, LocalSpeakerProfile.colorHex), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
             ("S3", 0x409CFF), ("S4", 0xD4845A)
         ]
         return speakerIds.compactMap { id in
@@ -796,15 +821,59 @@ final class RecordingController: ObservableObject {
                 return Participant(id: id, name: known.name, role: "Bekannt",
                                    colorHex: known.colorHex, spoke: baseDuration)
             }
+            if let displayName = displayNames[id] {
+                return Participant(id: id, name: displayName, role: "Caption",
+                                   colorHex: colorHex(forSpeakerId: id), spoke: baseDuration)
+            }
             guard let entry = palette.first(where: { $0.0 == id }) else {
                 return Participant(id: id, name: "Speaker \(id)", role: "Erkannt",
-                                   colorHex: 0x8E8E8A, spoke: baseDuration)
+                                   colorHex: colorHex(forSpeakerId: id), spoke: baseDuration)
             }
-            let name = id == "NK" ? "Niko Knez" : "Speaker \(id)"
-            let role = id == "NK" ? "NK Design" : "Erkannt"
+            let name = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.displayName : "Speaker \(id)"
+            let role = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.role : "Erkannt"
             return Participant(id: id, name: name, role: role,
                                colorHex: entry.1, spoke: baseDuration)
         }
+    }
+
+    private func persistCaptionIdentities(from lines: [TranscriptLine], platform: Platform) {
+        var seen: Set<String> = []
+        for line in lines where line.speakerSource == .caption {
+            guard !LocalSpeakerProfile.isLocalSpeakerId(line.who),
+                  let displayName = line.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !displayName.isEmpty,
+                  !seen.contains(line.who)
+            else { continue }
+            seen.insert(line.who)
+            speakerStore?.upsertIdentity(
+                id: line.who,
+                name: displayName,
+                colorHex: colorHex(forSpeakerId: line.who)
+            )
+            speakerStore?.upsertAlias(
+                speakerId: line.who,
+                alias: displayName,
+                source: "caption",
+                platform: platform,
+                externalId: nil
+            )
+        }
+    }
+
+    private func colorHex(forSpeakerId id: String) -> UInt32 {
+        if LocalSpeakerProfile.isLocalSpeakerId(id) { return LocalSpeakerProfile.colorHex }
+        let fixed: [String: UInt32] = [
+            "S1": 0x7C8AFF,
+            "S2": 0xFFB340,
+            "S3": 0x409CFF,
+            "S4": 0xD4845A,
+        ]
+        if let color = fixed[id] { return color }
+        let colors: [UInt32] = [0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259, 0x2EAB73]
+        let checksum = id.unicodeScalars.reduce(UInt32(0)) { partial, scalar in
+            partial &+ scalar.value
+        }
+        return colors[Int(checksum % UInt32(colors.count))]
     }
 
     private func generateTitle(from lines: [TranscriptLine], started: Date) -> String {
@@ -874,6 +943,23 @@ final class RecordingController: ObservableObject {
             .sink { [weak self] level in
                 self?.audioLevel = level
             }
+    }
+
+    private func wireCaptionCapture() {
+        captionStateCancellable = captionCapture.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] captureState in
+                self?.captionStatusText = captureState.label
+            }
+        captionEventsCancellable = captionCapture.$events
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] events in
+                self?.captionEventCount = events.count
+            }
+    }
+
+    private func startCaptionCapture(startedAt: Date, app: CallApp) {
+        captionCapture.start(for: app, startedAt: startedAt)
     }
 
     private func startElapsedTimer() {

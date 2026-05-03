@@ -32,7 +32,7 @@ enum TaskStatus: String, Codable, CaseIterable {
 }
 
 struct Participant: Identifiable, Codable, Hashable {
-    let id: String          // Initialen, "NK"
+    let id: String          // stabile Speaker-ID, z.B. "ME" oder "S1"
     let name: String
     let role: String
     let colorHex: UInt32
@@ -41,12 +41,89 @@ struct Participant: Identifiable, Codable, Hashable {
     var color: Color { Color(hex: colorHex) }
 }
 
+enum TranscriptSource: String, Codable, Hashable {
+    case mic
+    case system
+    case caption
+    case platformApi
+    case merged
+}
+
+enum SpeakerIdentitySource: String, Codable, Hashable {
+    case microphoneOwner
+    case caption
+    case platformApi
+    case knownVoice
+    case diarization
+    case manual
+    case unknown
+}
+
 struct TranscriptLine: Identifiable, Codable, Hashable {
-    var id: String { "\(who)-\(timestamp)" }
-    let who: String         // Participant.id
-    let timestamp: String   // "00:14"
-    let body: String
-    var highlight: Bool = false
+    let id: UUID
+    var who: String         // Participant.id
+    var displayName: String?
+    var timestamp: String   // "00:14"
+    var startSeconds: TimeInterval
+    var endSeconds: TimeInterval
+    var body: String
+    var source: TranscriptSource
+    var speakerSource: SpeakerIdentitySource
+    var confidence: Double
+    var highlight: Bool
+
+    init(
+        id: UUID = UUID(),
+        who: String,
+        displayName: String? = nil,
+        timestamp: String,
+        startSeconds: TimeInterval? = nil,
+        endSeconds: TimeInterval? = nil,
+        body: String,
+        source: TranscriptSource = .merged,
+        speakerSource: SpeakerIdentitySource = .unknown,
+        confidence: Double = 1.0,
+        highlight: Bool = false
+    ) {
+        let resolvedStart = startSeconds ?? Self.seconds(from: timestamp)
+        self.id = id
+        self.who = who
+        self.displayName = displayName
+        self.timestamp = timestamp
+        self.startSeconds = resolvedStart
+        self.endSeconds = max(endSeconds ?? resolvedStart, resolvedStart)
+        self.body = body
+        self.source = source
+        self.speakerSource = speakerSource
+        self.confidence = confidence
+        self.highlight = highlight
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let timestamp = try c.decode(String.self, forKey: .timestamp)
+        let start = try c.decodeIfPresent(TimeInterval.self, forKey: .startSeconds) ?? Self.seconds(from: timestamp)
+        let source = try c.decodeIfPresent(TranscriptSource.self, forKey: .source) ?? .merged
+        let who = try c.decode(String.self, forKey: .who)
+        self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.who = who
+        self.displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        self.timestamp = timestamp
+        self.startSeconds = start
+        self.endSeconds = max(try c.decodeIfPresent(TimeInterval.self, forKey: .endSeconds) ?? start, start)
+        self.body = try c.decode(String.self, forKey: .body)
+        self.source = source
+        self.speakerSource = try c.decodeIfPresent(SpeakerIdentitySource.self, forKey: .speakerSource)
+            ?? (LocalSpeakerProfile.isLocalSpeakerId(who) ? .microphoneOwner : .unknown)
+        self.confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 1.0
+        self.highlight = try c.decodeIfPresent(Bool.self, forKey: .highlight) ?? false
+    }
+
+    private static func seconds(from timestamp: String) -> TimeInterval {
+        let parts = timestamp.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return 0 }
+        return TimeInterval(parts[0] * 60 + parts[1])
+    }
 }
 
 struct Highlight: Identifiable, Codable, Hashable {

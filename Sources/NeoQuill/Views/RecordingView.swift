@@ -50,6 +50,7 @@ struct RecordingView: View {
             }
             Spacer()
             HStack(spacing: 8) {
+                ChipButton(icon: .sparkles, label: recorder.captionStatusText, tone: recorder.captionEventCount > 0 ? .brand : .info)
                 ChipButton(icon: .sparkles, label: recorder.modelLabel, tone: .brand)
                 ChipButton(icon: .mic,      label: recorder.device, tone: .info)
             }
@@ -95,6 +96,11 @@ struct RecordingView: View {
             Text("Hört zu …")
                 .font(.neonMono(11))
                 .foregroundStyle(Neon.textTertiary)
+            if recorder.captionEventCount > 0 {
+                Text("· \(recorder.captionEventCount) Captions")
+                    .font(.neonMono(11))
+                    .foregroundStyle(Neon.textTertiary)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -108,7 +114,7 @@ private struct PendingRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Text("00:00").font(.neonMono(10)).foregroundStyle(Neon.textTertiary).frame(width: 44, alignment: .trailing)
-            Avatar(initials: "NK", color: Neon.brandPrimary, size: 26)
+            Avatar(initials: LocalSpeakerProfile.id, color: Neon.brandPrimary, size: 26)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Du").font(.neonBody(13, weight: .medium)).foregroundStyle(Neon.textPrimary)
                 Text("Sprich los — sobald WhisperKit läuft, erscheint hier dein Transkript.")
@@ -130,8 +136,8 @@ private struct LiveTranscriptRow: View {
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     private var speakerColor: Color {
+        if LocalSpeakerProfile.isLocalSpeakerId(line.who) { return Neon.brandPrimary }
         switch line.who {
-        case "NK": return Neon.brandPrimary
         case "SE": return Neon.Speaker.indigo
         case "TM": return Neon.Speaker.amber
         default:   return Neon.Speaker.blue
@@ -139,12 +145,8 @@ private struct LiveTranscriptRow: View {
     }
 
     private var speakerName: String {
-        switch line.who {
-        case "NK": return "Du"
-        case "SE": return "Sarah Ebner"
-        case "TM": return "Thomas Müller"
-        default:   return line.who
-        }
+        if LocalSpeakerProfile.isLocalSpeakerId(line.who) { return "Du" }
+        return line.displayName ?? line.who
     }
 
     var body: some View {

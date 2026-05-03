@@ -89,7 +89,7 @@ final class MeetingStore: ObservableObject {
     }
 
     /// Wischt ALLE Aufnahmen weg und re-seedet die Mock-Daten.
-    /// Wird vom Settings-Tab "Berechtigungen" aufgerufen, falls Niko explizit clean machen will.
+    /// Wird vom Settings-Tab "Berechtigungen" aufgerufen, falls der User explizit clean machen will.
     func resetAllMeetings() {
         runRaw("DELETE FROM meeting;")
         seedMock()
@@ -99,7 +99,7 @@ final class MeetingStore: ObservableObject {
     // MARK: - Seed / Load
 
     private func loadAll() {
-        // Frühere Versionen seedeten Mocks beim ersten Start. Niko will real
+        // Frühere Versionen seedeten Mocks beim ersten Start. Der Standard ist jetzt real
         // aufnehmen, kein Demo-Material — bei leerer DB bleibt die Sidebar leer
         // (EmptyView greift). Mocks lassen sich über `resetAllMeetings()` aus
         // den Settings reaktivieren.
@@ -260,9 +260,16 @@ final class MeetingStore: ObservableObject {
         let transcript = d.transcript.map { line in
             guard line.who == oldId else { return line }
             return TranscriptLine(
+                id: line.id,
                 who: newId,
+                displayName: name,
                 timestamp: line.timestamp,
+                startSeconds: line.startSeconds,
+                endSeconds: line.endSeconds,
                 body: line.body,
+                source: line.source,
+                speakerSource: .manual,
+                confidence: 1.0,
                 highlight: line.highlight
             )
         }

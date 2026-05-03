@@ -1,6 +1,6 @@
 import Foundation
 
-// Subprocess-Wrapper für `claude -p` aus Niko's Max Plan.
+// Subprocess-Wrapper für lokale `claude -p` Verarbeitung.
 // Generiert TLDR + Highlights + Action Items aus einem Transkript.
 // Kein API-Key nötig — nutzt OAuth-Login der Claude CLI.
 
@@ -140,7 +140,7 @@ enum ClaudeCLIClient {
             {"label": "Termin", "text": "...", "tone": "info"}
           ],
           "tasks": [
-            {"who": "NK", "task": "...", "due": "DD. MMM.", "status": "open"}
+            {"who": "ME", "task": "...", "due": "DD. MMM.", "status": "open"}
           ],
           "chapters": [
             {"timestamp": "00:00", "label": "Begrüßung & Setup", "duration": "1m"},
@@ -152,7 +152,7 @@ enum ClaudeCLIClient {
         Regeln:
         - tone: "brand" für Entscheidungen, "warning" für Risiken/offene Punkte, "info" für Termine
         - status: nur "open" oder "done"
-        - who: Sprecher-Initialen (z.B. NK, SE, TM) — wenn unbekannt: "??"
+        - who: Sprecher-ID aus dem Transkript (z.B. ME, S1, SE) — wenn unbekannt: "??"
         - chapters: Themen-Cluster, ZWINGEND in zeitlicher Reihenfolge.
           - timestamp MUSS aus dem Transkript kommen (mm:ss vom ersten Line dieses Themas).
           - label: 2-5 Worte, beschreibt WORÜBER geredet wurde (kein Fließtext).

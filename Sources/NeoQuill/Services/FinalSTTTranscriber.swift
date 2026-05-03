@@ -76,10 +76,18 @@ enum FinalSTTTranscriber {
         return response.transcription.compactMap { segment in
             let text = LiveTranscriber.cleanTokens(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))
             guard !text.isEmpty else { return nil }
+            let isLocalSpeaker = LocalSpeakerProfile.isLocalSpeakerId(speaker)
+            let startSeconds = TimeInterval(segment.offsets.from) / 1000
+            let endSeconds = TimeInterval(segment.offsets.to ?? segment.offsets.from) / 1000
             return TranscriptLine(
                 who: speaker,
+                displayName: isLocalSpeaker ? LocalSpeakerProfile.displayName : nil,
                 timestamp: timestamp(ms: segment.offsets.from),
+                startSeconds: startSeconds,
+                endSeconds: max(endSeconds, startSeconds),
                 body: text,
+                source: isLocalSpeaker ? .mic : .system,
+                speakerSource: isLocalSpeaker ? .microphoneOwner : .unknown,
                 highlight: false
             )
         }
@@ -162,4 +170,5 @@ private struct WhisperCLISegment: Decodable {
 
 private struct WhisperCLIOffsets: Decodable {
     let from: Int
+    let to: Int?
 }
