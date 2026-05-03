@@ -28,15 +28,14 @@ struct MeetingPill: View {
         .overlay(
             Capsule().stroke(borderColor, lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.55), radius: 28, x: 0, y: 14)
-        .padding(10)
+        .clipShape(Capsule())
     }
 
     // MARK: - Background / Border tokenisiert pro Modus
 
     private var pillBackground: some View {
         Capsule()
-            .fill(.ultraThinMaterial)
+            .fill(Color(hex: 0x1A1A18).opacity(0.96))
             .overlay(
                 Capsule().fill(
                     LinearGradient(
