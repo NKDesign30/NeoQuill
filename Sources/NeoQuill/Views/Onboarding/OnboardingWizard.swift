@@ -18,8 +18,14 @@ struct OnboardingWizard: View {
             stepBody
             footer
         }
-        .frame(width: 980, height: 660)
+        .frame(width: 1180, height: 800)
         .background(Color(hex: 0x0E0E0D))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.55), radius: 36, y: 10)
         .onAppear { state.refreshPermissionStates() }
     }
 
@@ -158,16 +164,17 @@ struct OnboardingStepShell<Content: View, Visual: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             // Linke Hälfte — Copy + Form
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 36) {
                     OnboardingEyebrow(stepIdx: stepIdx, total: total, eyebrow: eyebrow, accent: accent)
                     content
                 }
-                .padding(.top, 64)
-                .padding(.bottom, 48)
-                .padding(.horizontal, 64)
+                .padding(.top, 56)
+                .padding(.bottom, 40)
+                .padding(.horizontal, 56)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .scrollIndicators(.hidden)
             .frame(maxWidth: .infinity)
 
             // Rechte Hälfte — Visual

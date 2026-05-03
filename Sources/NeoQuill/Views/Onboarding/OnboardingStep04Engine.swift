@@ -180,7 +180,7 @@ struct EngineVisual: View {
                      sub: "Lokal verschlüsselt · ~/Library/Quill",
                      active: true, highlight: false, accent: accent)
         }
-        .frame(maxWidth: 380)
+        .frame(width: 380)
     }
 }
 

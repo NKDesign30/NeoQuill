@@ -109,7 +109,7 @@ struct CaptureVisual: View {
             }
         }
         .padding(20)
-        .frame(maxWidth: 380)
+        .frame(width: 380)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(hex: 0x242422).opacity(0.86))

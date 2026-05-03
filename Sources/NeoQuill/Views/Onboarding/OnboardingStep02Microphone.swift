@@ -149,17 +149,22 @@ struct MicLiveBars: View {
     @State private var tick: Int = 0
 
     private let timer = Timer.publish(every: 0.09, on: .main, in: .common).autoconnect()
+    private let barCount = 32
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<38, id: \.self) { i in
-                let h = barHeight(for: i)
-                Capsule()
-                    .fill(active ? accent : Neon.textTertiary.opacity(0.3))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: max(2, h * 32))
-                    .opacity(active ? 0.5 + h * 0.5 : 0.3)
+        GeometryReader { geo in
+            let totalSpacing: CGFloat = CGFloat(barCount - 1) * 3
+            let barWidth = max(3, (geo.size.width - totalSpacing) / CGFloat(barCount))
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(0..<barCount, id: \.self) { i in
+                    let h = barHeight(for: i)
+                    Capsule()
+                        .fill(active ? accent : Neon.textTertiary.opacity(0.35))
+                        .frame(width: barWidth, height: max(3, h * geo.size.height))
+                        .opacity(active ? 0.55 + h * 0.45 : 0.35)
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
         .onReceive(timer) { _ in
             if active { tick &+= 1 }

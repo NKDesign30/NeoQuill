@@ -150,7 +150,7 @@ struct ReadyVisual: View {
             macroPillCard
             statsRow
         }
-        .frame(maxWidth: 380)
+        .frame(width: 380)
     }
 
     private var recordingPill: some View {
