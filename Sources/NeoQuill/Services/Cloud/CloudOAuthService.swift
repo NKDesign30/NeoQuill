@@ -1,10 +1,10 @@
 import Foundation
 import AuthenticationServices
 
-// Generischer OAuth 2.0 PKCE-Flow ueber ASWebAuthenticationSession.
+// Generischer OAuth 2.0 PKCE-Flow über ASWebAuthenticationSession.
 // Provider-agnostisch — Endpunkte + Scopes kommen aus CloudOAuthConfig.
 //
-// Token-Refresh laeuft transparent: jede `accessToken(for:)` Anfrage prueft
+// Token-Refresh läuft transparent: jede `accessToken(for:)` Anfrage prüft
 // Expiry und holt bei Bedarf via refresh_token einen neuen Access-Token.
 
 @MainActor
@@ -23,7 +23,7 @@ final class CloudOAuthService: NSObject, ObservableObject {
             switch self {
             case .notConfigured(let p): return "\(p.displayName)-Client-ID fehlt in der App-Config."
             case .userCancelled:        return "Anmeldung wurde abgebrochen."
-            case .malformedCallback:    return "Ungueltige OAuth-Antwort vom Provider."
+            case .malformedCallback:    return "Ungültige OAuth-Antwort vom Provider."
             case .missingState:         return "OAuth-State stimmt nicht (CSRF-Schutz griff)."
             case .tokenExchangeFailed(let m): return "Token-Austausch fehlgeschlagen: \(m)"
             case .refreshFailed(let m): return "Token-Refresh fehlgeschlagen: \(m)"
@@ -214,7 +214,7 @@ final class CloudOAuthService: NSObject, ObservableObject {
         let (data, response) = try await urlSession.data(for: request)
         try Self.validateHttp(response: response, body: data, errorMap: AuthError.refreshFailed)
         var result = try Self.decodeTokenResponse(data: data, fallbackScope: currentScope)
-        // Manche Provider geben kein neues refresh_token zurueck. Dann altes behalten.
+        // Manche Provider geben kein neues refresh_token zurück. Dann altes behalten.
         if result.refreshToken == nil { result.refreshToken = refreshToken }
         return result
     }

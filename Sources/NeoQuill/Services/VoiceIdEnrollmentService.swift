@@ -2,11 +2,11 @@ import Foundation
 import AVFoundation
 import Combine
 
-// Einmaliges Voice-ID Onboarding fuer den lokalen Sprecher (Niko/ME).
+// Einmaliges Voice-ID Onboarding für den lokalen Sprecher (Niko/ME).
 // Nimmt 8s Mic-Audio in 16 kHz Mono auf, extrahiert ein WeSpeaker-Embedding
-// ueber FluidAudio und persistiert es im SpeakerStore unter LocalSpeakerProfile.id.
+// über FluidAudio und persistiert es im SpeakerStore unter LocalSpeakerProfile.id.
 //
-// Effekt: Diarizer matched zukuenftige Mic-Stimme automatisch auf "ME" → in der
+// Effekt: Diarizer matched zukünftige Mic-Stimme automatisch auf "ME" → in der
 // UI steht direkt der echte Name statt "S1", auch wenn keine Plattform-Captions
 // laufen.
 
@@ -23,7 +23,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .idle
-    /// Kurzes Mikropegel-Signal fuer eine Live-Anzeige (0...1).
+    /// Kurzes Mikropegel-Signal für eine Live-Anzeige (0...1).
     @Published private(set) var meterLevel: Float = 0
 
     /// Gesamte Aufnahmedauer in Sekunden.
@@ -41,7 +41,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
         self.speakerStore = speakerStore
     }
 
-    /// Startet den Mic-Stream fuer `recordingDuration` Sekunden. Triggert
+    /// Startet den Mic-Stream für `recordingDuration` Sekunden. Triggert
     /// Permission-Anfrage falls noetig. Resultat liegt am Ende in `phase`.
     func startEnrollment() async {
         guard phase != .recording(secondsRemaining: Self.recordingDuration), phase != .processing else { return }
@@ -99,7 +99,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
             throw NSError(domain: "VoiceIdEnrollment", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Ungueltiges Audio-Format"])
+                          userInfo: [NSLocalizedDescriptionKey: "Ungültiges Audio-Format"])
         }
 
         input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
@@ -142,7 +142,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
         let captured = samples
         samples.removeAll()
         guard captured.count >= 16_000 * 3 else {
-            phase = .failed("Aufnahme war zu kurz. Bitte sprich beim naechsten Versuch laenger und lauter.")
+            phase = .failed("Aufnahme war zu kurz. Bitte sprich beim nächsten Versuch länger und lauter.")
             return
         }
         guard !diarizer.isReady ? await ensureDiarizerReady() : true else {

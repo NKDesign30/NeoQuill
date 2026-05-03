@@ -1,7 +1,7 @@
 import Foundation
 
-// Test/QA Replayer fuer Caption-Pollings. Bildet einen synthetischen AX-Stream
-// nach (was extractCaptionCandidates pro Poll liefern wuerde) und feuert ihn
+// Test/QA Replayer für Caption-Pollings. Bildet einen synthetischen AX-Stream
+// nach (was extractCaptionCandidates pro Poll liefern würde) und feuert ihn
 // in dieselbe Pipeline wie das Live-Polling. Damit lassen sich Echo-Dedupe,
 // Speaker-Splits und Edge-Cases (Caption ohne Speaker, Hidden-Identity) ohne
 // laufende Teams/Meet/Zoom-Session reproduzierbar testen.

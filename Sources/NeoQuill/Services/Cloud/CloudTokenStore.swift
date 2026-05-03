@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-// Keychain-backed Storage fuer OAuth-Tokens (Access + Refresh + Expiry).
+// Keychain-backed Storage für OAuth-Tokens (Access + Refresh + Expiry).
 // Ein Account pro Plattform. Service-String `com.neon.quill.cloud.<provider>`.
 
 struct CloudTokenSet: Codable, Equatable {
@@ -79,7 +79,7 @@ final class CloudTokenStore: CloudTokenPersisting {
     }
 }
 
-/// In-Memory-Variante fuer Tests.
+/// In-Memory-Variante für Tests.
 final class InMemoryCloudTokenStore: CloudTokenPersisting {
     private var storage: [CloudProvider: CloudTokenSet] = [:]
     func load(provider: CloudProvider) -> CloudTokenSet? { storage[provider] }

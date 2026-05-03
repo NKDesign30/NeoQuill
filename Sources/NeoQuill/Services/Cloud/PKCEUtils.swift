@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-// PKCE Helper (RFC 7636). Verifier + Challenge fuer OAuth-Flows ohne Client-Secret.
+// PKCE Helper (RFC 7636). Verifier + Challenge für OAuth-Flows ohne Client-Secret.
 // Beide Plattformen (Microsoft Graph, Google Identity) erwarten S256-Challenge.
 
 enum PKCEUtils {
@@ -22,7 +22,7 @@ enum PKCEUtils {
         return base64URL(Data(digest))
     }
 
-    /// Generischer Random-State fuer CSRF-Schutz.
+    /// Generischer Random-State für CSRF-Schutz.
     static func makeState(byteCount: Int = 24) -> String {
         var bytes = [UInt8](repeating: 0, count: byteCount)
         _ = SecRandomCopyBytes(kSecRandomDefault, byteCount, &bytes)

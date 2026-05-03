@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Kleine Lable + Confidence-Anzeige fuer eine TranscriptLine. Macht sichtbar
+// Kleine Lable + Confidence-Anzeige für eine TranscriptLine. Macht sichtbar
 // woher der Speaker-Name stammt (Caption/Plattform/Diarization/...) und wie
 // sicher das System ist. Bewusst dezent — soll Lesefluss nicht stoeren.
 
@@ -46,7 +46,7 @@ struct SpeakerSourceBadge: View {
         case .microphoneOwner: sourceText = "Aus dem Mikrofon-Stream — das bist du."
         case .caption:         sourceText = "Live-Caption der Meeting-App."
         case .platformApi:     sourceText = "Offizielles Transkript der Plattform."
-        case .knownVoice:      sourceText = "Stimme aus frueheren Meetings wiedererkannt."
+        case .knownVoice:      sourceText = "Stimme aus früheren Meetings wiedererkannt."
         case .diarization:     sourceText = "Lokale Diarization (anonym, ohne Namen)."
         case .manual:          sourceText = "Du hast diesen Speaker manuell gelabelt."
         case .unknown:         sourceText = "Quelle unbekannt."

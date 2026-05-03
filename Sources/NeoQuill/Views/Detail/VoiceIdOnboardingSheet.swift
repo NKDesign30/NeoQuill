@@ -1,14 +1,14 @@
 import SwiftUI
 
-// 3-Phasen-Sheet fuer Voice-ID Onboarding. Zeigt Standard-Satz zum Vorlesen,
-// Live-Mikropegel waehrend der Aufnahme, am Ende Bestaetigung oder Fehlerbild.
+// 3-Phasen-Sheet für Voice-ID Onboarding. Zeigt Standard-Satz zum Vorlesen,
+// Live-Mikropegel während der Aufnahme, am Ende Bestätigung oder Fehlerbild.
 
 struct VoiceIdOnboardingSheet: View {
 
     @ObservedObject var enrollment: VoiceIdEnrollmentService
     var onDismiss: () -> Void
 
-    private static let prompt = "Hi, ich bin \(LocalSpeakerProfile.displayName). Diese Aufnahme nutzt NeoQuill, um meine Stimme in zukuenftigen Meetings automatisch zu erkennen — ohne dass ich mich extra einloggen muss."
+    private static let prompt = "Hi, ich bin \(LocalSpeakerProfile.displayName). Diese Aufnahme nutzt NeoQuill, um meine Stimme in zukünftigen Meetings automatisch zu erkennen — ohne dass ich mich extra einloggen muss."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -20,7 +20,7 @@ struct VoiceIdOnboardingSheet: View {
                     explainerCard
                 case .requestingPermission:
                     statusCard(symbol: "mic.fill", title: "Mikrofon-Zugriff anfragen…",
-                               subtitle: "Bitte bestaetige in macOS, falls ein Dialog erscheint.")
+                               subtitle: "Bitte bestätige in macOS, falls ein Dialog erscheint.")
                 case .recording(let secondsRemaining):
                     recordingCard(remaining: secondsRemaining)
                 case .processing:
@@ -80,7 +80,7 @@ struct VoiceIdOnboardingSheet: View {
     private func recordingCard(remaining: Double) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Aufnahme laeuft…")
+                Text("Aufnahme läuft…")
                     .font(.neonBody(16, weight: .semibold))
                     .foregroundStyle(Neon.textPrimary)
                 Spacer()

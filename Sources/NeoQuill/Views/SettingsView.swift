@@ -193,7 +193,7 @@ private struct AIIntelligenceTab: View {
             }
             Section("Kalender-Hinweise") {
                 Toggle("Teilnehmer aus Kalender als Pool nutzen", isOn: $calendarPool)
-                Text("Bei aktivem Meeting werden die Kalender-Teilnehmer als Hinweis-Pool fuer unklare Speaker verwendet.")
+                Text("Bei aktivem Meeting werden die Kalender-Teilnehmer als Hinweis-Pool für unklare Speaker verwendet.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

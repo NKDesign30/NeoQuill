@@ -2,7 +2,7 @@ import Foundation
 import EventKit
 
 // EventKit-Service der den aktuell laufenden Kalender-Termin findet und die
-// Teilnehmer-Namen als Pool zurueckgibt. Wird vom RecordingController
+// Teilnehmer-Namen als Pool zurückgibt. Wird vom RecordingController
 // genutzt um anonyme Diarization-Cluster (`S1/S2/S3`) gegen einen erwarteten
 // Personenkreis zu matchen.
 //
@@ -49,7 +49,7 @@ final class CalendarParticipantsService: ObservableObject {
         }
     }
 
-    /// Liefert Teilnehmer-Namen des Termins der jetzt laeuft (within ±5min Fenster).
+    /// Liefert Teilnehmer-Namen des Termins der jetzt läuft (within ±5min Fenster).
     /// Eigene Teilnahme + bekannte Self-Names werden gefiltert.
     func participantsForCurrentMeeting(now: Date = Date()) async -> [String] {
         guard await ensureAccess() else { return [] }
@@ -58,7 +58,7 @@ final class CalendarParticipantsService: ObservableObject {
     }
 
     /// Wie `participantsForCurrentMeeting`, gibt aber zusaetzlich Event-Titel
-    /// fuer UI-Hinweise zurueck.
+    /// für UI-Hinweise zurück.
     func currentMeetingContext(now: Date = Date()) async -> (title: String, attendees: [String])? {
         guard await ensureAccess() else { return nil }
         guard let event = currentEvent(at: now) else { return nil }
@@ -84,7 +84,7 @@ final class CalendarParticipantsService: ObservableObject {
     /// "jetzt-laufende" Meeting. Kriterien (in dieser Reihenfolge):
     /// 1. Meeting umschliesst `now` und hat Teilnehmer
     /// 2. Meeting umschliesst `now` (auch ohne Attendees)
-    /// 3. Naechster Termin der innerhalb von 5min beginnt
+    /// 3. Nächster Termin der innerhalb von 5min beginnt
     nonisolated static func bestActiveEvent(in events: [EKEvent], at now: Date) -> EKEvent? {
         let candidates = events.map { event in
             EventCandidate(

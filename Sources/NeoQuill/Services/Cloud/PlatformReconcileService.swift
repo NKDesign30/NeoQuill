@@ -1,13 +1,13 @@
 import Foundation
 
-// Holt fuer ein bestimmtes Meeting das offizielle Cloud-Transkript der jeweiligen
-// Plattform und uebersetzt es in unsere `PlatformTranscriptEvent`-Struktur. Die
+// Holt für ein bestimmtes Meeting das offizielle Cloud-Transkript der jeweiligen
+// Plattform und übersetzt es in unsere `PlatformTranscriptEvent`-Struktur. Die
 // drei Clients sind bewusst klein gehalten und teilen sich Auth + Networking.
 //
 // Aktuell sind die Provider-Endpoints implementiert, aber ohne echte Tenant-
 // Konfiguration nicht testbar (siehe CloudOAuthConfig). Sobald Niko Client-IDs
 // hinterlegt + sich anmeldet, fliessen die Daten via PlatformImportService in
-// MeetingStore zurueck.
+// MeetingStore zurück.
 
 enum PlatformReconcileError: LocalizedError {
     case providerNotConnected(CloudProvider)
@@ -18,7 +18,7 @@ enum PlatformReconcileError: LocalizedError {
         switch self {
         case .providerNotConnected(let p): return "\(p.displayName) ist nicht verbunden — bitte in den Einstellungen anmelden."
         case .requestFailed(let m):        return "Cloud-Anfrage fehlgeschlagen: \(m)"
-        case .noTranscriptAvailable:       return "Kein offizielles Transkript fuer dieses Meeting gefunden."
+        case .noTranscriptAvailable:       return "Kein offizielles Transkript für dieses Meeting gefunden."
         }
     }
 }
@@ -34,7 +34,7 @@ final class PlatformReconcileService {
         self.urlSession = urlSession
     }
 
-    /// Holt das aktuellste Transkript fuer den Provider und konvertiert es.
+    /// Holt das aktuellste Transkript für den Provider und konvertiert es.
     /// Erwartet: Plattform-Meeting-ID (Teams/Meet/Zoom-spezifisch).
     func fetchTranscript(provider: CloudProvider, externalMeetingId: String) async throws -> [PlatformTranscriptEvent] {
         guard oauth.isConnected(provider) else { throw PlatformReconcileError.providerNotConnected(provider) }
