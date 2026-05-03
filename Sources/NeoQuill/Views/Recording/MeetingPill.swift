@@ -96,7 +96,6 @@ struct MeetingPill: View {
                     .font(.neonBody(12, weight: .medium))
                     .foregroundStyle(Neon.textSecondary)
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 14)
                     .frame(height: 30)
                     .background(
@@ -107,6 +106,7 @@ struct MeetingPill: View {
                     )
             }
             .buttonStyle(.plain)
+            .fixedSize()
 
             Button(action: state.onAccept) {
                 HStack(spacing: 6) {
@@ -116,7 +116,6 @@ struct MeetingPill: View {
                         .font(.neonBody(12, weight: .semibold))
                         .lineLimit(1)
                 }
-                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .frame(height: 30)
@@ -131,6 +130,7 @@ struct MeetingPill: View {
                 )
             }
             .buttonStyle(.plain)
+            .fixedSize()
         }
     }
 
