@@ -5,32 +5,31 @@ import EventKit
 import SwiftUI
 import UserNotifications
 
-// Zentrale Logik des First-Run-Wizards. Schritte sind eine Aufzaehlung,
-// Permissions werden hier konsolidiert abgefragt + reportiert.
+// State des First-Run-Wizards. 6 Schritte nach Design:
+// 01 Willkommen · 02 Mikrofon · 03 Stimme & Name · 04 KI-Engine ·
+// 05 Quellen · 06 Startklar.
 
 @MainActor
 final class OnboardingState: ObservableObject {
 
     enum Step: Int, CaseIterable, Identifiable {
         case welcome
-        case profile
         case microphone
-        case voiceId
-        case permissions
-        case cloud
+        case voice
+        case engine
+        case capture
         case ready
 
         var id: Int { rawValue }
 
-        var title: String {
+        var eyebrow: String {
             switch self {
-            case .welcome:     return "Willkommen"
-            case .profile:     return "Profil"
-            case .microphone:  return "Mikrofon"
-            case .voiceId:     return "Stimme"
-            case .permissions: return "Berechtigungen"
-            case .cloud:       return "Cloud (optional)"
-            case .ready:       return "Fertig"
+            case .welcome:    return "WILLKOMMEN"
+            case .microphone: return "MIKROFON"
+            case .voice:      return "STIMME & NAME"
+            case .engine:     return "KI-ENGINE"
+            case .capture:    return "QUELLEN"
+            case .ready:      return "STARTKLAR"
             }
         }
     }
@@ -43,9 +42,9 @@ final class OnboardingState: ObservableObject {
 
         var label: String {
             switch self {
-            case .granted:       return "Erteilt"
+            case .granted:       return "Erlaubt"
             case .denied:        return "Verweigert"
-            case .notDetermined: return "Noch nicht angefragt"
+            case .notDetermined: return "Ausstehend"
             case .unknown:       return "Unbekannt"
             }
         }
@@ -60,38 +59,68 @@ final class OnboardingState: ObservableObject {
         }
     }
 
+    enum Engine: String, CaseIterable, Identifiable {
+        case ane    = "ane"
+        case cloud  = "cloud"
+        var id: String { rawValue }
+    }
+
     @Published var currentStep: Step = .welcome
+
+    // Profil
     @Published var name: String = ""
-    @Published var role: String = ""
+    @Published var organization: String = ""
     @Published var language: String = "de"
-    @Published var autoDetect: Bool = true
-    @Published var liveCaptions: Bool = true
-    @Published var watchDownloads: Bool = false
-    @Published var calendarPool: Bool = true
 
+    // Mikrofon
     @Published var micStatus: PermissionStatus = .unknown
-    @Published var accessibilityStatus: PermissionStatus = .unknown
-    @Published var calendarStatus: PermissionStatus = .unknown
-    @Published var notificationStatus: PermissionStatus = .unknown
-    @Published var screenCaptureStatus: PermissionStatus = .unknown
-
     @Published var availableMics: [(id: String, name: String)] = []
     @Published var selectedMicId: String = ""
 
+    // Engine
+    @Published var engine: Engine = .ane
+    @Published var claudeAnalysisEnabled: Bool = true
+
+    // Quellen
+    @Published var captureTeams:  Bool = true
+    @Published var captureZoom:   Bool = true
+    @Published var captureMeet:   Bool = true
+    @Published var captureSystem: Bool = true
+    @Published var captureLocal:  Bool = true
+
+    // Hotkey + Verhalten
+    @Published var hotkeyParts: [String] = ["⌥", "R"]
+    @Published var autoDetect: Bool = true
+    @Published var liveCaptions: Bool = true
+    @Published var calendarPool: Bool = true
+    @Published var watchDownloads: Bool = false
+
+    // Sekundäre Permissions
+    @Published var accessibilityStatus: PermissionStatus = .unknown
+    @Published var calendarStatus: PermissionStatus = .unknown
+    @Published var notificationStatus: PermissionStatus = .unknown
+
     init() {
-        // Vorbelegen aus Defaults damit der Wizard wie ein Re-Configure wirkt,
-        // falls Niko ihn aus den Settings nochmal oeffnet.
         let defaults = UserDefaults.standard
-        let storedName = defaults.string(forKey: AppSettings.ownerDisplayName) ?? ""
+        let stored = defaults.string(forKey: AppSettings.ownerDisplayName) ?? ""
         let suggestion = NSFullUserName()
-        self.name = storedName.isEmpty ? suggestion : storedName
-        self.role = defaults.string(forKey: AppSettings.ownerRole) ?? "Eigene Stimme"
+        self.name = stored.isEmpty ? suggestion : stored
+        self.organization = defaults.string(forKey: AppSettings.ownerOrganization) ?? ""
         self.language = defaults.string(forKey: AppSettings.language) ?? "de"
         self.autoDetect = defaults.boolOr(AppSettings.autoDetectMeetings, default: true)
         self.liveCaptions = defaults.boolOr(AppSettings.liveCaptionCapture, default: true)
-        self.watchDownloads = defaults.boolOr(AppSettings.autoWatchDownloadsForTranscripts, default: false)
         self.calendarPool = defaults.boolOr(AppSettings.calendarParticipantPool, default: true)
+        self.watchDownloads = defaults.boolOr(AppSettings.autoWatchDownloadsForTranscripts, default: false)
+        self.claudeAnalysisEnabled = defaults.boolOr(AppSettings.claudeAnalysisEnabled, default: true)
+        self.captureTeams  = defaults.boolOr(AppSettings.captureSourceTeams,  default: true)
+        self.captureZoom   = defaults.boolOr(AppSettings.captureSourceZoom,   default: true)
+        self.captureMeet   = defaults.boolOr(AppSettings.captureSourceMeet,   default: true)
+        self.captureSystem = defaults.boolOr(AppSettings.captureSourceSystem, default: true)
+        self.captureLocal  = defaults.boolOr(AppSettings.captureSourceLocal,  default: true)
         self.selectedMicId = defaults.string(forKey: AppSettings.micDeviceId) ?? ""
+        if let raw = defaults.string(forKey: AppSettings.recordHotkey), !raw.isEmpty {
+            self.hotkeyParts = raw.split(separator: "+").map { String($0).trimmingCharacters(in: .whitespaces) }
+        }
         refreshMicList()
         refreshPermissionStates()
     }
@@ -100,29 +129,43 @@ final class OnboardingState: ObservableObject {
 
     var canGoNext: Bool {
         switch currentStep {
-        case .profile: return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        default:       return true
+        case .voice: return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .microphone: return micStatus == .granted
+        default: return true
         }
     }
 
-    var nextLabel: String {
+    var primaryLabel: String {
         switch currentStep {
-        case .ready: return "App starten"
-        case .voiceId, .cloud: return "Weiter"
-        default: return "Weiter"
+        case .welcome:    return "Loslegen"
+        case .microphone: return micStatus == .granted ? "Weiter" : "Mikrofon erlauben"
+        case .ready:      return "NeoQuill öffnen"
+        default:          return "Weiter"
         }
     }
 
-    var skipLabel: String? {
+    var secondaryLabel: String? {
         switch currentStep {
-        case .voiceId, .cloud: return "Später"
-        default: return nil
+        case .welcome:    return "Tour überspringen"
+        case .microphone: return micStatus == .granted ? nil : "Später"
+        case .voice:      return "Sample überspringen"
+        default:          return nil
         }
     }
+
+    var canGoBack: Bool { currentStep.rawValue > 0 }
 
     func advance() {
         if let next = Step(rawValue: currentStep.rawValue + 1) {
             currentStep = next
+        }
+    }
+
+    func skip() {
+        if currentStep == .welcome {
+            currentStep = .ready
+        } else {
+            advance()
         }
     }
 
@@ -132,20 +175,25 @@ final class OnboardingState: ObservableObject {
         }
     }
 
-    var canGoBack: Bool { currentStep != .welcome && currentStep != .ready }
-
     // MARK: - Persistence
 
     func persistAll() {
         let defaults = UserDefaults.standard
         defaults.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerDisplayName)
-        defaults.set(role.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerRole)
+        defaults.set(organization.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerOrganization)
         defaults.set(language, forKey: AppSettings.language)
         defaults.set(autoDetect, forKey: AppSettings.autoDetectMeetings)
         defaults.set(liveCaptions, forKey: AppSettings.liveCaptionCapture)
-        defaults.set(watchDownloads, forKey: AppSettings.autoWatchDownloadsForTranscripts)
         defaults.set(calendarPool, forKey: AppSettings.calendarParticipantPool)
+        defaults.set(watchDownloads, forKey: AppSettings.autoWatchDownloadsForTranscripts)
+        defaults.set(claudeAnalysisEnabled, forKey: AppSettings.claudeAnalysisEnabled)
+        defaults.set(captureTeams,  forKey: AppSettings.captureSourceTeams)
+        defaults.set(captureZoom,   forKey: AppSettings.captureSourceZoom)
+        defaults.set(captureMeet,   forKey: AppSettings.captureSourceMeet)
+        defaults.set(captureSystem, forKey: AppSettings.captureSourceSystem)
+        defaults.set(captureLocal,  forKey: AppSettings.captureSourceLocal)
         defaults.set(selectedMicId, forKey: AppSettings.micDeviceId)
+        defaults.set(hotkeyParts.joined(separator: "+"), forKey: AppSettings.recordHotkey)
         defaults.set(true, forKey: AppSettings.profileOnboarded)
     }
 
@@ -159,7 +207,6 @@ final class OnboardingState: ObservableObject {
         micStatus = mapMic(AVCaptureDevice.authorizationStatus(for: .audio))
         accessibilityStatus = AXIsProcessTrusted() ? .granted : .notDetermined
         calendarStatus = mapCalendar(EKEventStore.authorizationStatus(for: .event))
-        screenCaptureStatus = .notDetermined  // SCK liefert keinen synchronen Status
         Task { await refreshNotificationState() }
     }
 
@@ -186,34 +233,16 @@ final class OnboardingState: ObservableObject {
 
     func requestCalendarPermission() async {
         let store = EKEventStore()
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .notDetermined:
+        if EKEventStore.authorizationStatus(for: .event) == .notDetermined {
             _ = try? await store.requestFullAccessToEvents()
-        default: break
         }
         calendarStatus = mapCalendar(EKEventStore.authorizationStatus(for: .event))
     }
 
     func requestNotificationPermission() async {
         let center = UNUserNotificationCenter.current()
-        do {
-            _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-        } catch {
-            // ignore — refresh below liest den finalen Status
-        }
+        _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
         await refreshNotificationState()
-    }
-
-    func openAccessibilitySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    func openScreenCaptureSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
-        }
     }
 
     // MARK: - Mapping

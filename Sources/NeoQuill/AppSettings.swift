@@ -17,6 +17,14 @@ enum AppSettings {
     static let detailLayout        = "detail_layout"
     static let voiceIdEnrolled     = "voice_id_enrolled"
     static let calendarParticipantPool = "calendar_participant_pool"
+    static let claudeAnalysisEnabled = "claude_analysis_enabled"
+    static let captureSourceTeams  = "capture_source_teams"
+    static let captureSourceZoom   = "capture_source_zoom"
+    static let captureSourceMeet   = "capture_source_meet"
+    static let captureSourceSystem = "capture_source_system"
+    static let captureSourceLocal  = "capture_source_local"
+    static let recordHotkey        = "record_hotkey"
+    static let ownerOrganization   = "owner_organization"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -26,6 +34,7 @@ enum AppSettings {
             autoWatchDownloadsForTranscripts: false,
             ownerDisplayName: "",
             ownerRole: "Eigene Stimme",
+            ownerOrganization: "",
             profileOnboarded: false,
             whisperModel: "openai_whisper-small",
             language: "de",
@@ -33,6 +42,13 @@ enum AppSettings {
             detailLayout: "editorial",
             voiceIdEnrolled: false,
             calendarParticipantPool: true,
+            claudeAnalysisEnabled: true,
+            captureSourceTeams: true,
+            captureSourceZoom: true,
+            captureSourceMeet: true,
+            captureSourceSystem: true,
+            captureSourceLocal: true,
+            recordHotkey: "⌥+R",
         ])
     }
 }
