@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Schwebender Hinweis am oberen Rand. Zeigt Backfill-Resultate, kurze Status-
-// Meldungen und Aenderungen die sonst stillschweigend passieren wuerden.
+// Meldungen und Änderungen die sonst stillschweigend passieren würden.
 
 struct TransientNoticeBanner: View {
     @EnvironmentObject private var state: AppState

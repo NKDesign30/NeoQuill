@@ -50,7 +50,7 @@ struct OnboardingWizard: View {
                 }
             }
             Spacer()
-            Text("Alles bleibt lokal — keine Konten, keine Cloud, keine Telemetrie ausser du erlaubst sie explizit.")
+            Text("Alles bleibt lokal — keine Konten, keine Cloud, keine Telemetrie außer du erlaubst sie explizit.")
                 .font(.neonBody(11))
                 .foregroundStyle(Neon.textTertiary)
                 .lineSpacing(2)
@@ -106,7 +106,7 @@ struct OnboardingWizard: View {
     private var footer: some View {
         HStack(spacing: 12) {
             if state.canGoBack {
-                Button("Zurueck") { state.goBack() }
+                Button("Zurück") { state.goBack() }
                     .buttonStyle(.bordered)
             }
             Spacer()
@@ -139,24 +139,24 @@ struct OnboardingStepWelcome: View {
             Text("Willkommen bei NeoQuill")
                 .font(.neonDisplay(28))
                 .foregroundStyle(Neon.textPrimary)
-            Text("Meeting-Recording, das deine Speaker erkennt — auch wenn keiner in Teams oder Zoom auf 'Aufzeichnen' drueckt.")
+            Text("Meeting-Recording, das deine Speaker erkennt — auch wenn keiner in Teams oder Zoom auf 'Aufzeichnen' drückt.")
                 .font(.neonBody(15))
                 .foregroundStyle(Neon.textSecondary)
                 .lineSpacing(4)
 
             VStack(alignment: .leading, spacing: 12) {
                 FeatureRow(symbol: "waveform", title: "Lokale Transkription",
-                           detail: "WhisperKit + Final-STT laufen on-device. Audio verlaesst deinen Mac nicht.")
+                           detail: "WhisperKit + Final-STT laufen on-device. Audio verlässt deinen Mac nicht.")
                 FeatureRow(symbol: "person.3.fill", title: "Speaker-Erkennung",
                            detail: "FluidAudio + dein Voice-Onboarding ergeben echte Namen statt S1/S2.")
                 FeatureRow(symbol: "calendar", title: "Auto-Detect",
                            detail: "Erkennt Teams/Meet/Zoom-Calls automatisch und startet die Aufnahme.")
                 FeatureRow(symbol: "lock.shield", title: "Klarer Permission-Pfad",
-                           detail: "Wir holen dich Schritt fuer Schritt durch alle macOS-Freigaben.")
+                           detail: "Wir holen dich Schritt für Schritt durch alle macOS-Freigaben.")
             }
 
             Spacer()
-            Text("Dauert ca. 2 Minuten. Du kannst jeden Schritt spaeter in den Einstellungen aendern.")
+            Text("Dauert ca. 2 Minuten. Du kannst jeden Schritt später in den Einstellungen ändern.")
                 .font(.neonBody(12))
                 .foregroundStyle(Neon.textTertiary)
         }
@@ -196,7 +196,7 @@ struct OnboardingStepProfile: View {
                 Text("Wer bist du?")
                     .font(.neonDisplay(24))
                     .foregroundStyle(Neon.textPrimary)
-                Text("Wird fuer deine Mikrofonspur verwendet (interne ID bleibt 'ME').")
+                Text("Wird für deine Mikrofonspur verwendet (interne ID bleibt 'ME').")
                     .font(.neonBody(13))
                     .foregroundStyle(Neon.textSecondary)
             }
@@ -275,7 +275,7 @@ struct OnboardingStepVoiceId: View {
                 Text("Stimme einrichten")
                     .font(.neonDisplay(24))
                     .foregroundStyle(Neon.textPrimary)
-                Text("8 Sekunden Vorlesen — danach erkennt NeoQuill deine Stimme automatisch in jedem Meeting. Du kannst das auch ueberspringen und spaeter in den Einstellungen nachholen.")
+                Text("8 Sekunden Vorlesen — danach erkennt NeoQuill deine Stimme automatisch in jedem Meeting. Du kannst das auch überspringen und später in den Einstellungen nachholen.")
                     .font(.neonBody(13))
                     .foregroundStyle(Neon.textSecondary)
                     .lineSpacing(3)
@@ -325,7 +325,7 @@ struct OnboardingStepVoiceId: View {
     private func inlineRecordingCard(remaining: Double) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Aufnahme laeuft…")
+                Text("Aufnahme läuft…")
                     .font(.neonBody(15, weight: .semibold))
                     .foregroundStyle(Neon.textPrimary)
                 Spacer()
@@ -394,7 +394,7 @@ struct OnboardingStepPermissions: View {
                 Text("Berechtigungen")
                     .font(.neonDisplay(24))
                     .foregroundStyle(Neon.textPrimary)
-                Text("macOS fragt einmal pro Permission. Was du hier ueberspringst kannst du jederzeit in den Systemeinstellungen nachholen.")
+                Text("macOS fragt einmal pro Permission. Was du hier überspringst kannst du jederzeit in den Systemeinstellungen nachholen.")
                     .font(.neonBody(13))
                     .foregroundStyle(Neon.textSecondary)
                     .lineSpacing(3)
@@ -403,7 +403,7 @@ struct OnboardingStepPermissions: View {
             Form {
                 permissionRow(
                     title: "Bildschirm- & System-Audio",
-                    detail: "Wird beim ersten Teams/Zoom-Tap automatisch angefragt. Pflicht fuer Speaker-Diarization.",
+                    detail: "Wird beim ersten Teams/Zoom-Tap automatisch angefragt. Pflicht für Speaker-Diarization.",
                     status: state.screenCaptureStatus,
                     actionLabel: "Systemeinstellungen oeffnen",
                     action: state.openScreenCaptureSettings
@@ -417,7 +417,7 @@ struct OnboardingStepPermissions: View {
                 )
                 permissionRow(
                     title: "Kalender",
-                    detail: "Liest Teilnehmer des aktuellen Termins als Pool fuer unklare Speaker.",
+                    detail: "Liest Teilnehmer des aktuellen Termins als Pool für unklare Speaker.",
                     status: state.calendarStatus,
                     actionLabel: "Anfragen",
                     action: { Task { await state.requestCalendarPermission() } }
@@ -476,7 +476,7 @@ struct OnboardingStepCloud: View {
                 Text("Cloud-Integrationen (optional)")
                     .font(.neonDisplay(24))
                     .foregroundStyle(Neon.textPrimary)
-                Text("Wenn deine Org Cloud-Recordings nutzt, kann NeoQuill das offizielle Transkript automatisch holen. Komplett ueberspringbar — die App funktioniert auch ohne.")
+                Text("Wenn deine Org Cloud-Recordings nutzt, kann NeoQuill das offizielle Transkript automatisch holen. Komplett überspringbar — die App funktioniert auch ohne.")
                     .font(.neonBody(13))
                     .foregroundStyle(Neon.textSecondary)
                     .lineSpacing(3)
@@ -536,7 +536,7 @@ struct OnboardingStepReady: View {
             Text("Alles bereit, \(displayedFirstName).")
                 .font(.neonDisplay(28))
                 .foregroundStyle(Neon.textPrimary)
-            Text("NeoQuill startet jetzt. Im Menue-Bar siehst du den Aufnahme-Status, ueber das Plus-Icon startest du manuell.")
+            Text("NeoQuill startet jetzt. Im Menü-Bar siehst du den Aufnahme-Status, über das Plus-Icon startest du manuell.")
                 .font(.neonBody(14))
                 .foregroundStyle(Neon.textSecondary)
                 .lineSpacing(3)
@@ -544,7 +544,7 @@ struct OnboardingStepReady: View {
             VStack(alignment: .leading, spacing: 8) {
                 summaryRow(symbol: "person.fill",     label: "Profil",        value: displayedName)
                 summaryRow(symbol: "mic.fill",        label: "Mikrofon",      value: state.selectedMicId.isEmpty ? "Standard (auto)" : selectedMicName)
-                summaryRow(symbol: "waveform",        label: "Voice-ID",      value: VoiceIdEnrollmentService.isEnrolled ? "Eingerichtet" : "Spaeter")
+                summaryRow(symbol: "waveform",        label: "Voice-ID",      value: VoiceIdEnrollmentService.isEnrolled ? "Eingerichtet" : "Später")
                 summaryRow(symbol: "calendar",        label: "Kalender-Pool", value: state.calendarPool ? "An" : "Aus")
                 summaryRow(symbol: "captions.bubble", label: "Live-Captions", value: state.liveCaptions ? "An" : "Aus")
                 summaryRow(symbol: "bolt.fill",       label: "Auto-Detect",   value: state.autoDetect ? "An" : "Aus")
@@ -560,7 +560,7 @@ struct OnboardingStepReady: View {
             )
 
             Spacer()
-            Text("Du kannst jeden Punkt jederzeit in den Einstellungen aendern.")
+            Text("Du kannst jeden Punkt jederzeit in den Einstellungen ändern.")
                 .font(.neonBody(12))
                 .foregroundStyle(Neon.textTertiary)
         }

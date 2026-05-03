@@ -11,7 +11,7 @@ struct CloudOAuthConfig {
     let tokenURL: URL
     let scopes: [String]
     let redirectURI: URL
-    /// macOS URL-Scheme der App (ohne "://"). Pflicht fuer ASWebAuthenticationSession.
+    /// macOS URL-Scheme der App (ohne "://"). Pflicht für ASWebAuthenticationSession.
     let callbackScheme: String
 
     var isConfigured: Bool { !clientId.isEmpty }

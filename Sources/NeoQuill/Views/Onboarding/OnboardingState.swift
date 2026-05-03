@@ -115,7 +115,7 @@ final class OnboardingState: ObservableObject {
 
     var skipLabel: String? {
         switch currentStep {
-        case .voiceId, .cloud: return "Spaeter"
+        case .voiceId, .cloud: return "Später"
         default: return nil
         }
     }
