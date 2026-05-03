@@ -15,11 +15,15 @@ final class SpeakerStore: ObservableObject {
     private let url: URL
     private var embeddingsBySpeakerId: [String: [[Float]]] = [:]
 
-    init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("NeoQuill", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.url = dir.appendingPathComponent("speakers.sqlite")
+    init(url: URL? = nil) {
+        if let url {
+            self.url = url
+        } else {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = support.appendingPathComponent("NeoQuill", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.url = dir.appendingPathComponent("speakers.sqlite")
+        }
         openDb()
         migrate()
         reload()
@@ -124,6 +128,92 @@ final class SpeakerStore: ObservableObject {
         }
     }
 
+    /// Speichert das Embedding eines anonymen Speakers (`S1`/`S2`/...) pro
+    /// Meeting. Wird beim spaeteren Label-Backfill genutzt: sobald derselbe
+    /// Speaker in irgendeinem Meeting einen Namen bekommt, koennen wir alle
+    /// anderen Meetings ueber diese Embeddings zuordnen.
+    func recordMeetingEmbedding(meetingId: String, internalId: String, embedding: [Float]) {
+        let trimmedMeeting = meetingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInternal = internalId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMeeting.isEmpty, !trimmedInternal.isEmpty, !embedding.isEmpty else { return }
+        let now = Date().timeIntervalSince1970
+        let sql = """
+            INSERT INTO meeting_speaker_embedding (id, meeting_id, internal_id, embedding, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(meeting_id, internal_id) DO UPDATE SET
+              embedding = excluded.embedding,
+              created_at = excluded.created_at
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, UUID().uuidString)
+        bindText(stmt, 2, trimmedMeeting)
+        bindText(stmt, 3, trimmedInternal)
+        bindText(stmt, 4, encodeEmbedding(embedding))
+        sqlite3_bind_double(stmt, 5, now)
+        sqlite3_step(stmt)
+    }
+
+    struct MeetingSpeakerMatch: Hashable {
+        let meetingId: String
+        let internalId: String
+        let score: Float
+    }
+
+    /// Sucht in allen gespeicherten Meeting-Embeddings nach Treffern fuer das
+    /// gegebene Embedding. Optional kann `excluding` ein Meeting auslassen
+    /// (z.B. das gerade gelabelte). Ergebnis sortiert nach Score absteigend.
+    func meetingMatches(
+        for embedding: [Float],
+        threshold: Float = 0.78,
+        excluding meetingId: String? = nil
+    ) -> [MeetingSpeakerMatch] {
+        guard !embedding.isEmpty else { return [] }
+        var stmt: OpaquePointer?
+        let sql = "SELECT meeting_id, internal_id, embedding FROM meeting_speaker_embedding"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        var hits: [MeetingSpeakerMatch] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let storedMeetingId = String(cString: sqlite3_column_text(stmt, 0))
+            if let exclude = meetingId, storedMeetingId == exclude { continue }
+            let storedInternalId = String(cString: sqlite3_column_text(stmt, 1))
+            let storedEmbeddingJson = String(cString: sqlite3_column_text(stmt, 2))
+            let stored = decodeEmbedding(storedEmbeddingJson)
+            guard !stored.isEmpty else { continue }
+            let score = Self.cosine(embedding, stored)
+            guard score >= threshold else { continue }
+            hits.append(MeetingSpeakerMatch(
+                meetingId: storedMeetingId,
+                internalId: storedInternalId,
+                score: score
+            ))
+        }
+        return hits.sorted { $0.score > $1.score }
+    }
+
+    /// Nach erfolgtem Backfill umbenennen — die `internal_id`-Spalte zeigt jetzt
+    /// auf den canonical Speaker, damit zukuenftige Cross-Meeting-Matches
+    /// konsistent bleiben.
+    func renameMeetingInternalId(meetingId: String, from oldInternalId: String, to newInternalId: String) {
+        guard !meetingId.isEmpty, !oldInternalId.isEmpty, !newInternalId.isEmpty,
+              oldInternalId != newInternalId else { return }
+        let sql = """
+            UPDATE meeting_speaker_embedding
+               SET internal_id = ?
+             WHERE meeting_id = ? AND internal_id = ?
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, newInternalId)
+        bindText(stmt, 2, meetingId)
+        bindText(stmt, 3, oldInternalId)
+        sqlite3_step(stmt)
+    }
+
     /// Suche bekannten Speaker per Cosine-Similarity. Gibt die ID + Score zurück
     /// wenn der beste Match über `threshold` liegt.
     func bestMatch(for embedding: [Float], threshold: Float = 0.72) -> (id: String, score: Float)? {
@@ -190,6 +280,20 @@ final class SpeakerStore: ObservableObject {
                 UNIQUE(speaker_id, alias, source, platform),
                 FOREIGN KEY(speaker_id) REFERENCES speaker(id) ON DELETE CASCADE
             );
+        """)
+        runRaw("""
+            CREATE TABLE IF NOT EXISTS meeting_speaker_embedding (
+                id            TEXT PRIMARY KEY,
+                meeting_id    TEXT NOT NULL,
+                internal_id   TEXT NOT NULL,
+                embedding     TEXT NOT NULL,
+                created_at    REAL NOT NULL,
+                UNIQUE(meeting_id, internal_id)
+            );
+        """)
+        runRaw("""
+            CREATE INDEX IF NOT EXISTS idx_meeting_speaker_embedding_meeting
+            ON meeting_speaker_embedding(meeting_id);
         """)
         migrateLegacyEmbeddings()
     }

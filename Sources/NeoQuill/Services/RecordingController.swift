@@ -346,6 +346,7 @@ final class RecordingController: ObservableObject {
                         pendingEmbeddings[entry.speakerId] = entry.embedding
                     }
                 }
+                persistMeetingEmbeddings(meetingId: id, embeddings: pendingEmbeddings)
             }
         }
         if !captionEvents.isEmpty || !diarizationSegments.isEmpty {
@@ -475,6 +476,11 @@ final class RecordingController: ObservableObject {
         if diarSamplesAvailable {
             statusText = "Erkenne Sprecher"
             diarSegments = await runDiarization(samples: storedAudio.system)
+            var freshEmbeddings: [String: [Float]] = [:]
+            for segment in diarSegments where freshEmbeddings[segment.speakerId] == nil {
+                freshEmbeddings[segment.speakerId] = segment.embedding
+            }
+            persistMeetingEmbeddings(meetingId: meetingId, embeddings: freshEmbeddings)
         }
         if diarSamplesAvailable || !platformEvents.isEmpty {
             allLines = mergeSpeakers(
@@ -605,8 +611,11 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    /// User labelt "S1 → Thorsten" → SpeakerStore + bekannte Aufnahme rückwirkend.
-    func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) {
+    /// User labelt "S1 → Thorsten" → SpeakerStore + bekannte Aufnahme rueckwirkend.
+    /// Gibt zurueck wieviele weitere Meetings ueber Embedding-Match auf den
+    /// gleichen Speaker migriert wurden (fuer UI-Feedback).
+    @discardableResult
+    func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) -> Int {
         let embedding = lastEmbeddings[internalId] ?? []
         let canonicalId = canonicalize(name: name)
         if !embedding.isEmpty {
@@ -619,6 +628,67 @@ final class RecordingController: ObservableObject {
                 to: canonicalId,
                 name: name,
                 colorHex: colorHex
+            )
+            speakerStore?.renameMeetingInternalId(meetingId: meetingId, from: internalId, to: canonicalId)
+        }
+        return backfillCrossMeetings(
+            embedding: embedding,
+            canonicalId: canonicalId,
+            name: name,
+            colorHex: colorHex,
+            currentMeetingId: meetingId
+        )
+    }
+
+    /// Sucht Embedding-Treffer in anderen Meetings und migriert sie auf
+    /// den jetzt bekannten Speaker. Pro Meeting hoechstens ein Treffer
+    /// (der mit dem hoechsten Score), damit ein Speaker nicht zwei Slots
+    /// im selben Meeting belegt.
+    private func backfillCrossMeetings(
+        embedding: [Float],
+        canonicalId: String,
+        name: String,
+        colorHex: UInt32,
+        currentMeetingId: String?
+    ) -> Int {
+        guard !embedding.isEmpty, let speakerStore, let store else { return 0 }
+        let matches = speakerStore.meetingMatches(
+            for: embedding,
+            excluding: currentMeetingId
+        )
+        var seenMeetings: Set<String> = []
+        var migrated = 0
+        for match in matches {
+            guard !seenMeetings.contains(match.meetingId) else { continue }
+            guard match.internalId != canonicalId else {
+                seenMeetings.insert(match.meetingId)
+                continue
+            }
+            store.relabelSpeaker(
+                meetingId: match.meetingId,
+                from: match.internalId,
+                to: canonicalId,
+                name: name,
+                colorHex: colorHex
+            )
+            speakerStore.renameMeetingInternalId(
+                meetingId: match.meetingId,
+                from: match.internalId,
+                to: canonicalId
+            )
+            seenMeetings.insert(match.meetingId)
+            migrated += 1
+        }
+        return migrated
+    }
+
+    private func persistMeetingEmbeddings(meetingId: String, embeddings: [String: [Float]]) {
+        guard let speakerStore, !embeddings.isEmpty else { return }
+        for (internalId, embedding) in embeddings where !embedding.isEmpty {
+            speakerStore.recordMeetingEmbedding(
+                meetingId: meetingId,
+                internalId: internalId,
+                embedding: embedding
             )
         }
     }
