@@ -95,7 +95,11 @@ final class FloatingPillController {
         p.isFloatingPanel = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        p.hasShadow = true
+        // Kein System-Window-Shadow: MeetingPill rendert eigenen Shadow um die
+        // Capsule. hasShadow=true wuerde einen rechteckigen Outline um die
+        // Window-Bounds zeichnen, der durch das transparente Background als
+        // Doppel-Frame sichtbar wird.
+        p.hasShadow = false
         p.backgroundColor = .clear
         p.isOpaque = false
         p.isMovableByWindowBackground = true
