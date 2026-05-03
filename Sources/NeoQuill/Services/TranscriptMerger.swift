@@ -57,6 +57,7 @@ enum TranscriptMerger {
     static func merge(
         audioLines: [TranscriptLine],
         captionEvents: [CaptionEvent],
+        platformTranscriptEvents: [PlatformTranscriptEvent] = [],
         diarization: [DiarizedSpeakerSegment]
     ) -> [TranscriptLine] {
         audioLines.map { line in
@@ -68,6 +69,19 @@ enum TranscriptMerger {
                     source: line.source == .caption ? .caption : line.source,
                     speakerSource: .microphoneOwner,
                     confidence: max(line.confidence, 1.0)
+                )
+            }
+
+            if let platformEvent = bestPlatformMatch(for: line, in: platformTranscriptEvents),
+               !SpeakerNameResolver.isHiddenIdentity(platformEvent.speakerName),
+               let speakerName = platformEvent.speakerName {
+                return copy(
+                    line,
+                    who: SpeakerNameResolver.id(for: speakerName),
+                    displayName: speakerName,
+                    source: .merged,
+                    speakerSource: .platformApi,
+                    confidence: platformEvent.confidence
                 )
             }
 
@@ -101,6 +115,26 @@ enum TranscriptMerger {
             if lhs.startSeconds == rhs.startSeconds { return lhs.endSeconds < rhs.endSeconds }
             return lhs.startSeconds < rhs.startSeconds
         }
+    }
+
+    private static func bestPlatformMatch(
+        for line: TranscriptLine,
+        in events: [PlatformTranscriptEvent]
+    ) -> PlatformTranscriptEvent? {
+        let candidates = events.compactMap { event -> (event: PlatformTranscriptEvent, score: Double)? in
+            let windowScore = temporalScore(
+                lineStart: line.startSeconds,
+                lineEnd: line.endSeconds,
+                eventStart: event.startSeconds,
+                eventEnd: event.endSeconds
+            )
+            guard windowScore > 0 else { return nil }
+            let textScore = textSimilarity(line.body, event.text)
+            let score = (windowScore * 0.48) + (textScore * 0.52)
+            guard score >= 0.36 || textScore >= 0.44 else { return nil }
+            return (event, score)
+        }
+        return candidates.max { $0.score < $1.score }?.event
     }
 
     private static func bestCaptionMatch(for line: TranscriptLine, in events: [CaptionEvent]) -> CaptionEvent? {

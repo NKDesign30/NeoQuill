@@ -39,6 +39,46 @@ final class TranscriptMergerTests: XCTestCase {
         XCTAssertEqual(merged.first?.speakerSource, .caption)
     }
 
+    func testPlatformApiWinsOverCaption() {
+        let line = TranscriptLine(
+            who: "S1",
+            timestamp: "00:04",
+            startSeconds: 4,
+            endSeconds: 7,
+            body: "Wir sollten das bis Freitag ausrollen.",
+            source: .system,
+            speakerSource: .unknown
+        )
+        let caption = CaptionEvent(
+            platform: .teams,
+            appBundleIdentifier: "com.microsoft.teams2",
+            speakerName: "Live Caption Name",
+            text: "Wir sollten das bis Freitag ausrollen.",
+            startSeconds: 4,
+            endSeconds: 7,
+            confidence: 0.88
+        )
+        let platformEvent = PlatformTranscriptEvent(
+            platform: .teams,
+            speakerName: "Graph Transcript Name",
+            speakerId: "aad-user-1",
+            text: "Wir sollten das bis Freitag ausrollen.",
+            startSeconds: 4,
+            endSeconds: 7,
+            confidence: 0.98
+        )
+
+        let merged = TranscriptMerger.merge(
+            audioLines: [line],
+            captionEvents: [caption],
+            platformTranscriptEvents: [platformEvent],
+            diarization: []
+        )
+
+        XCTAssertEqual(merged.first?.displayName, "Graph Transcript Name")
+        XCTAssertEqual(merged.first?.speakerSource, .platformApi)
+    }
+
     func testLocalSpeakerIsPreservedAndNormalizedToMe() {
         let legacyLine = TranscriptLine(
             who: "NK",
