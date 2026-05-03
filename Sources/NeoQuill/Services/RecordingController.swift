@@ -436,6 +436,10 @@ final class RecordingController: ObservableObject {
     }
 
     private func reprocessMeetingAsync(_ meetingId: String) async {
+        await reprocessMeetingAsync(meetingId, platformEvents: [])
+    }
+
+    private func reprocessMeetingAsync(_ meetingId: String, platformEvents: [PlatformTranscriptEvent]) async {
         guard let store, let detail = store.detail(for: meetingId), !detail.processing else { return }
         let busy = rebuiltDetail(
             from: detail,
@@ -461,13 +465,24 @@ final class RecordingController: ObservableObject {
             ? detail.participants
             : collectParticipants(lines: allLines, baseDuration: detail.duration)
 
-        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false),
-           diarizer.isReady,
-           storedAudio.system.count > 16_000 * 5 {
+        let diarizationEnabled = UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false)
+        let diarSamplesAvailable = diarizationEnabled && diarizer.isReady && storedAudio.system.count > 16_000 * 5
+        var diarSegments: [DiarizedSpeakerSegment] = []
+        if diarSamplesAvailable {
             statusText = "Erkenne Sprecher"
-            let diar = await runDiarization(samples: storedAudio.system)
-            allLines = mergeSpeakers(lines: allLines, captionEvents: [], diarization: diar)
+            diarSegments = await runDiarization(samples: storedAudio.system)
+        }
+        if diarSamplesAvailable || !platformEvents.isEmpty {
+            allLines = mergeSpeakers(
+                lines: allLines,
+                captionEvents: [],
+                platformEvents: platformEvents,
+                diarization: diarSegments
+            )
             participants = collectParticipants(lines: allLines, baseDuration: detail.duration)
+        }
+        if !platformEvents.isEmpty {
+            persistPlatformIdentities(from: allLines, platform: detail.platform)
         }
 
         let wordCount = allLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
@@ -573,6 +588,14 @@ final class RecordingController: ObservableObject {
 
     /// Embeddings der letzten Aufnahme — verfügbar für das Speaker-Labeling-Sheet.
     private(set) var lastEmbeddings: [String: [Float]] = [:]
+
+    /// Importiertes Plattform-Transkript auf Meeting anwenden — re-running Final-STT
+    /// mit den neuen platformEvents im Merger. Synchroner Trigger, asynchrone Arbeit.
+    func applyPlatformImport(meetingId: String, events: [PlatformTranscriptEvent]) {
+        Task { [weak self] in
+            await self?.reprocessMeetingAsync(meetingId, platformEvents: events)
+        }
+    }
 
     /// User labelt "S1 → Thorsten" → SpeakerStore + bekannte Aufnahme rückwirkend.
     func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) {
@@ -767,11 +790,13 @@ final class RecordingController: ObservableObject {
     private func mergeSpeakers(
         lines: [TranscriptLine],
         captionEvents: [CaptionEvent],
+        platformEvents: [PlatformTranscriptEvent] = [],
         diarization: [DiarizedSpeakerSegment]
     ) -> [TranscriptLine] {
         TranscriptMerger.merge(
             audioLines: lines,
             captionEvents: captionEvents,
+            platformTranscriptEvents: platformEvents,
             diarization: diarization
         )
     }
@@ -856,6 +881,30 @@ final class RecordingController: ObservableObject {
                 source: "caption",
                 platform: platform,
                 externalId: nil
+            )
+        }
+    }
+
+    private func persistPlatformIdentities(from lines: [TranscriptLine], platform: Platform) {
+        var seen: Set<String> = []
+        for line in lines where line.speakerSource == .platformApi {
+            guard !LocalSpeakerProfile.isLocalSpeakerId(line.who),
+                  let displayName = line.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !displayName.isEmpty,
+                  !seen.contains(line.who)
+            else { continue }
+            seen.insert(line.who)
+            speakerStore?.upsertIdentity(
+                id: line.who,
+                name: displayName,
+                colorHex: colorHex(forSpeakerId: line.who)
+            )
+            speakerStore?.upsertAlias(
+                speakerId: line.who,
+                alias: displayName,
+                source: "platform",
+                platform: platform,
+                externalId: line.who
             )
         }
     }
