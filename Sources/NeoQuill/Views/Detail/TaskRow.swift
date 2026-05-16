@@ -10,6 +10,7 @@ struct TaskRow: View {
     var accent: Color = Neon.brandPrimary
     var isLast: Bool
     var onToggle: () -> Void = {}
+    var onSendToInbox: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -56,6 +57,15 @@ struct TaskRow: View {
         .overlay(alignment: .bottom) {
             if !isLast {
                 Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
+            }
+        }
+        .contextMenu {
+            if let onSendToInbox {
+                Button {
+                    onSendToInbox()
+                } label: {
+                    Label("An Neo Inbox senden", systemImage: "tray.and.arrow.up")
+                }
             }
         }
     }
