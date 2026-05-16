@@ -60,6 +60,9 @@ struct SummaryPane: View {
                         onToggle: {
                             let next: TaskStatus = t.status == .done ? .open : .done
                             state.store.updateTaskStatus(meetingId: meeting.id, taskId: t.id, status: next)
+                        },
+                        onSendToInbox: {
+                            sendToInbox(t)
                         }
                     )
                 }
@@ -84,6 +87,19 @@ struct SummaryPane: View {
                 ForEach(meeting.participants) { p in
                     ParticipantBar(participant: p, totalSeconds: total, accent: accent)
                 }
+            }
+        }
+    }
+
+    private func sendToInbox(_ item: ActionItem) {
+        let appState = state
+        let meeting = meeting
+        Task { @MainActor in
+            do {
+                _ = try await MeetingInboxBridge.sendActionItem(item, from: meeting)
+                appState.notify("Aufgabe an Neo Inbox: \(item.task)")
+            } catch {
+                appState.notify("Inbox-Fehler: \(error.localizedDescription)")
             }
         }
     }
