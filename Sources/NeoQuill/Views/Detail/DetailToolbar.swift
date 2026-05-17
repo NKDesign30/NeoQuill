@@ -40,7 +40,25 @@ struct DetailToolbar: View {
                 .frame(width: 1, height: 18)
                 .padding(.horizontal, 4)
 
-            ToolbarButton(icon: .more) { /* TODO: Context-Menu (Phase 7) */ }
+            Menu {
+                Button("Final-STT erneut ausführen") { reprocessAction() }
+                    .disabled(meeting == nil || meeting?.processing == true)
+                Button("Transkript importieren") { importAction() }
+                    .disabled(meeting == nil)
+
+                Divider()
+
+                Button("Markdown kopieren") { copyAction() }
+                    .disabled(meeting == nil)
+                Button("Auf Desktop exportieren") { exportAction() }
+                    .disabled(meeting == nil)
+                Button("Teilen") { shareAction() }
+                    .disabled(meeting == nil)
+            } label: {
+                ToolbarMenuLabel(icon: .more)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
@@ -129,5 +147,22 @@ private struct LayoutSwitcher: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct ToolbarMenuLabel: View {
+    let icon: Glyph.Name
+
+    @State private var hovering = false
+
+    var body: some View {
+        GlyphView(name: icon, size: 14, color: Neon.textSecondary)
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: Neon.Radius.md, style: .continuous)
+                    .fill(hovering ? Color.white.opacity(0.06) : .clear)
+            )
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: Neon.Duration.fast), value: hovering)
     }
 }

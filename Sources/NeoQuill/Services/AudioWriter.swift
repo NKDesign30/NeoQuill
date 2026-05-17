@@ -65,13 +65,15 @@ final class AudioWriter {
 
     func start(id: String, stem: RecordingAudioStem = .mix) throws {
         let url = Self.url(id: id, stem: stem)
-        // WAV-Settings explizit für AVAudioFile (Float32 Mono 16kHz)
+        // WAV-Settings explizit für AVAudioFile. Die App hält intern Float32
+        // 16kHz, speichert aber PCM16. Das ist robuster für macOS-Player,
+        // QuickLook und externe Tools als Float32-WAV.
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: 16000,
             AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false,
         ]

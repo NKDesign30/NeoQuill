@@ -16,6 +16,8 @@ struct AudioPlayer: View {
     @State private var timer: Timer?
     @State private var player: AVAudioPlayer?
     @State private var loadFailed = false
+    @State private var playbackRate: Float = 1
+    @State private var playbackRateCorrected = false
 
     private var bars: [Double] {
         let seed = Double(waveformSeed)
@@ -116,7 +118,8 @@ struct AudioPlayer: View {
     }
 
     private var speedPill: some View {
-        Text("1.0×")
+        let prefix = playbackRateCorrected ? "Auto " : ""
+        return Text("\(prefix)\(Self.formatted(rate: playbackRate))×")
             .font(.neonMono(10))
             .foregroundStyle(Neon.textTertiary)
             .padding(.horizontal, 6)
@@ -156,8 +159,19 @@ struct AudioPlayer: View {
             let p = try AVAudioPlayer(contentsOf: url)
             p.prepareToPlay()
             p.enableRate = true
-            p.rate = 1.0
+            let correction = AudioPlaybackPitchGuard.decide(
+                fileDuration: p.duration,
+                expectedDuration: TimeInterval(totalSeconds)
+            )
+            p.rate = correction.rate
             player = p
+            playbackRate = correction.rate
+            playbackRateCorrected = correction.corrected
+            if correction.corrected {
+                NSLog(
+                    "[AudioPlayer] playback rate corrected to \(correction.rate) for \(audioURL) (\(correction.reason ?? "duration mismatch"))"
+                )
+            }
             loadFailed = false
         } catch {
             NSLog("[AudioPlayer] failed to load \(audioURL): \(error)")
@@ -203,11 +217,17 @@ struct AudioPlayer: View {
         playing = false
         position = 0
         loadFailed = false
+        playbackRate = 1
+        playbackRateCorrected = false
     }
 
     static func formatted(seconds: Int) -> String {
         let m = max(0, seconds) / 60
         let s = max(0, seconds) % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    private static func formatted(rate: Float) -> String {
+        String(format: "%.1f", Double(rate))
     }
 }

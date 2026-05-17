@@ -10,6 +10,7 @@ struct SummaryPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
             tldrSection
+            MeetingActionQueueSection(meeting: meeting, accent: accent)
             highlightsSection
             tasksSection
             participantsSection

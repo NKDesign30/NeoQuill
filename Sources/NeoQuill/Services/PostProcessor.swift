@@ -1,6 +1,6 @@
 import Foundation
 
-// Post-Processing nach Stop: WAV speichern + Claude-Summary holen.
+// Post-Processing nach Stop: WAV speichern + optional Claude-Summary holen.
 // Orchestriert AudioWriter (Mix → ~/Library/Application Support/NeoQuill/recordings)
 // und ClaudeCLIClient (Haiku via Max-Plan, kein API-Key nötig).
 
@@ -36,7 +36,7 @@ enum PostProcessor {
             )
         }
 
-        let ai = await ClaudeCLIClient.summarize(transcript: transcript, locale: locale)
+        let ai = await summarize(transcript: transcript, locale: locale)
 
         return PostProcessResult(
             title: ai?.title ?? fallbackTitle(from: transcriptLines),
@@ -58,6 +58,26 @@ enum PostProcessor {
         } catch {
             NSLog("[PostProcessor] AudioWriter failed: \(error)")
             return nil
+        }
+    }
+
+    private static func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {
+        guard !UserDefaults.standard.boolOr(AppSettings.localOnlyMode, default: false) else { return nil }
+        guard UserDefaults.standard.boolOr(AppSettings.claudeAnalysisEnabled, default: true) else { return nil }
+
+        switch AIProviderSettings.selectedProvider() {
+        case .claudeCLI:
+            return await ClaudeCLIClient.summarize(transcript: transcript, locale: locale)
+        case .openAICompatible:
+            guard let config = AIProviderSettings.openAICompatibleConfig() else {
+                NSLog("[PostProcessor] OpenAI-compatible provider missing config or API key")
+                return nil
+            }
+            return await OpenAICompatibleSummaryClient.summarize(
+                transcript: transcript,
+                locale: locale,
+                config: config
+            )
         }
     }
 

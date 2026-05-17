@@ -18,6 +18,15 @@ enum AppSettings {
     static let voiceIdEnrolled     = "voice_id_enrolled"
     static let calendarParticipantPool = "calendar_participant_pool"
     static let claudeAnalysisEnabled = "claude_analysis_enabled"
+    static let localOnlyMode = "local_only_mode"
+    static let deleteAudioAfterTranscription = "delete_audio_after_transcription"
+    static let aiSummaryProvider = "ai_summary_provider"
+    static let aiSummaryBaseURL = "ai_summary_base_url"
+    static let aiSummaryModel = "ai_summary_model"
+    static let actionDefaultRecipient = "action_default_recipient"
+    static let actionJiraBaseURL = "action_jira_base_url"
+    static let actionWebhookURL = "action_webhook_url"
+    static let actionNeoSkillBridgeEnabled = "action_neo_skill_bridge_enabled"
     static let captureSourceTeams  = "capture_source_teams"
     static let captureSourceZoom   = "capture_source_zoom"
     static let captureSourceMeet   = "capture_source_meet"
@@ -37,12 +46,21 @@ enum AppSettings {
             ownerOrganization: "",
             profileOnboarded: false,
             whisperModel: "openai_whisper-small",
-            language: "de",
+            language: "auto",
             sidebarDensity: "regular",
             detailLayout: "editorial",
             voiceIdEnrolled: false,
             calendarParticipantPool: true,
             claudeAnalysisEnabled: true,
+            localOnlyMode: false,
+            deleteAudioAfterTranscription: false,
+            aiSummaryProvider: AIProviderSettings.defaultProvider,
+            aiSummaryBaseURL: AIProviderSettings.defaultOpenAIBaseURL,
+            aiSummaryModel: AIProviderSettings.defaultOpenAIModel,
+            actionDefaultRecipient: "",
+            actionJiraBaseURL: "",
+            actionWebhookURL: "",
+            actionNeoSkillBridgeEnabled: false,
             captureSourceTeams: true,
             captureSourceZoom: true,
             captureSourceMeet: true,

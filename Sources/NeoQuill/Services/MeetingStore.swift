@@ -4,8 +4,8 @@ import SQLite3
 // SQLite-WAL Backed Store für Meetings + Transkripte. Muesli-Pattern: kein CoreData,
 // direkter sqlite3, WAL für Concurrency, JSON für strukturierte Felder.
 //
-// Aktuell: lazy-init, Schema-Migrations, Seed mit MockData beim ersten Start.
-// Später: RecordingManager schreibt hier rein, UI liest aus Publishers.
+// Aktuell: lazy-init, Schema-Migrations, echte Meeting-Daten.
+// RecordingController schreibt hier rein, UI liest aus Publishers.
 
 final class MeetingStore: ObservableObject {
 
@@ -15,11 +15,19 @@ final class MeetingStore: ObservableObject {
     private var db: OpaquePointer?
     private let url: URL
 
-    init() {
+    static func applicationSupportDirectory() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("NeoQuill", isDirectory: true)
+        return support.appendingPathComponent("NeoQuill", isDirectory: true)
+    }
+
+    static func databaseURL() -> URL {
+        applicationSupportDirectory().appendingPathComponent("meetings.sqlite")
+    }
+
+    init() {
+        let dir = Self.applicationSupportDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.url = dir.appendingPathComponent("meetings.sqlite")
+        self.url = Self.databaseURL()
         open()
         migrate()
         cleanupGarbageMeetings()
@@ -88,11 +96,14 @@ final class MeetingStore: ObservableObject {
         """)
     }
 
-    /// Wischt ALLE Aufnahmen weg und re-seedet die Mock-Daten.
-    /// Wird vom Settings-Tab "Berechtigungen" aufgerufen, falls der User explizit clean machen will.
-    func resetAllMeetings() {
+    /// Löscht alle echten Meeting-Daten ohne Demo-Re-Seed. Für Kunden-/Privacy-Reset.
+    func deleteAllMeetings() {
         runRaw("DELETE FROM meeting;")
-        seedMock()
+        readBackToPublished()
+    }
+
+    func clearAudioURLs() {
+        runRaw("UPDATE meeting SET audio_url = NULL;")
         readBackToPublished()
     }
 
@@ -100,64 +111,8 @@ final class MeetingStore: ObservableObject {
 
     private func loadAll() {
         // Frühere Versionen seedeten Mocks beim ersten Start. Der Standard ist jetzt real
-        // aufnehmen, kein Demo-Material — bei leerer DB bleibt die Sidebar leer
-        // (EmptyView greift). Mocks lassen sich über `resetAllMeetings()` aus
-        // den Settings reaktivieren.
+        // aufnehmen, kein Demo-Material — bei leerer DB bleibt die Sidebar leer.
         readBackToPublished()
-    }
-
-    private func fixMockTimestamps() {
-        let base = Date().timeIntervalSince1970
-        for (idx, m) in MockData.meetings.enumerated() {
-            var stmt: OpaquePointer?
-            let sql = "UPDATE meeting SET created_at = ? WHERE id = ?"
-            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
-            sqlite3_bind_double(stmt, 1, base - Double(idx))
-            bind(stmt, 2, m.id)
-            sqlite3_step(stmt)
-            sqlite3_finalize(stmt)
-        }
-    }
-
-    private func seedMock() {
-        // Descending fake timestamps damit die Sidebar die Mock-Daten in
-        // Insert-Order zeigt (jüngere oben). Production-Aufnahmen nutzen Date().
-        let base = Date().timeIntervalSince1970
-        for (idx, m) in MockData.meetings.enumerated() {
-            insertSummaryWithTimestamp(m, timestamp: base - Double(idx))
-        }
-        upsertDetail(MockData.activeMeeting)
-    }
-
-    private func insertSummaryWithTimestamp(_ m: MeetingSummary, timestamp: Double) {
-        let sql = """
-            INSERT OR REPLACE INTO meeting
-            (id,title,date_short,date_long,time_short,duration,platform,word_count,grouping,unread,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-        defer { sqlite3_finalize(stmt) }
-        bind(stmt, 1, m.id)
-        bind(stmt, 2, m.title)
-        bind(stmt, 3, m.date)
-        bind(stmt, 4, m.date)
-        bind(stmt, 5, m.time)
-        bind(stmt, 6, m.duration)
-        bind(stmt, 7, m.platform.rawValue)
-        sqlite3_bind_int(stmt, 8, Int32(m.wordCount))
-        bind(stmt, 9, m.group)
-        sqlite3_bind_int(stmt, 10, m.unread ? 1 : 0)
-        sqlite3_bind_double(stmt, 11, timestamp)
-        sqlite3_step(stmt)
-    }
-
-    private func rowCount() -> Int {
-        var stmt: OpaquePointer?
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM meeting", -1, &stmt, nil) == SQLITE_OK else { return 0 }
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
-        return Int(sqlite3_column_int(stmt, 0))
     }
 
     private func readBackToPublished() {

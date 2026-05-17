@@ -6,6 +6,13 @@ import os.log
 
 private let detectorLogger = Logger(subsystem: "com.neon.neoquill", category: "MeetingDetector")
 
+struct AudioProcessActivity: Equatable {
+    let bundleIdentifier: String
+    let isRunningInput: Bool
+    let isRunningOutput: Bool
+    let isRunning: Bool
+}
+
 /// Erkannte Call-App
 enum CallApp: String {
     case teams = "Microsoft Teams"
@@ -185,19 +192,34 @@ final class MeetingDetector: ObservableObject {
     }
 
     nonisolated private static func detectRunningCallAudioProcess() -> CallApp? {
-        let running = runningAudioBundleIds()
+        let running = runningAudioActivities()
         guard !running.isEmpty else { return nil }
+        return detectRunningCallAudioProcess(from: running)
+    }
+
+    nonisolated static func detectRunningCallAudioProcess(from activities: [AudioProcessActivity]) -> CallApp? {
+        guard !activities.isEmpty else { return nil }
         let priority: [CallApp] = [.teams, .zoom, .facetime, .slack, .webex, .discord, .browser]
         return priority.first { app in
-            app.bundleIdentifiers.contains { target in
-                running.contains { bundleId in
-                    bundleId == target || bundleId.hasPrefix(target + ".")
+            activities.contains { activity in
+                guard app.bundleIdentifiers.contains(where: { bundleIdMatches(activity.bundleIdentifier, target: $0) }) else {
+                    return false
                 }
+
+                if app == .browser {
+                    return activity.isRunningInput
+                }
+
+                return activity.isRunningInput || activity.isRunningOutput || activity.isRunning
             }
         }
     }
 
-    nonisolated private static func runningAudioBundleIds() -> Set<String> {
+    nonisolated private static func bundleIdMatches(_ bundleId: String, target: String) -> Bool {
+        bundleId == target || bundleId.hasPrefix(target + ".")
+    }
+
+    nonisolated private static func runningAudioActivities() -> [AudioProcessActivity] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -225,14 +247,20 @@ final class MeetingDetector: ObservableObject {
         )
         guard dataStatus == noErr else { return [] }
 
-        return Set(objectIDs.compactMap { objectID in
-            guard Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningInput)
-                    || Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningOutput)
-                    || Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunning),
-                  let bundleId = Self.readProcessBundleId(objectID)
-            else { return nil }
-            return bundleId
-        })
+        return objectIDs.compactMap { objectID in
+            let isRunningInput = Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningInput)
+            let isRunningOutput = Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunningOutput)
+            let isRunning = Self.readProcessIsRunning(objectID, selector: kAudioProcessPropertyIsRunning)
+            guard isRunningInput || isRunningOutput || isRunning,
+                  let bundleId = Self.readProcessBundleId(objectID) else { return nil }
+
+            return AudioProcessActivity(
+                bundleIdentifier: bundleId,
+                isRunningInput: isRunningInput,
+                isRunningOutput: isRunningOutput,
+                isRunning: isRunning
+            )
+        }
     }
 
     nonisolated private static func readProcessBundleId(_ objectID: AudioObjectID) -> String? {

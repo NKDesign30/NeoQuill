@@ -5,6 +5,16 @@ import AppKit
 
 enum MeetingExporter {
 
+    enum ExportError: LocalizedError {
+        case emptyArchive
+
+        var errorDescription: String? {
+            switch self {
+            case .emptyArchive: return "Keine Meetings zum Exportieren vorhanden."
+            }
+        }
+    }
+
     static func markdown(_ m: MeetingDetail) -> String {
         var out = "# \(m.title)\n\n"
         out += "**\(m.dateLong) · \(m.timeRange) · \(m.duration) · \(m.platform.rawValue)**\n\n"
@@ -71,8 +81,41 @@ enum MeetingExporter {
         }
     }
 
+    static func exportArchive(_ meetings: [MeetingDetail], to directory: URL, now: Date = Date()) throws -> URL {
+        guard !meetings.isEmpty else { throw ExportError.emptyArchive }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+
+        let folder = directory.appendingPathComponent("NeoQuill-Export-\(formatter.string(from: now))", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        for meeting in meetings {
+            let fileName = safeFilename("\(meeting.dateLong)-\(meeting.title)").appending(".md")
+            try markdown(meeting).write(to: folder.appendingPathComponent(fileName), atomically: true, encoding: .utf8)
+        }
+        return folder
+    }
+
+    static func exportArchiveToDesktop(_ meetings: [MeetingDetail]) throws -> URL {
+        let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
+        let folder = try exportArchive(meetings, to: desktop)
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+        return folder
+    }
+
     static func share(_ m: MeetingDetail, from view: NSView) {
         let picker = NSSharingServicePicker(items: [markdown(m)])
         picker.show(relativeTo: .zero, of: view, preferredEdge: .minY)
+    }
+
+    private static func safeFilename(_ value: String) -> String {
+        let forbidden = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let cleaned = value
+            .components(separatedBy: forbidden)
+            .joined(separator: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Meeting" : cleaned
     }
 }

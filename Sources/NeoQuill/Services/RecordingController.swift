@@ -128,7 +128,7 @@ final class RecordingController: ObservableObject {
         modelLabel = FinalSTTTranscriber.isAvailable ? FinalSTTTranscriber.label : "WhisperKit ANE"
         if !FinalSTTTranscriber.isAvailable {
             let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-            let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+            let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
             _ = await transcriber.loadModel(model: model, language: lang)
             modelLabel = friendlyModelLabel(model)
         }
@@ -187,7 +187,7 @@ final class RecordingController: ObservableObject {
 
         // Modell + Sprache aus Settings, sonst Defaults.
         let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-        let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "de")
+        let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "auto")
         if !FinalSTTTranscriber.isAvailable {
             let loaded = await transcriber.loadModel(model: model, language: lang)
             guard loaded else {
@@ -321,7 +321,7 @@ final class RecordingController: ObservableObject {
         let captured = audioCapture.collectFinalAudio()
         let audioURL = persistCapturedAudio(meetingId: id, captured: captured)
 
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         var allLines = await transcribeFinalAudio(
@@ -416,6 +416,8 @@ final class RecordingController: ObservableObject {
             )
         }
 
+        let finalAudioPath = result.audioURL?.path ?? audioURL?.path
+        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         let finalDetail = MeetingDetail(
             id: id,
             title: result.title.isEmpty ? provisionalTitle : result.title,
@@ -430,7 +432,7 @@ final class RecordingController: ObservableObject {
             tasks: tasks,
             chapters: chapters,
             transcript: enrichedLines,
-            audioURL: result.audioURL?.path ?? audioURL?.path,
+            audioURL: shouldDeleteAudio ? nil : finalAudioPath,
             processing: false
         )
 
@@ -438,6 +440,9 @@ final class RecordingController: ObservableObject {
             finalDetail,
             summaryTitle: result.title.isEmpty ? nil : result.title
         )
+        if shouldDeleteAudio {
+            _ = try? PrivacyDataService.deleteAudioFiles(for: id)
+        }
     }
 
     private func reprocessMeetingAsync(_ meetingId: String) async {
@@ -458,7 +463,7 @@ final class RecordingController: ObservableObject {
         statusText = "Final-STT läuft"
 
         let storedAudio = readStoredAudio(meetingId: meetingId, detail: detail)
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "de")
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         var allLines = await transcribeFinalAudio(
             mic: storedAudio.mic,
             system: storedAudio.system,
@@ -500,6 +505,7 @@ final class RecordingController: ObservableObject {
         }
 
         let wordCount = allLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         guard !allLines.isEmpty else {
             let empty = rebuiltDetail(
                 from: detail,
@@ -511,10 +517,13 @@ final class RecordingController: ObservableObject {
                 tasks: [],
                 chapters: [],
                 transcript: [],
-                audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
+                audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
                 processing: false
             )
             store.updateDetail(empty, summaryTitle: empty.title)
+            if shouldDeleteAudio {
+                _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId)
+            }
             statusText = "Bereit"
             return
         }
@@ -568,10 +577,13 @@ final class RecordingController: ObservableObject {
             tasks: tasks,
             chapters: chapters,
             transcript: allLines,
-            audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
+            audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
             processing: false
         )
         store.updateDetail(final, summaryTitle: result.title.isEmpty ? nil : result.title)
+        if shouldDeleteAudio {
+            _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId)
+        }
         statusText = "Bereit"
     }
 

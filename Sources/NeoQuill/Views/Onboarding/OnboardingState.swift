@@ -70,7 +70,7 @@ final class OnboardingState: ObservableObject {
     // Profil
     @Published var name: String = ""
     @Published var organization: String = ""
-    @Published var language: String = "de"
+    @Published var language: String = "auto"
 
     // Mikrofon
     @Published var micStatus: PermissionStatus = .unknown
@@ -106,7 +106,7 @@ final class OnboardingState: ObservableObject {
         let suggestion = NSFullUserName()
         self.name = stored.isEmpty ? suggestion : stored
         self.organization = defaults.string(forKey: AppSettings.ownerOrganization) ?? ""
-        self.language = defaults.string(forKey: AppSettings.language) ?? "de"
+        self.language = defaults.string(forKey: AppSettings.language) ?? "auto"
         self.autoDetect = defaults.boolOr(AppSettings.autoDetectMeetings, default: true)
         self.liveCaptions = defaults.boolOr(AppSettings.liveCaptionCapture, default: true)
         self.calendarPool = defaults.boolOr(AppSettings.calendarParticipantPool, default: true)

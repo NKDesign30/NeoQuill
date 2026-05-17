@@ -8,3 +8,5 @@ DerivedData/
 build-app.sh.log
 landing/
 marketing/
+Tools/*/dist/
+Tools/*/node_modules/
