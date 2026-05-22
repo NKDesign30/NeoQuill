@@ -275,9 +275,68 @@ final class RecordingController: ObservableObject {
         }
     }
 
+    /// Importiert eine externe Audiodatei (iPhone-Sprachmemo, Diktiergerät,
+    /// beliebige .m4a/.mp3/.wav/.caf) als eigenständige Aufnahme: dekodieren,
+    /// als Mic-Stem persistieren und durch die normale Final-STT- plus
+    /// Summary-Pipeline schicken. Mono-Solo-Audio → keine Diarization,
+    /// keine Captions. Gibt bei Fehlern eine deutsche Meldung zurück (nil = ok).
+    @discardableResult
+    func importAudioFile(url: URL) async -> String? {
+        guard store != nil else { return "Kein Meeting-Speicher verfügbar." }
+
+        let needsAccess = url.startAccessingSecurityScopedResource()
+        defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
+
+        let fileName = url.deletingPathExtension().lastPathComponent
+        statusText = "Audio wird gelesen"
+
+        let samples: [Float]
+        do {
+            samples = try await Task.detached(priority: .userInitiated) {
+                try AudioImporter.decodeToWhisperSamples(url: url)
+            }.value
+        } catch {
+            statusText = "Bereit"
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            NSLog("[RecordingController] Audio-Import fehlgeschlagen: \(message)")
+            return message
+        }
+
+        let started = Date()
+        let runtime = TimeInterval(samples.count) / AudioImporter.targetSampleRate
+        let meetingId = "import-\(Int(started.timeIntervalSince1970))"
+
+        // Mic- + Mix-Stem schreiben: Mic füttert die Transkription, Mix dient
+        // dem späteren Playback im Detail-View.
+        do {
+            _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: samples)
+            _ = try AudioWriter.persist(id: meetingId, stem: .mix, samples: samples)
+        } catch {
+            statusText = "Bereit"
+            NSLog("[RecordingController] Import-Stem persist failed: \(error)")
+            return "Audio konnte nicht gespeichert werden: \(error.localizedDescription)"
+        }
+
+        insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started, title: fileName, platform: .call)
+        await persistImportedMeeting(
+            meetingId: meetingId,
+            samples: samples,
+            started: started,
+            runtime: runtime,
+            fileName: fileName
+        )
+        return nil
+    }
+
     /// Setzt direkt nach Stop ein Provisional-Meeting in den Store, damit
     /// AppState in Detail-View wechselt waehrend die echte Transkription laeuft.
-    private func insertProvisionalMeeting(id: String, runtime: TimeInterval, started: Date) {
+    private func insertProvisionalMeeting(
+        id: String,
+        runtime: TimeInterval,
+        started: Date,
+        title: String? = nil,
+        platform: Platform? = nil
+    ) {
         guard let store else { return }
         let durationShort = formatDurationShort(runtime)
         let timeShort = Self.timeFormatter.string(from: started)
@@ -285,17 +344,18 @@ final class RecordingController: ObservableObject {
         let dateLong = Self.dateLongFormatter.string(from: started)
         let endDate = started.addingTimeInterval(runtime)
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
-        let provisionalTitle = "Aufnahme \(timeShort)"
+        let provisionalTitle = title ?? "Aufnahme \(timeShort)"
+        let resolvedPlatform = platform ?? detectedPlatform()
         let participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
 
         let summary = MeetingSummary(
             id: id, title: provisionalTitle, date: dateShort, time: timeShort,
-            duration: durationShort, platform: detectedPlatform(), wordCount: 0,
+            duration: durationShort, platform: resolvedPlatform, wordCount: 0,
             group: "Diesen Monat", participantIds: [LocalSpeakerProfile.id], unread: true
         )
         let provisional = MeetingDetail(
             id: id, title: provisionalTitle, dateLong: dateLong, timeRange: timeRange,
-            duration: durationShort, platform: detectedPlatform(), wordCount: 0,
+            duration: durationShort, platform: resolvedPlatform, wordCount: 0,
             participants: participants,
             tldr: "Wird transkribiert…",
             highlights: [], tasks: [], chapters: [],
@@ -443,6 +503,288 @@ final class RecordingController: ObservableObject {
         if shouldDeleteAudio {
             _ = try? PrivacyDataService.deleteAudioFiles(for: id)
         }
+    }
+
+    /// Pipeline für eine importierte Audiodatei: Final-STT auf dem Mic-Stem,
+    /// dann Claude-Summary. Bewusst ohne Diarization/Captions — eine externe
+    /// Datei hat keinen separaten System-Audio-Stream und keine Plattform-
+    /// Captions. Updated das bereits eingefügte Provisional-Detail in Stufen.
+    private func persistImportedMeeting(
+        meetingId: String,
+        samples: [Float],
+        started: Date,
+        runtime: TimeInterval,
+        fileName: String
+    ) async {
+        guard let store else { return }
+        let durationShort = formatDurationShort(runtime)
+        let timeShort = Self.timeFormatter.string(from: started)
+        let dateLong = Self.dateLongFormatter.string(from: started)
+        let endDate = started.addingTimeInterval(runtime)
+        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let audioPath = AudioWriter.url(id: meetingId, stem: .mix).path
+        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
+
+        statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
+        let lines = await transcribeFinalAudio(mic: samples, system: [], mixed: samples, language: lang)
+
+        guard !lines.isEmpty else {
+            let empty = MeetingDetail(
+                id: meetingId, title: "\(fileName) (keine Sprache)", dateLong: dateLong,
+                timeRange: timeRange, duration: durationShort, platform: .call, wordCount: 0,
+                participants: [LocalSpeakerProfile.participant(spoke: durationShort)],
+                tldr: "Keine Sprach-Inhalte erkannt.",
+                highlights: [], tasks: [], chapters: [], transcript: [],
+                audioURL: shouldDeleteAudio ? nil : audioPath, processing: false
+            )
+            store.updateDetail(empty, summaryTitle: empty.title)
+            if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
+            statusText = "Bereit"
+            return
+        }
+
+        let participants = collectParticipants(lines: lines, baseDuration: durationShort)
+        let wordCount = lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+
+        let transcribed = MeetingDetail(
+            id: meetingId, title: fileName, dateLong: dateLong, timeRange: timeRange,
+            duration: durationShort, platform: .call, wordCount: wordCount,
+            participants: participants, tldr: "KI-Zusammenfassung läuft…",
+            highlights: [], tasks: [], chapters: [], transcript: lines,
+            audioURL: audioPath, processing: true
+        )
+        store.updateDetail(transcribed, summaryTitle: fileName)
+        statusText = "KI verarbeitet"
+
+        let result = await PostProcessor.process(
+            meetingId: meetingId,
+            mixedSamples: [],
+            transcriptLines: lines,
+            locale: lang
+        )
+        let highlights = result.highlights.map { mapAIHighlight($0) }
+        let tasks = result.tasks.enumerated().map { idx, t in
+            ActionItem(
+                id: "\(meetingId)-task-\(idx)",
+                who: t.who.isEmpty ? "??" : t.who,
+                task: t.task,
+                due: t.due,
+                status: t.status == "done" ? .done : .open
+            )
+        }
+        let chapters = result.chapters.enumerated().map { idx, c in
+            Chapter(id: "\(meetingId)-ch-\(idx)", timestamp: c.timestamp, label: c.label, duration: c.duration)
+        }
+        let finalTitle = result.title.isEmpty ? fileName : result.title
+        let finalDetail = MeetingDetail(
+            id: meetingId, title: finalTitle, dateLong: dateLong, timeRange: timeRange,
+            duration: durationShort, platform: .call, wordCount: wordCount,
+            participants: participants, tldr: result.tldr,
+            highlights: highlights, tasks: tasks, chapters: chapters, transcript: lines,
+            audioURL: shouldDeleteAudio ? nil : (result.audioURL?.path ?? audioPath), processing: false
+        )
+        store.updateDetail(finalDetail, summaryTitle: finalTitle)
+        if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
+        statusText = "Bereit"
+    }
+
+    /// Speaker-ID für Zeilen aus einer nachträglich gemergten Zweitaufnahme.
+    static let mergedExternalSpeakerId = "EXT"
+
+    /// Ergänzt ein bestehendes Meeting um eine zweite Audioquelle: dekodieren,
+    /// transkribieren, die neuen Zeilen zeit-sortiert ins Transkript mergen
+    /// (mit Text+Zeit-Dedup gegen Dubletten) und neu zusammenfassen. Use-Case:
+    /// eine Backup-Aufnahme füllt Lücken, die das Original nicht erfasst hat.
+    /// Gibt bei Fehlern eine deutsche Meldung zurück (nil = ok).
+    @discardableResult
+    func mergeAudioIntoMeeting(meetingId: String, url: URL) async -> String? {
+        guard let store, let detail = store.detail(for: meetingId), !detail.processing else {
+            return "Meeting nicht verfügbar oder wird gerade verarbeitet."
+        }
+
+        let needsAccess = url.startAccessingSecurityScopedResource()
+        defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
+
+        statusText = "Zusatz-Audio wird gelesen"
+        let samples: [Float]
+        do {
+            samples = try await Task.detached(priority: .userInitiated) {
+                try AudioImporter.decodeToWhisperSamples(url: url)
+            }.value
+        } catch {
+            statusText = "Bereit"
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            NSLog("[RecordingController] Merge-Decode fehlgeschlagen: \(message)")
+            return message
+        }
+
+        // Zweitquelle als eigenen Stem ablegen (für spätere Reprozesse/Playback).
+        let mergeStemId = "\(meetingId).merge-\(Int(Date().timeIntervalSince1970))"
+        _ = try? AudioWriter.persist(id: mergeStemId, stem: .mic, samples: samples)
+
+        // UI in den Processing-Zustand setzen, Original-Inhalte bleiben sichtbar.
+        store.updateDetail(rebuiltDetail(from: detail, tldr: "Zusatz-Audio wird eingearbeitet…", processing: true))
+        statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
+
+        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let incoming = await transcribeFinalAudio(
+            mic: samples,
+            system: [],
+            mixed: samples,
+            language: lang
+        ).map { line -> TranscriptLine in
+            TranscriptLine(
+                who: Self.mergedExternalSpeakerId,
+                displayName: "Zusatzaufnahme",
+                timestamp: line.timestamp,
+                startSeconds: line.startSeconds,
+                endSeconds: line.endSeconds,
+                body: line.body,
+                source: .merged,
+                speakerSource: .unknown,
+                confidence: line.confidence,
+                highlight: false
+            )
+        }
+
+        guard !incoming.isEmpty else {
+            store.updateDetail(rebuiltDetail(from: detail, tldr: detail.tldr, processing: false))
+            statusText = "Bereit"
+            return "In der Zusatzaufnahme wurde keine Sprache erkannt."
+        }
+
+        let mergedLines = Self.fuseTranscripts(original: detail.transcript, incoming: incoming)
+        let addedCount = mergedLines.count - detail.transcript.count
+        let wordCount = mergedLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+
+        var participants = detail.participants
+        if addedCount > 0, !participants.contains(where: { $0.id == Self.mergedExternalSpeakerId }) {
+            participants.append(Participant(
+                id: Self.mergedExternalSpeakerId,
+                name: "Zusatzaufnahme",
+                role: "Ergänzt",
+                colorHex: colorHex(forSpeakerId: Self.mergedExternalSpeakerId),
+                spoke: ""
+            ))
+        }
+
+        store.updateDetail(rebuiltDetail(
+            from: detail,
+            wordCount: wordCount,
+            participants: participants,
+            tldr: "KI-Zusammenfassung läuft…",
+            transcript: mergedLines,
+            processing: true
+        ))
+        statusText = "KI verarbeitet"
+
+        let result = await PostProcessor.process(
+            meetingId: meetingId,
+            mixedSamples: [],
+            transcriptLines: mergedLines,
+            locale: lang
+        )
+        let highlights = result.highlights.map { mapAIHighlight($0) }
+        let tasks = result.tasks.enumerated().map { idx, t in
+            ActionItem(
+                id: "\(meetingId)-merge-task-\(idx)",
+                who: t.who.isEmpty ? "??" : t.who,
+                task: t.task,
+                due: t.due,
+                status: t.status == "done" ? .done : .open
+            )
+        }
+        let chapters = result.chapters.enumerated().map { idx, c in
+            Chapter(id: "\(meetingId)-merge-ch-\(idx)", timestamp: c.timestamp, label: c.label, duration: c.duration)
+        }
+        store.updateDetail(rebuiltDetail(
+            from: detail,
+            title: result.title.isEmpty ? detail.title : result.title,
+            wordCount: wordCount,
+            participants: participants,
+            tldr: result.tldr.isEmpty ? detail.tldr : result.tldr,
+            highlights: highlights,
+            tasks: tasks,
+            chapters: chapters,
+            transcript: mergedLines,
+            processing: false
+        ), summaryTitle: result.title.isEmpty ? nil : result.title)
+        statusText = "Bereit"
+        return nil
+    }
+
+    static let mergeMatchThreshold = 0.5   // Jaccard ab hier = gleiche Aussage
+    static let mergeMinTokens = 4          // kürzere Zeilen ("Ja", "Genau") nicht als Anker/Lücke werten
+
+    /// Fusioniert zwei Transkripte EINES doppelt aufgenommenen Meetings —
+    /// zeitUNabhängig per Text-Alignment. Nötig, weil parallele Aufnahmen
+    /// (NeoQuill + Sprachmemo) nie synchron starten und ein zeitbasiertes
+    /// Matching deshalb scheitert.
+    ///
+    /// Verfahren: Inverted Index über die Original-Zeilen-Tokens, dann pro
+    /// incoming-Zeile die inhaltlich ähnlichste Original-Zeile suchen
+    /// (Jaccard ≥ mergeMatchThreshold = Dublette). Substanzielle Zeilen ohne
+    /// Treffer sind echte Lücken und werden via monotonem Anchor-Merge an der
+    /// passenden Gesprächsposition eingefügt. So füllt die bessere/vollständigere
+    /// Quelle die Lücken der anderen, ohne Dubletten zu erzeugen.
+    nonisolated static func fuseTranscripts(
+        original: [TranscriptLine],
+        incoming: [TranscriptLine]
+    ) -> [TranscriptLine] {
+        guard !original.isEmpty else { return incoming }
+        guard !incoming.isEmpty else { return original }
+
+        let origTokens = original.map { lineTokens($0.body) }
+        var inverted: [String: Set<Int>] = [:]
+        for (i, tokens) in origTokens.enumerated() where tokens.count >= mergeMinTokens {
+            for word in tokens { inverted[word, default: []].insert(i) }
+        }
+
+        var result: [TranscriptLine] = []
+        result.reserveCapacity(original.count + incoming.count)
+        var consumed = 0
+
+        for line in incoming {
+            let tokens = lineTokens(line.body)
+            var matchIdx = -1
+            if tokens.count >= mergeMinTokens {
+                var candidates: Set<Int> = []
+                for word in tokens { if let hits = inverted[word] { candidates.formUnion(hits) } }
+                var best = 0.0
+                for ci in candidates {
+                    let score = jaccard(tokens, origTokens[ci])
+                    if score > best { best = score; matchIdx = ci }
+                }
+                if best < mergeMatchThreshold { matchIdx = -1 }
+            }
+
+            if matchIdx >= consumed {
+                while consumed <= matchIdx {
+                    result.append(original[consumed]); consumed += 1
+                }
+            } else if matchIdx == -1 && tokens.count >= mergeMinTokens {
+                // Substanzielle Lücke → einfügen (incoming ist bereits als
+                // Zusatzquelle markiert). Floskeln/Out-of-order-Dubletten: skip.
+                result.append(line)
+            }
+        }
+        while consumed < original.count {
+            result.append(original[consumed]); consumed += 1
+        }
+        return result
+    }
+
+    /// Lowercase Wort-Tokens eines Transkript-Bodys (Satzzeichen entfernt).
+    nonisolated static func lineTokens(_ text: String) -> Set<String> {
+        Set(text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init))
+    }
+
+    /// Jaccard-Ähnlichkeit zweier Token-Mengen (0…1).
+    nonisolated static func jaccard(_ a: Set<String>, _ b: Set<String>) -> Double {
+        if a.isEmpty && b.isEmpty { return 1 }
+        let union = a.union(b).count
+        return union == 0 ? 0 : Double(a.intersection(b).count) / Double(union)
     }
 
     private func reprocessMeetingAsync(_ meetingId: String) async {

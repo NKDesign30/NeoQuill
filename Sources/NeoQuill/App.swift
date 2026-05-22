@@ -49,6 +49,11 @@ struct NeoQuillApp: App {
                     Task { @MainActor in await state.recorder.toggle() }
                 }
                 .keyboardShortcut("r", modifiers: .command)
+
+                Button("Audio importieren…") {
+                    state.importAudio()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
             CommandGroup(after: .toolbar) {
                 Button("Editorial") { state.detailLayout = .editorial }

@@ -45,6 +45,8 @@ struct DetailToolbar: View {
                     .disabled(meeting == nil || meeting?.processing == true)
                 Button("Transkript importieren") { importAction() }
                     .disabled(meeting == nil)
+                Button("Audio ergänzen…") { mergeAudioAction() }
+                    .disabled(meeting == nil || meeting?.processing == true)
 
                 Divider()
 
@@ -101,6 +103,11 @@ struct DetailToolbar: View {
     private func importAction() {
         guard meeting != nil else { return }
         showImportSheet = true
+    }
+
+    private func mergeAudioAction() {
+        guard let m = meeting, !m.processing else { return }
+        state.mergeAudio(into: m.id)
     }
 
     private func exportAction() {
