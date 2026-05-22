@@ -1,5 +1,7 @@
 import SwiftUI
 import Combine
+import AppKit
+import UniformTypeIdentifiers
 
 // Globaler App-State. ObservableObject bewusst — Swift 5 Mode, kein @Observable.
 // Single Source of Truth für selektiertes Meeting, View-Modus, Layout-Variante.
@@ -203,6 +205,59 @@ final class AppState: ObservableObject {
 
     func reprocessMeeting(_ meetingId: String) {
         recorder.reprocessMeeting(meetingId)
+    }
+
+    /// Öffnet einen Datei-Dialog für eine externe Audiodatei (iPhone-Sprachmemo,
+    /// Diktiergerät etc.) und schickt sie durch die Import-Pipeline. Das neue
+    /// Meeting erscheint sofort als "Wird transkribiert…" in der Liste und
+    /// aktualisiert sich live, sobald Transkript + Summary fertig sind.
+    func importAudio() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = AudioImporter.supportedExtensions.compactMap {
+            UTType(filenameExtension: $0)
+        }
+        panel.prompt = "Importieren"
+        panel.message = "Wähle eine Audiodatei (z. B. iPhone-Sprachmemo) zum Transkribieren."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        notify("Importiere „\(url.lastPathComponent)“ …", dismissAfter: 4)
+        Task { [weak self] in
+            guard let self else { return }
+            if let error = await self.recorder.importAudioFile(url: url) {
+                self.notify(error, dismissAfter: 8)
+            } else {
+                self.notify("„\(url.lastPathComponent)“ importiert und transkribiert.", dismissAfter: 5)
+            }
+        }
+    }
+
+    /// Ergänzt ein bestehendes Meeting um eine zweite Audioquelle. Öffnet den
+    /// Datei-Dialog und mergt die transkribierten Zeilen ins vorhandene
+    /// Transkript — füllt Lücken, die das Original nicht erfasst hat.
+    func mergeAudio(into meetingId: String) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = AudioImporter.supportedExtensions.compactMap {
+            UTType(filenameExtension: $0)
+        }
+        panel.prompt = "Einarbeiten"
+        panel.message = "Wähle eine Zusatz-Aufnahme, die in dieses Meeting eingearbeitet werden soll."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        notify("Arbeite „\(url.lastPathComponent)“ ein …", dismissAfter: 4)
+        Task { [weak self] in
+            guard let self else { return }
+            if let error = await self.recorder.mergeAudioIntoMeeting(meetingId: meetingId, url: url) {
+                self.notify(error, dismissAfter: 8)
+            } else {
+                self.notify("Zusatz-Audio eingearbeitet.", dismissAfter: 5)
+            }
+        }
     }
 
     /// Importiert ein Plattform-Transkript (Teams VTT/Metadata, Meet Entries, Zoom Timeline/VTT)
