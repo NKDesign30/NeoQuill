@@ -9,6 +9,21 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.14] - 2026-05-24
+
+- Added: First public release. Source-available under proprietary LICENSE
+  (All Rights Reserved). Hosted on github.com/NKDesign30/NeoQuill.
+- Added: Sparkle 2 auto-updater wired into the SwiftUI app. The updater
+  polls the EdDSA-signed appcast at the repository root and exposes
+  `Nach Updates suchen…` from the app menu.
+- Added: `scripts/publish-update.sh` generates and signs the appcast,
+  commits it on the current branch and creates the matching GitHub Release.
+- Added: Marketing README with hero icon, screenshot, sales positioning
+  and badge row.
+- Changed: `scripts/build-app.sh` reads `NEOQUILL_PREFERRED_DEV_EMAIL`
+  from the environment instead of a hardcoded email when picking a
+  development cert.
+
 ## [0.9.13] - 2026-05-24
 
 - Added: Public Builds werden mit Developer ID Application (G2, Niko Knez 6QW75N66YP) signiert und über `xcrun notarytool` bei Apple notarisiert.
