@@ -79,10 +79,10 @@ fi
 echo "[2/6] swift build ($CONFIG)..."
 if [ "$CONFIG" = "release" ]; then
   swift build -c release
-  BUILD_DIR=".build/arm64-apple-macosx/release"
+  BUILD_DIR="$(swift build -c release --show-bin-path)"
 else
   swift build
-  BUILD_DIR=".build/arm64-apple-macosx/debug"
+  BUILD_DIR="$(swift build --show-bin-path)"
 fi
 
 APP="$BUILD_DIR/NeoQuill.app"

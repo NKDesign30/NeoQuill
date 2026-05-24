@@ -265,6 +265,21 @@ final class CloudOAuthService: NSObject, ObservableObject {
 
 extension CloudOAuthService: ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                Self.presentationAnchorOnMainActor()
+            }
+        }
+
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                Self.presentationAnchorOnMainActor()
+            }
+        }
+    }
+
+    @MainActor
+    private static func presentationAnchorOnMainActor() -> ASPresentationAnchor {
         if let window = NSApplication.shared.windows.first(where: { $0.isKeyWindow }) ?? NSApplication.shared.mainWindow {
             return window
         }

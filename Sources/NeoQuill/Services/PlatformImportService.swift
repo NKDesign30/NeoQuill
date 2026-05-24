@@ -48,14 +48,14 @@ enum PlatformImportService {
             return Outcome(platform: platform, events: events)
 
         case "json":
-            return try parseJSON(data: data, filename: filename, fallback: fallbackPlatform)
+            return try parseJSON(data: data, filename: filename)
 
         default:
             throw ImportError.unsupportedFormat
         }
     }
 
-    private static func parseJSON(data: Data, filename: String, fallback: Platform) throws -> Outcome {
+    private static func parseJSON(data: Data, filename: String) throws -> Outcome {
         let kind = sniffJSONKind(data: data, filename: filename)
         do {
             switch kind {
@@ -93,7 +93,6 @@ enum PlatformImportService {
         } catch {
             throw ImportError.parser(String(describing: error))
         }
-        _ = fallback
     }
 
     private enum JSONKind {
