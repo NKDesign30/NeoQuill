@@ -978,7 +978,11 @@ final class RecordingController: ObservableObject {
         let embedding = lastEmbeddings[internalId]
             ?? meetingId.flatMap { speakerStore?.meetingEmbedding(meetingId: $0, internalId: internalId) }
             ?? []
-        let canonicalId = Self.canonicalSpeakerId(name: name, knownSpeakerId: knownSpeakerId)
+        let canonicalId = Self.canonicalSpeakerId(
+            name: name,
+            knownSpeakerId: knownSpeakerId,
+            existingSpeakers: speakerStore?.speakers ?? []
+        )
         if !embedding.isEmpty {
             speakerStore?.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
         } else {
@@ -1056,14 +1060,52 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    static func canonicalSpeakerId(name: String, knownSpeakerId: String? = nil) -> String {
+    static func canonicalSpeakerId(
+        name: String,
+        knownSpeakerId: String? = nil,
+        existingSpeakers: [LabeledSpeaker] = []
+    ) -> String {
         if let knownSpeakerId = knownSpeakerId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !knownSpeakerId.isEmpty {
             return knownSpeakerId
         }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let initials = trimmed.split(separator: " ").compactMap { $0.first.map(String.init) }.joined()
-        return initials.isEmpty ? trimmed : initials.uppercased()
+        let normalizedName = normalizedSpeakerName(trimmed)
+        if !normalizedName.isEmpty,
+           let existingSpeaker = existingSpeakers.first(where: { normalizedSpeakerName($0.name) == normalizedName }) {
+            return existingSpeaker.id
+        }
+        return generatedSpeakerId(for: trimmed)
+    }
+
+    private static func normalizedSpeakerName(_ name: String) -> String {
+        let folded = name
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
+        return folded.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    private static func generatedSpeakerId(for name: String) -> String {
+        let separator = UnicodeScalar("-")
+        let folded = name
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
+        var scalars: [UnicodeScalar] = []
+        var lastWasSeparator = true
+        for scalar in folded.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) {
+                scalars.append(scalar)
+                lastWasSeparator = false
+            } else if !lastWasSeparator {
+                scalars.append(separator)
+                lastWasSeparator = true
+            }
+        }
+        if scalars.last == separator {
+            scalars.removeLast()
+        }
+        let slug = String(String.UnicodeScalarView(scalars))
+        return slug.isEmpty ? "speaker-unknown" : "speaker-\(slug)"
     }
 
     private func readStoredAudio(
