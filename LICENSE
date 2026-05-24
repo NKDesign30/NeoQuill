@@ -1,0 +1,40 @@
+NeoQuill — Proprietary License
+Copyright (c) 2026 Niko Knez. All Rights Reserved.
+
+This source code is provided publicly for transparency, security review, and
+trust-building only. Publishing the source does NOT grant any license to use,
+copy, modify, merge, publish, distribute, sublicense, sell, or create
+derivative works from it.
+
+Permitted, without prior written permission:
+
+  - Reading the source code.
+  - Filing issues, pull requests and security reports against the repository.
+  - Quoting short excerpts with attribution for educational or journalistic
+    purposes (fair use as recognized by applicable copyright law).
+
+Not permitted without prior written permission from Niko Knez:
+
+  - Compiling and running this code outside of a personal evaluation context.
+  - Using any part of this code, in source or binary form, in another product,
+    service, fork or distribution.
+  - Removing or altering copyright, license, or attribution notices.
+  - Redistributing modified or unmodified copies of the source or compiled
+    binaries.
+  - Using NeoQuill's name, logo, or other brand assets to endorse or promote
+    derivative works.
+
+Official binary releases of NeoQuill are distributed via the GitHub Releases
+page of this repository and the official channels operated by Niko Knez. Those
+binaries are governed by a separate end-user license agreement included with
+the application.
+
+For commercial licensing, partnerships, or any usage beyond what is permitted
+above, contact: info@design-nk.de
+
+THE SOURCE CODE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -11,11 +11,13 @@ connectors are used.
 
 ## Current Release
 
-- Latest tag: `v0.9.12`
+- Latest tag: `v0.9.13`
 - Source of truth for version: `VERSION`
 - Human release history: `CHANGELOG.md`
 - Release artifacts: GitHub Releases with ZIP, SHA256 and JSON manifest
-- Public Direct-Sale blocker: Developer ID Application signing and notarization
+- Developer ID Application signing and Apple notarization wired in the
+  release pipeline (`scripts/package-release.sh --strict-distribution --notarize`)
+- Sparkle 2 auto-updater integrated; appcast lives at the repository root
 
 ## Product Position
 
@@ -46,9 +48,7 @@ Store once direct-sale feedback proves the product shape.
 
 ## What Is Not Market-Clear Yet
 
-- Direct-sale public builds are not Developer-ID-signed or notarized yet.
 - No payment/licensing layer is wired.
-- No auto-updater is installed.
 - Public beta still needs real outside-user meeting tests.
 
 Run the market gate before treating a build as public-ready:
@@ -128,8 +128,13 @@ For public direct distribution:
 
 ```bash
 NEOQUILL_NOTARY_PROFILE=<profile> ./scripts/package-release.sh --strict-distribution --notarize
+./scripts/publish-update.sh
 ./scripts/market-readiness.sh
 ```
+
+`publish-update.sh` generates and signs the Sparkle appcast, commits it on the
+current branch and creates the matching GitHub Release with the ZIP, SHA256
+and manifest as assets.
 
 Release artifacts are written to `dist/`:
 
@@ -145,9 +150,13 @@ Release artifacts are written to `dist/`:
 - `scripts/package-release.sh` - release artifact packaging
 - `scripts/verify-changelog.sh` - changelog release gate
 - `scripts/market-readiness.sh` - paid/public distribution gate
+- `scripts/publish-update.sh` - generate appcast + create GitHub Release
 - `docs/release-versioning.md` - version and release policy
 - `docs/market-readiness.md` - distribution status and blockers
-- `PRODUCT_RELEASE_PLAN.md` - product, pricing and launch plan
+- `docs/decisions/` - architecture and product decisions
+- `docs/internal/` - in-progress product, speaker-ID and research notes
+- `appcast.xml` - Sparkle update feed for the auto-updater (generated)
+- `LICENSE` - proprietary license, all rights reserved
 
 ## Design Notes
 
@@ -161,3 +170,17 @@ dashboard: fast capture, clear transcript, useful summary, explicit actions.
 - [AudioCap](https://github.com/insidegui/AudioCap) for Core Audio Tap reference work
 - [muesli](https://github.com/pHequals7/muesli) for pure-Swift local meeting transcription ideas
 - [HushScribe](https://github.com/drcursor/HushScribe) for local meeting transcription positioning
+
+## License
+
+NeoQuill is **proprietary software** — Copyright (c) 2026 Niko Knez. All rights
+reserved. See [LICENSE](LICENSE) for full terms.
+
+The source is published for transparency, security review, and trust-building.
+Reading the code, filing issues and submitting pull requests is welcome.
+Compiling, redistributing or building derivative products requires written
+permission. Official binaries are distributed via this repository's
+[Releases](https://github.com/NKDesign30/NeoQuill/releases) page under a
+separate end-user license agreement bundled with the app.
+
+For commercial licensing or partnerships: info@design-nk.de
