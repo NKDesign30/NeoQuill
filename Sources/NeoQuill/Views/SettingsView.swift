@@ -655,11 +655,31 @@ private struct PermissionsTab: View {
 private struct BuildInfoTab: View {
     private let version = AppVersionInfo.current()
 
+    @EnvironmentObject private var updater: AppUpdater
+    @AppStorage("SUEnableAutomaticChecks") private var autoCheck: Bool = true
+
     var body: some View {
         Form {
             Section("App") {
                 LabeledContent("Version", value: version.displayVersion)
                 LabeledContent("Build-Datum", value: version.buildDate)
+            }
+
+            Section("Updates") {
+                Toggle("Automatisch nach Updates suchen", isOn: $autoCheck)
+                LabeledContent("Update-Kanal") {
+                    Text("Stable · github.com/NKDesign30/NeoQuill")
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Button("Jetzt nach Updates suchen") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+                Text("NeoQuill nutzt Sparkle 2 und verifiziert jedes Update über die EdDSA-Signatur in `Info.plist`.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section("GitHub-Stand") {
