@@ -238,17 +238,25 @@ final class SpeakerStore: ObservableObject {
 
     /// Suche bekannten Speaker per Cosine-Similarity. Gibt die ID + Score zurück
     /// wenn der beste Match über `threshold` liegt.
-    func bestMatch(for embedding: [Float], threshold: Float = 0.72) -> (id: String, score: Float)? {
+    func bestMatch(
+        for embedding: [Float],
+        threshold: Float = 0.72,
+        minScoreMargin: Float = 0.08
+    ) -> (id: String, score: Float)? {
         guard !embedding.isEmpty else { return nil }
-        var best: (id: String, score: Float)?
+        var scoresBySpeakerId: [String: Float] = [:]
         for (speakerId, knownEmbeddings) in embeddingsBySpeakerId {
             for knownEmbedding in knownEmbeddings where !knownEmbedding.isEmpty {
-                let s = Self.cosine(embedding, knownEmbedding)
-                if s > (best?.score ?? -1) { best = (speakerId, s) }
+                let score = Self.cosine(embedding, knownEmbedding)
+                scoresBySpeakerId[speakerId] = max(scoresBySpeakerId[speakerId] ?? -1, score)
             }
         }
-        guard let b = best, b.score >= threshold else { return nil }
-        return b
+        let ranked = scoresBySpeakerId.sorted { lhs, rhs in lhs.value > rhs.value }
+        guard let best = ranked.first, best.value >= threshold else { return nil }
+        if let runnerUp = ranked.dropFirst().first, best.value - runnerUp.value < minScoreMargin {
+            return nil
+        }
+        return (best.key, best.value)
     }
 
     // MARK: - Internal
