@@ -1,11 +1,15 @@
 <div align="center">
 
-<img src="docs/assets/app-icon-hero.png" alt="NeoQuill" width="180" />
+<img src="docs/assets/readme-hero.png" alt="NeoQuill — Was gesagt wurde. Was wichtig war." />
 
 # NeoQuill
 
-**Local-first meeting intelligence for macOS.**
-No bot in your call. No cloud upload by default. Your meetings stay on your Mac.
+### Was gesagt wurde. *Was wichtig war.*
+
+Local-first meeting intelligence for macOS.
+WhisperKit on the Apple Neural Engine for transcription, Claude Haiku 4.5 for
+analysis — TL;DR, action items and chapters land in your library in seconds.
+No cloud upload of your audio.
 
 [Download for macOS](https://github.com/NKDesign30/NeoQuill/releases/latest) ·
 [Changelog](CHANGELOG.md) ·
@@ -14,17 +18,9 @@ No bot in your call. No cloud upload by default. Your meetings stay on your Mac.
 
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-2EAB73?style=flat-square&logo=apple&logoColor=white)](https://github.com/NKDesign30/NeoQuill/releases/latest)
 [![Swift 6](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift&logoColor=white)](https://swift.org)
-[![Developer ID Signed](https://img.shields.io/badge/Apple-Notarized-2EAB73?style=flat-square&logo=apple&logoColor=white)](https://github.com/NKDesign30/NeoQuill/releases/latest)
+[![Apple Notarized](https://img.shields.io/badge/Apple-Notarized-2EAB73?style=flat-square&logo=apple&logoColor=white)](https://github.com/NKDesign30/NeoQuill/releases/latest)
 [![Auto Updates](https://img.shields.io/badge/Sparkle-Auto%20Updates-2EAB73?style=flat-square)](https://sparkle-project.org)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey?style=flat-square)](LICENSE)
-
-</div>
-
----
-
-<div align="center">
-
-<img src="docs/assets/screenshot-app.png" alt="NeoQuill app — meeting sidebar and ready state" width="820" />
 
 </div>
 
