@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AVFoundation
 import ApplicationServices
 
@@ -498,6 +499,15 @@ private struct DataPrivacyTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Diagnose") {
+                Button("Privacy-safe Diagnosepaket exportieren") {
+                    exportDiagnostics()
+                }
+                Text("Erstellt einen Support-Report ohne Meeting-Titel, Transkripte, Audio-Inhalte, Namen, URLs, API-Keys oder Keychain-Werte.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Audio-Retention") {
                 Toggle("Audio nach fertigem Transkript löschen", isOn: $deleteAudioAfterTranscription)
                 Button("Alle gespeicherten Audio-Dateien löschen") {
@@ -554,6 +564,16 @@ private struct DataPrivacyTab: View {
             state.notify("Export erstellt: \(folder.lastPathComponent)")
         } catch {
             state.notify("Export fehlgeschlagen: \(error.localizedDescription)")
+        }
+    }
+
+    private func exportDiagnostics() {
+        do {
+            let folder = try SupportDiagnosticsService.exportBundleToDesktop()
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
+            state.notify("Diagnosepaket erstellt: \(folder.lastPathComponent)")
+        } catch {
+            state.notify("Diagnosepaket fehlgeschlagen: \(error.localizedDescription)")
         }
     }
 
