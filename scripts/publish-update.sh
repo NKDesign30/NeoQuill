@@ -54,15 +54,31 @@ if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   exit 1
 fi
 
+# Prefer DMG over ZIP — DMG is the public Direct-Sale artefact, ZIP is the
+# legacy/fallback enclosure for Sparkle clients without DMG support.
+DMG_PATH=$(ls -1t dist/NeoQuill-${TAG_NAME}-*.dmg 2>/dev/null | head -1 || true)
 ZIP_PATH=$(ls -1t dist/NeoQuill-${TAG_NAME}-*.zip 2>/dev/null | head -1 || true)
-if [ -z "$ZIP_PATH" ]; then
-  echo "FEHLER: keine dist/NeoQuill-${TAG_NAME}-*.zip gefunden."
-  echo "  Erst ./scripts/package-release.sh --strict-distribution --notarize ausführen."
+
+if [ -z "$DMG_PATH" ] && [ -z "$ZIP_PATH" ]; then
+  echo "FEHLER: keine dist/NeoQuill-${TAG_NAME}-*.{dmg,zip} gefunden."
+  echo "  Erst ./scripts/build-dmg.sh --notarize oder"
+  echo "  ./scripts/package-release.sh --strict-distribution --notarize ausführen."
   exit 1
 fi
 
-MANIFEST_PATH="${ZIP_PATH%.zip}.json"
-SHA_PATH="${ZIP_PATH}.sha256"
+# Collect every uploadable artefact for this tag (DMG/ZIP + their sidecars).
+ASSETS=()
+for f in "$DMG_PATH" "$ZIP_PATH"; do
+  [ -n "$f" ] || continue
+  ASSETS+=("$f")
+  [ -f "${f}.sha256" ] && ASSETS+=("${f}.sha256")
+done
+# Manifest sits next to the ZIP today; if we only have a DMG, skip it.
+if [ -n "$ZIP_PATH" ] && [ -f "${ZIP_PATH%.zip}.json" ]; then
+  ASSETS+=("${ZIP_PATH%.zip}.json")
+fi
+
+echo "  Artefakte: ${ASSETS[*]}"
 
 echo "[1/4] generate_appcast über dist/"
 if [ "$DRY_RUN" = "1" ]; then
@@ -105,7 +121,7 @@ fi
 
 echo "[4/4] GitHub Release für $TAG_NAME + Assets hochladen"
 if [ "$DRY_RUN" = "1" ]; then
-  echo "  würde gh release create/edit $TAG_NAME mit $ZIP_PATH"
+  echo "  würde gh release create/edit $TAG_NAME mit ${ASSETS[*]}"
 elif [ "$SKIP_PUSH" = "1" ]; then
   echo "  --skip-push gesetzt → GitHub Release wird übersprungen."
 else
@@ -115,19 +131,18 @@ else
   ' CHANGELOG.md)"
 
   if gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1; then
-    gh release upload "$TAG_NAME" "$ZIP_PATH" "$SHA_PATH" "$MANIFEST_PATH" \
-      --clobber --repo "$REPO"
+    gh release upload "$TAG_NAME" "${ASSETS[@]}" --clobber --repo "$REPO"
     if [ -n "$CHANGELOG_BODY" ]; then
       gh release edit "$TAG_NAME" --notes "$CHANGELOG_BODY" --repo "$REPO"
     fi
   else
     if [ -n "$CHANGELOG_BODY" ]; then
-      gh release create "$TAG_NAME" "$ZIP_PATH" "$SHA_PATH" "$MANIFEST_PATH" \
+      gh release create "$TAG_NAME" "${ASSETS[@]}" \
         --title "NeoQuill $TAG_NAME" \
         --notes "$CHANGELOG_BODY" \
         --repo "$REPO"
     else
-      gh release create "$TAG_NAME" "$ZIP_PATH" "$SHA_PATH" "$MANIFEST_PATH" \
+      gh release create "$TAG_NAME" "${ASSETS[@]}" \
         --title "NeoQuill $TAG_NAME" \
         --generate-notes \
         --repo "$REPO"

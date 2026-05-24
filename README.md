@@ -11,7 +11,7 @@ WhisperKit on the Apple Neural Engine for transcription, Claude Haiku 4.5 for
 analysis — TL;DR, action items and chapters land in your library in seconds.
 No cloud upload of your audio.
 
-[Download for macOS](https://github.com/NKDesign30/NeoQuill/releases/latest) ·
+[**⬇ Download Installer (.dmg)**](https://github.com/NKDesign30/NeoQuill/releases/latest) ·
 [Changelog](CHANGELOG.md) ·
 [Architecture](#architecture) ·
 [License](LICENSE)
@@ -164,18 +164,24 @@ For public Direct-Sale distribution:
 
 ```bash
 NEOQUILL_NOTARY_PROFILE=<profile> ./scripts/package-release.sh --strict-distribution --notarize
+./scripts/build-dmg.sh --notarize
 ./scripts/publish-update.sh
 ./scripts/market-readiness.sh
 ```
 
+`build-dmg.sh` packages the signed release `.app` into a branded, signed and
+notarized DMG installer (drag-to-Applications layout, retina background,
+github.com/NKDesign30/NeoQuill footer).
+
 `publish-update.sh` generates and signs the Sparkle appcast, commits it on the
-current branch and creates the matching GitHub Release with the ZIP, SHA256
-and manifest as assets.
+current branch and creates the matching GitHub Release with the DMG (and the
+legacy ZIP) as assets.
 
 Release artifacts are written to `dist/`:
 
-- `NeoQuill-v<version>-build<build>-<commit>.zip`
-- matching `.zip.sha256`
+- `NeoQuill-v<version>-build<build>-<commit>.dmg` — branded installer, primary download
+- `NeoQuill-v<version>-build<build>-<commit>.zip` — Sparkle / scripted fallback
+- matching `.sha256` for each archive
 - matching `.json` manifest
 
 ## Repository Map

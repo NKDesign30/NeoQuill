@@ -12,3 +12,8 @@ marketing/
 Tools/*/dist/
 Tools/*/node_modules/
 .env
+
+# Local design references (8MB bundles, kept out of the repo)
+claudedocs/
+# Playwright MCP cache
+.playwright-mcp/
