@@ -11,3 +11,4 @@ landing/
 marketing/
 Tools/*/dist/
 Tools/*/node_modules/
+.env
