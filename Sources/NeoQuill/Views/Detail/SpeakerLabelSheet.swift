@@ -7,6 +7,7 @@ import SwiftUI
 struct SpeakerLabelSheet: View {
 
     let participant: Participant
+    let knownSpeakers: [LabeledSpeaker]
     let suggestedColors: [UInt32]
     var onSave: (String, UInt32) -> Void
     var onDismiss: () -> Void
@@ -14,9 +15,50 @@ struct SpeakerLabelSheet: View {
     @State private var name: String = ""
     @State private var selectedColor: UInt32 = 0x7C8AFF
 
+    private var reusableSpeakers: [LabeledSpeaker] {
+        knownSpeakers
+            .filter { speaker in
+                !LocalSpeakerProfile.isLocalSpeakerId(speaker.id)
+                && speaker.id != participant.id
+                && !speaker.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            .sorted { lhs, rhs in lhs.lastSeenAt > rhs.lastSeenAt }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             header
+            if !reusableSpeakers.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("BEKANNTE SPEAKER").neonEyebrow()
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(reusableSpeakers) { speaker in
+                                Button {
+                                    name = speaker.name
+                                    selectedColor = speaker.colorHex
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Avatar(initials: speaker.id, color: Color(hex: speaker.colorHex), size: 24)
+                                        Text(speaker.name)
+                                            .font(.neonBody(12, weight: .medium))
+                                            .foregroundStyle(Neon.textPrimary)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 32)
+                                    .background(Color.white.opacity(0.04))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
             VStack(alignment: .leading, spacing: 8) {
                 Text("NAME").neonEyebrow()
                 TextField("Vorname Nachname", text: $name)
@@ -64,7 +106,7 @@ struct SpeakerLabelSheet: View {
             }
         }
         .padding(28)
-        .frame(width: 420, height: 320)
+        .frame(width: 460, height: reusableSpeakers.isEmpty ? 320 : 390)
         .background(Neon.surfaceBackground)
         .onAppear {
             name = participant.name.hasPrefix("Speaker") ? "" : participant.name

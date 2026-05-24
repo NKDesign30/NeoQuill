@@ -70,6 +70,7 @@ struct ParticipantBar: View {
         .sheet(isPresented: $showLabelSheet) {
             SpeakerLabelSheet(
                 participant: participant,
+                knownSpeakers: state.speakerStore.speakers,
                 suggestedColors: [0x2EAB73, 0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259],
                 onSave: { name, color in
                     let migrated = state.recorder.labelSpeaker(
