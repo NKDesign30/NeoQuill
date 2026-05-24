@@ -9,6 +9,8 @@ cd "$(dirname "$0")/.."
 ALLOW_DIRTY=0
 CLEAN_BUILD=0
 LAUNCH_SMOKE=0
+NOTARIZE=0
+NOTARY_PROFILE="${NEOQUILL_NOTARY_PROFILE:-}"
 STRICT_DISTRIBUTION=0
 DIST_DIR="dist"
 
@@ -23,27 +25,64 @@ Usage:
   ./scripts/package-release.sh --clean
   ./scripts/package-release.sh --allow-dirty
   ./scripts/package-release.sh --launch-smoke
+  ./scripts/package-release.sh --notarize --notary-profile <keychain-profile>
   ./scripts/package-release.sh --strict-distribution
 USAGE
 }
 
-for arg in "$@"; do
-  case "$arg" in
-    --allow-dirty)          ALLOW_DIRTY=1 ;;
-    --clean)                CLEAN_BUILD=1 ;;
-    --launch-smoke)         LAUNCH_SMOKE=1 ;;
-    --strict-distribution)  STRICT_DISTRIBUTION=1 ;;
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --allow-dirty)
+      ALLOW_DIRTY=1
+      shift
+      ;;
+    --clean)
+      CLEAN_BUILD=1
+      shift
+      ;;
+    --launch-smoke)
+      LAUNCH_SMOKE=1
+      shift
+      ;;
+    --notarize)
+      NOTARIZE=1
+      STRICT_DISTRIBUTION=1
+      shift
+      ;;
+    --notary-profile)
+      if [ -z "${2:-}" ]; then
+        echo "FEHLER: --notary-profile braucht einen Keychain-Profilnamen."
+        exit 1
+      fi
+      NOTARY_PROFILE="$2"
+      shift 2
+      ;;
+    --strict-distribution)
+      STRICT_DISTRIBUTION=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
       ;;
-    *) echo "Unbekanntes Flag: $arg"; exit 1 ;;
+    *) echo "Unbekanntes Flag: $1"; exit 1 ;;
   esac
 done
 
 if ! command -v swift >/dev/null 2>&1; then
   echo "FEHLER: swift ist nicht auf PATH."
   exit 1
+fi
+
+if [ "$NOTARIZE" = "1" ]; then
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "FEHLER: xcrun ist nicht auf PATH."
+    exit 1
+  fi
+  if [ -z "$NOTARY_PROFILE" ]; then
+    echo "FEHLER: --notarize braucht --notary-profile oder NEOQUILL_NOTARY_PROFILE."
+    exit 1
+  fi
 fi
 
 BUILD_ARGS=(--release --no-install --no-run)
@@ -106,6 +145,9 @@ else
   echo "  Distribution-Signatur OK: $SIGNING_AUTHORITY"
 fi
 
+NOTARIZED="false"
+STAPLED="false"
+
 if [ "$LAUNCH_SMOKE" = "1" ]; then
   echo "[4/5] Launch-Smoke..."
   APP_ABS="$(cd "$(dirname "$APP")" && pwd)/$(basename "$APP")"
@@ -146,6 +188,24 @@ MANIFEST_PATH="$DIST_DIR/${ARCHIVE_BASENAME}.json"
 
 rm -f "$ZIP_PATH" "$SHA_PATH" "$MANIFEST_PATH"
 ditto -c -k --keepParent "$APP" "$ZIP_PATH"
+
+if [ "$NOTARIZE" = "1" ]; then
+  echo "  Notarization submit: $ZIP_PATH"
+  xcrun notarytool submit "$ZIP_PATH" \
+    --keychain-profile "$NOTARY_PROFILE" \
+    --wait
+  NOTARIZED="true"
+
+  echo "  Notarization staple + validate..."
+  xcrun stapler staple "$APP"
+  xcrun stapler validate "$APP"
+  spctl --assess --type execute --verbose=4 "$APP"
+  STAPLED="true"
+
+  rm -f "$ZIP_PATH"
+  ditto -c -k --keepParent "$APP" "$ZIP_PATH"
+fi
+
 (cd "$DIST_DIR" && shasum -a 256 "$(basename "$ZIP_PATH")") > "$SHA_PATH"
 SHA256="$(awk '{print $1}' "$SHA_PATH")"
 
@@ -159,6 +219,8 @@ SHA256="$(awk '{print $1}' "$SHA_PATH")"
   printf '  "gitDirty": "%s",\n' "$GIT_DIRTY"
   printf '  "buildDate": "%s",\n' "$BUILD_DATE"
   printf '  "signingAuthority": "%s",\n' "$SIGNING_AUTHORITY"
+  printf '  "notarized": %s,\n' "$NOTARIZED"
+  printf '  "stapled": %s,\n' "$STAPLED"
   printf '  "archive": "%s",\n' "$(basename "$ZIP_PATH")"
   printf '  "sha256": "%s"\n' "$SHA256"
   printf '}\n'

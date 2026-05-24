@@ -22,8 +22,8 @@ VERSION_FILE="VERSION"
 
 # Sign-Identity ermitteln:
 # 1. ENV-Override:               NEOQUILL_SIGN_IDENTITY=<hash-or-name>
-# 2. Bevorzugt: info@design-nk.de Cert (NK Design — aktiv)
-# 3. Sonst erste verfügbare Apple-Cert (per SHA-1-Hash)
+# 2. Release: Developer ID Application bevorzugen
+# 3. Debug: Apple Development bevorzugen
 # 4. Fallback: ad-hoc ("-")
 detect_sign_identity() {
   if [ -n "${NEOQUILL_SIGN_IDENTITY:-}" ]; then
@@ -33,28 +33,31 @@ detect_sign_identity() {
   local certs
   certs=$(security find-identity -v -p codesigning 2>/dev/null \
             | grep -E 'Apple Development|Developer ID Application' || true)
-  local preferred
-  preferred=$(echo "$certs" | grep -i "design-nk.de" | head -1 | awk '{print $2}')
-  if [ -n "$preferred" ]; then
-    echo "$preferred"
+
+  if [ "$CONFIG" = "release" ]; then
+    local developer_id
+    developer_id=$(echo "$certs" | grep -i "Developer ID Application" | head -1 | awk '{print $2}' || true)
+    if [ -n "$developer_id" ]; then
+      echo "$developer_id"
+      return
+    fi
+  fi
+
+  local preferred_development
+  preferred_development=$(echo "$certs" | grep -i "Apple Development" | grep -i "design-nk.de" | head -1 | awk '{print $2}' || true)
+  if [ -n "$preferred_development" ]; then
+    echo "$preferred_development"
     return
   fi
-  local hash
-  hash=$(echo "$certs" | head -1 | awk '{print $2}')
-  if [ -n "$hash" ]; then
-    echo "$hash"
+
+  local fallback
+  fallback=$(echo "$certs" | head -1 | awk '{print $2}' || true)
+  if [ -n "$fallback" ]; then
+    echo "$fallback"
   else
     echo "-"
   fi
 }
-SIGN_IDENTITY=$(detect_sign_identity)
-SIGN_LABEL="$SIGN_IDENTITY"
-if [ "$SIGN_IDENTITY" != "-" ]; then
-  SIGN_LABEL=$(security find-identity -v -p codesigning 2>/dev/null \
-                 | grep "$SIGN_IDENTITY" \
-                 | head -1 \
-                 | sed -E 's/.*"([^"]+)".*/\1/')
-fi
 
 for arg in "$@"; do
   case "$arg" in
@@ -70,6 +73,19 @@ for arg in "$@"; do
     *) echo "Unbekanntes Flag: $arg"; exit 1 ;;
   esac
 done
+
+SIGN_IDENTITY=$(detect_sign_identity)
+SIGN_LABEL="$SIGN_IDENTITY"
+if [ "$SIGN_IDENTITY" != "-" ]; then
+  SIGN_LABEL=$(security find-identity -v -p codesigning 2>/dev/null \
+                 | grep "$SIGN_IDENTITY" \
+                 | head -1 \
+                 | sed -E 's/.*"([^"]+)".*/\1/')
+fi
+IS_DEVELOPER_ID=0
+if [[ "$SIGN_LABEL" == Developer\ ID\ Application:* ]]; then
+  IS_DEVELOPER_ID=1
+fi
 
 if [ "$DO_CLEAN" = "1" ]; then
   echo "[1/6] Clean: .build entfernen..."
@@ -141,10 +157,17 @@ if [ "$SIGN_IDENTITY" = "-" ]; then
   codesign --force --deep --sign - "$APP" 2>&1 | tail -1
 else
   echo "[5/6] Code signing mit \"$SIGN_LABEL\"..."
-  codesign --force --deep --options=runtime \
-    --entitlements "$ENTITLEMENTS" \
-    --sign "$SIGN_IDENTITY" \
-    "$APP" 2>&1 | tail -1
+  if [ "$IS_DEVELOPER_ID" = "1" ]; then
+    codesign --force --deep --timestamp --options=runtime \
+      --entitlements "$ENTITLEMENTS" \
+      --sign "$SIGN_IDENTITY" \
+      "$APP" 2>&1 | tail -1
+  else
+    codesign --force --deep --options=runtime \
+      --entitlements "$ENTITLEMENTS" \
+      --sign "$SIGN_IDENTITY" \
+      "$APP" 2>&1 | tail -1
+  fi
 fi
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
