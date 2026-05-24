@@ -9,6 +9,11 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.11] - 2026-05-24
+
+- Added: Market-Readiness-Preflight für GitHub Release, Changelog, Manifest, SHA256, Signing und Notarization.
+- Added: Distribution-Doku mit klarem Developer-ID- und Notary-Blocker für Direct-Sale.
+
 ## [0.9.10] - 2026-05-24
 
 - Added: Release-Changelog als verpflichtenden Teil des Release-Flows eingeführt.

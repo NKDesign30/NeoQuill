@@ -21,4 +21,5 @@ Release tags should match the version file, for example `v0.9.0`.
 - Tags are created on `main` and must match `VERSION`.
 - Public artifacts come from `scripts/package-release.sh`; the JSON manifest is the handoff source for version, build, commit, branch, dirty-state, changelog, signing and SHA256.
 - `scripts/verify-changelog.sh` must pass before packaging; every release needs a `## [VERSION] - YYYY-MM-DD` section with at least one bullet.
+- `scripts/market-readiness.sh` must pass before paid/public distribution.
 - For public distribution, `--strict-distribution --notarize` must pass with a Developer ID Application certificate and a notary profile.
