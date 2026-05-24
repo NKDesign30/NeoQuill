@@ -70,6 +70,7 @@ struct NeoQuillApp: App {
         Settings {
             SettingsView()
                 .environmentObject(state)
+                .environmentObject(updater)
                 .preferredColorScheme(.dark)
         }
     }
