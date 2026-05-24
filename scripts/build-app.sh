@@ -43,8 +43,15 @@ detect_sign_identity() {
     fi
   fi
 
-  local preferred_development
-  preferred_development=$(echo "$certs" | grep -i "Apple Development" | grep -i "design-nk.de" | head -1 | awk '{print $2}' || true)
+  # Prefer a development cert whose email matches NEOQUILL_PREFERRED_DEV_EMAIL
+  # (for contributors with multiple Apple Developer identities in their Keychain).
+  local preferred_development=""
+  if [ -n "${NEOQUILL_PREFERRED_DEV_EMAIL:-}" ]; then
+    preferred_development=$(echo "$certs" | grep -i "Apple Development" | grep -i "$NEOQUILL_PREFERRED_DEV_EMAIL" | head -1 | awk '{print $2}' || true)
+  fi
+  if [ -z "$preferred_development" ]; then
+    preferred_development=$(echo "$certs" | grep -i "Apple Development" | head -1 | awk '{print $2}' || true)
+  fi
   if [ -n "$preferred_development" ]; then
     echo "$preferred_development"
     return

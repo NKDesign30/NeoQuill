@@ -41,7 +41,7 @@
     <key>NSCalendarsUsageDescription</key>
     <string>NeoQuill liest Kalender-Events für Meeting-Namen und Teilnehmer.</string>
     <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/NKDesign30/neoquill-updates/main/appcast.xml</string>
+    <string>https://raw.githubusercontent.com/NKDesign30/NeoQuill/main/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>Z7Y5xpcshAq5syDWIvvIGlXt8UJbDLbSyB1XVWtc0KM=</string>
     <key>SUEnableAutomaticChecks</key>
