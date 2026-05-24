@@ -1,10 +1,23 @@
 # NeoQuill Product Release Plan
 
-Stand: 2026-05-17
+Stand: 2026-05-24
 
 ## Produktthese
 
 NeoQuill wird als lokale macOS-Meeting-App positioniert: Aufnahme, Transkript, Sprecher, Zusammenfassung und Aufgaben laufen zuerst auf dem Mac. Der Unterschied zu bot-basierten Tools ist Kontrolle: keine Meeting-Bots, lokale Datenhaltung, eigener KI-Provider möglich.
+
+## Professioneller Operating Standard
+
+Spotify-Learning für NeoQuill: Professionelle Produkte gewinnen nicht durch mehr Chaos-Features, sondern durch gemeinsame Plattform-Standards, klare Ownership und reproduzierbare Releases. Für NeoQuill heißt das:
+
+- `dev` ist der Arbeitsstand; `main` ist nur verifizierter Release-Stand.
+- Jede App zeigt Version, Build, Branch, Commit, Dirty-State und Build-Datum.
+- Jeder Release läuft durch Tests, Bundle-Build, Signaturcheck, ZIP und SHA256-Manifest.
+- Kritische Produktpfade haben Regressionstests: Aufnahme, Playback, Transkript, Speaker, Export, Diagnostics.
+- Support-Diagnosen bleiben privacy-safe und erklären den Build-Stand ohne Audio-/Transcript-Leak.
+- Feature-Entscheidungen folgen dem Local-first-Versprechen: Cloud nur optional, nie heimlich.
+
+Der Maßstab vor Paid Launch: Ein fremder Nutzer kann einen Fehler melden, und wir wissen sofort App-Version, Commit, Build, Signaturstatus und betroffenen Produktpfad.
 
 ## Zielkunden
 
@@ -173,6 +186,7 @@ Nächste echte Connector-Slices:
 - Apple App Review Guidelines: https://developer.apple.com/app-store/review/guidelines/
 - Apple In-App Purchase types: https://apps.apple.com/us/iphone/story/id1539139213
 - Apple Small Business Program: https://developer.apple.com/app-store/small-business-program/
+- Spotify Engineering zu Backstage und autonomer Kultur: https://engineering.atspotify.com/2021/05/a-product-story-the-lessons-of-backstage-and-spotifys-autonomous-culture/
 - Granola pricing docs: https://docs.granola.ai/help-center/update-to-granola-pricing-plans
 - Otter pricing: https://otter.ai/pricing
 - Fireflies pricing: https://fireflies.ai/pricing

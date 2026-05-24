@@ -28,8 +28,6 @@ enum AudioPlaybackPitchGuard {
             return Decision(rate: 1, corrected: false, reason: nil)
         }
 
-        let clamped = max(ratio, 0.5)
-        let reason = "file shorter than meeting"
-        return Decision(rate: Float(clamped), corrected: true, reason: reason)
+        return Decision(rate: Float(ratio), corrected: true, reason: "file shorter than meeting")
     }
 }

@@ -17,6 +17,14 @@ final class AudioPlaybackPitchGuardTests: XCTestCase {
         XCTAssertEqual(decision.reason, "file shorter than meeting")
     }
 
+    func testKeepsSevereDurationRatioForRenderedCorrection() {
+        let decision = AudioPlaybackPitchGuard.decide(fileDuration: 200, expectedDuration: 600)
+
+        XCTAssertEqual(decision.rate, Float(1.0 / 3.0), accuracy: 0.0001)
+        XCTAssertTrue(decision.corrected)
+        XCTAssertEqual(decision.reason, "file shorter than meeting")
+    }
+
     func testDoesNotSpeedUpLongFileToAvoidHighPitchPlayback() {
         let decision = AudioPlaybackPitchGuard.decide(fileDuration: 900, expectedDuration: 600)
 

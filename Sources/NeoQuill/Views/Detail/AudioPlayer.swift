@@ -154,24 +154,51 @@ struct AudioPlayer: View {
 
     private func loadPlayer() {
         guard let audioURL else { return }
-        let url = URL(fileURLWithPath: audioURL)
+        let sourceURL = URL(fileURLWithPath: audioURL)
         do {
-            let p = try AVAudioPlayer(contentsOf: url)
-            p.prepareToPlay()
-            p.enableRate = true
+            let originalPlayer = try AVAudioPlayer(contentsOf: sourceURL)
+            originalPlayer.prepareToPlay()
+            originalPlayer.enableRate = true
             let correction = AudioPlaybackPitchGuard.decide(
-                fileDuration: p.duration,
+                fileDuration: originalPlayer.duration,
                 expectedDuration: TimeInterval(totalSeconds)
             )
-            p.rate = correction.rate
-            player = p
-            playbackRate = correction.rate
-            playbackRateCorrected = correction.corrected
+
+            var playerURL = sourceURL
+            var playerRate: Float = 1
+
             if correction.corrected {
-                NSLog(
-                    "[AudioPlayer] playback rate corrected to \(correction.rate) for \(audioURL) (\(correction.reason ?? "duration mismatch"))"
-                )
+                do {
+                    if let correctedURL = try AudioPlaybackFileCorrector.renderCorrectedCopy(
+                        from: sourceURL,
+                        expectedDuration: TimeInterval(totalSeconds),
+                        correctionRate: correction.rate
+                    ) {
+                        playerURL = correctedURL
+                        NSLog(
+                            "[AudioPlayer] rendered playback correction \(correction.rate) for \(audioURL) (\(correction.reason ?? "duration mismatch"))"
+                        )
+                    } else {
+                        playerRate = max(correction.rate, 0.5)
+                        NSLog(
+                            "[AudioPlayer] playback render correction unavailable; falling back to rate \(playerRate) for \(audioURL)"
+                        )
+                    }
+                } catch {
+                    playerRate = max(correction.rate, 0.5)
+                    NSLog(
+                        "[AudioPlayer] playback render correction failed; falling back to rate \(playerRate) for \(audioURL): \(error)"
+                    )
+                }
             }
+
+            let p = playerURL == sourceURL ? originalPlayer : try AVAudioPlayer(contentsOf: playerURL)
+            p.prepareToPlay()
+            p.enableRate = true
+            p.rate = playerRate
+            player = p
+            playbackRate = correction.corrected ? correction.rate : playerRate
+            playbackRateCorrected = correction.corrected
             loadFailed = false
         } catch {
             NSLog("[AudioPlayer] failed to load \(audioURL): \(error)")

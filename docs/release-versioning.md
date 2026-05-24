@@ -12,3 +12,11 @@
 - `NeoQuillBuildDate`: UTC build timestamp
 
 Release tags should match the version file, for example `v0.9.0`.
+
+## Branch and Release Policy
+
+- Work happens on `dev`.
+- `main` is only updated after the release gate passes on `dev`.
+- Tags are created on `main` and must match `VERSION`.
+- Public artifacts come from `scripts/package-release.sh`; the JSON manifest is the handoff source for version, build, commit, branch, dirty-state, signing and SHA256.
+- For public distribution, `--strict-distribution --notarize` must pass with a Developer ID Application certificate and a notary profile.

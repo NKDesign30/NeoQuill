@@ -21,6 +21,18 @@ enum RecordingAudioStem {
 
 final class AudioWriter {
 
+    private static var playbackCompatibleWavSettings: [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16_000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+    }
+
     private var file: AVAudioFile?
     private(set) var url: URL?
     private let format: AVAudioFormat
@@ -28,7 +40,7 @@ final class AudioWriter {
     init() {
         self.format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: 16000,
+            sampleRate: 16_000,
             channels: 1,
             interleaved: false
         )!
@@ -63,27 +75,50 @@ final class AudioWriter {
         return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
     }
 
+    static func writePlaybackCompatibleWav(samples: [Float], to url: URL) throws {
+        guard !samples.isEmpty else { return }
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let writer = AudioWriter()
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: playbackCompatibleWavSettings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        try writer.write(samples: samples, to: file)
+    }
+
     func start(id: String, stem: RecordingAudioStem = .mix) throws {
         let url = Self.url(id: id, stem: stem)
-        // WAV-Settings explizit für AVAudioFile. Die App hält intern Float32
-        // 16kHz, speichert aber PCM16. Das ist robuster für macOS-Player,
-        // QuickLook und externe Tools als Float32-WAV.
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-            AVLinearPCMIsNonInterleaved: false,
-        ]
-        self.file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+        self.file = try AVAudioFile(
+            forWriting: url,
+            settings: Self.playbackCompatibleWavSettings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
         self.url = url
     }
 
     /// Schreibt einen Float-Buffer (16kHz Mono). Wird vom AudioCapture-Mix gefüttert.
     func write(samples: [Float]) {
         guard let file else { return }
+        do {
+            try write(samples: samples, to: file)
+        } catch {
+            NSLog("[AudioWriter] write failed: \(error)")
+        }
+    }
+
+    func close() -> URL? {
+        let result = url
+        file = nil
+        return result
+    }
+
+    private func write(samples: [Float], to file: AVAudioFile) throws {
         let prepared = Self.prepareForPlayback(samples)
         let frameCount = AVAudioFrameCount(prepared.count)
         guard frameCount > 0,
@@ -95,17 +130,7 @@ final class AudioWriter {
                 channel.update(from: baseAddress, count: prepared.count)
             }
         }
-        do {
-            try file.write(from: buffer)
-        } catch {
-            NSLog("[AudioWriter] write failed: \(error)")
-        }
-    }
-
-    func close() -> URL? {
-        let result = url
-        file = nil
-        return result
+        try file.write(from: buffer)
     }
 
     private static func prepareForPlayback(_ samples: [Float]) -> [Float] {
