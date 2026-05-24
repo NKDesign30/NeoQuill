@@ -968,13 +968,21 @@ final class RecordingController: ObservableObject {
     /// Gibt zurueck wieviele weitere Meetings ueber Embedding-Match auf den
     /// gleichen Speaker migriert wurden (fuer UI-Feedback).
     @discardableResult
-    func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) -> Int {
+    func labelSpeaker(
+        internalId: String,
+        name: String,
+        colorHex: UInt32,
+        meetingId: String?,
+        knownSpeakerId: String? = nil
+    ) -> Int {
         let embedding = lastEmbeddings[internalId]
             ?? meetingId.flatMap { speakerStore?.meetingEmbedding(meetingId: $0, internalId: internalId) }
             ?? []
-        let canonicalId = canonicalize(name: name)
+        let canonicalId = Self.canonicalSpeakerId(name: name, knownSpeakerId: knownSpeakerId)
         if !embedding.isEmpty {
             speakerStore?.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
+        } else {
+            speakerStore?.upsertIdentity(id: canonicalId, name: name, colorHex: colorHex)
         }
         if let meetingId {
             store?.relabelSpeaker(
@@ -1048,7 +1056,11 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    private func canonicalize(name: String) -> String {
+    static func canonicalSpeakerId(name: String, knownSpeakerId: String? = nil) -> String {
+        if let knownSpeakerId = knownSpeakerId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !knownSpeakerId.isEmpty {
+            return knownSpeakerId
+        }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let initials = trimmed.split(separator: " ").compactMap { $0.first.map(String.init) }.joined()
         return initials.isEmpty ? trimmed : initials.uppercased()

@@ -9,11 +9,12 @@ struct SpeakerLabelSheet: View {
     let participant: Participant
     let knownSpeakers: [LabeledSpeaker]
     let suggestedColors: [UInt32]
-    var onSave: (String, UInt32) -> Void
+    var onSave: (String, UInt32, String?) -> Void
     var onDismiss: () -> Void
 
     @State private var name: String = ""
     @State private var selectedColor: UInt32 = 0x7C8AFF
+    @State private var selectedKnownSpeakerId: String?
 
     private var reusableSpeakers: [LabeledSpeaker] {
         knownSpeakers
@@ -23,6 +24,10 @@ struct SpeakerLabelSheet: View {
                 && !speaker.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
             .sorted { lhs, rhs in lhs.lastSeenAt > rhs.lastSeenAt }
+    }
+
+    private var selectedKnownSpeaker: LabeledSpeaker? {
+        reusableSpeakers.first { $0.id == selectedKnownSpeakerId }
     }
 
     var body: some View {
@@ -37,6 +42,7 @@ struct SpeakerLabelSheet: View {
                                 Button {
                                     name = speaker.name
                                     selectedColor = speaker.colorHex
+                                    selectedKnownSpeakerId = speaker.id
                                 } label: {
                                     HStack(spacing: 8) {
                                         Avatar(initials: speaker.id, color: Color(hex: speaker.colorHex), size: 24)
@@ -50,7 +56,14 @@ struct SpeakerLabelSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
+                                            .stroke(
+                                                selectedKnownSpeakerId == speaker.id
+                                                    ? Neon.brandPrimary
+                                                    : Neon.strokeHairline,
+                                                lineWidth: selectedKnownSpeakerId == speaker.id
+                                                    ? 1
+                                                    : Neon.hairlineWidth
+                                            )
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -91,7 +104,12 @@ struct SpeakerLabelSheet: View {
                 Button("Abbrechen", action: onDismiss)
                     .keyboardShortcut(.cancelAction)
                 Button {
-                    onSave(name.isEmpty ? participant.name : name, selectedColor)
+                    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let finalName = trimmedName.isEmpty ? participant.name : trimmedName
+                    let knownSpeakerId = selectedKnownSpeaker?.name == finalName
+                        ? selectedKnownSpeaker?.id
+                        : nil
+                    onSave(finalName, selectedColor, knownSpeakerId)
                 } label: {
                     Text("Speichern")
                         .font(.neonBodyButton)
@@ -113,6 +131,7 @@ struct SpeakerLabelSheet: View {
             selectedColor = suggestedColors.contains(participant.colorHex)
                 ? participant.colorHex
                 : (suggestedColors.first ?? 0x7C8AFF)
+            selectedKnownSpeakerId = nil
         }
     }
 

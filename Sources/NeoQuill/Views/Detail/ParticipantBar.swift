@@ -72,12 +72,13 @@ struct ParticipantBar: View {
                 participant: participant,
                 knownSpeakers: state.speakerStore.speakers,
                 suggestedColors: [0x2EAB73, 0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259],
-                onSave: { name, color in
+                onSave: { name, color, knownSpeakerId in
                     let migrated = state.recorder.labelSpeaker(
                         internalId: participant.id,
                         name: name,
                         colorHex: color,
-                        meetingId: state.selectedMeetingId
+                        meetingId: state.selectedMeetingId,
+                        knownSpeakerId: knownSpeakerId
                     )
                     if migrated > 0 {
                         let suffix = migrated == 1 ? "weiteres Meeting" : "weitere Meetings"
