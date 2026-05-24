@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Buildet ein reproduzierbares NeoQuill-Release-Artefakt mit Bundle-Metadaten,
-# Signaturcheck, ZIP und SHA256-Manifest.
+# Changelog-Gate, Signaturcheck, ZIP und SHA256-Manifest.
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ usage() {
   cat <<'USAGE'
 NeoQuill Release Packaging
 Buildet ein reproduzierbares Release-Artefakt mit Bundle-Metadaten,
-Signaturcheck, ZIP und SHA256-Manifest.
+Changelog-Gate, Signaturcheck, ZIP und SHA256-Manifest.
 
 Usage:
   ./scripts/package-release.sh
@@ -90,7 +90,10 @@ if [ "$CLEAN_BUILD" = "1" ]; then
   BUILD_ARGS+=(--clean)
 fi
 
-echo "[1/5] Release-Bundle bauen..."
+echo "[1/6] Changelog prüfen..."
+./scripts/verify-changelog.sh
+
+echo "[2/6] Release-Bundle bauen..."
 ./scripts/build-app.sh "${BUILD_ARGS[@]}"
 
 BUILD_DIR="$(swift build -c release --show-bin-path)"
@@ -114,7 +117,7 @@ GIT_BRANCH="$(plist_value NeoQuillGitBranch)"
 GIT_DIRTY="$(plist_value NeoQuillGitDirty)"
 BUILD_DATE="$(plist_value NeoQuillBuildDate)"
 
-echo "[2/5] Bundle-Metadaten prüfen..."
+echo "[3/6] Bundle-Metadaten prüfen..."
 if [ "$BUNDLE_VERSION" != "$VERSION_FILE_VALUE" ]; then
   echo "FEHLER: VERSION=$VERSION_FILE_VALUE, Bundle=$BUNDLE_VERSION"
   exit 1
@@ -127,7 +130,7 @@ fi
 
 echo "  v$BUNDLE_VERSION build $BUILD_NUMBER ($GIT_BRANCH@$GIT_COMMIT, $GIT_DIRTY)"
 
-echo "[3/5] Signatur prüfen..."
+echo "[4/6] Signatur prüfen..."
 codesign --verify --deep --strict "$APP"
 SIGNING_AUTHORITY="$(codesign -dv --verbose=4 "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -1 || true)"
 if [ -z "$SIGNING_AUTHORITY" ]; then
@@ -149,7 +152,7 @@ NOTARIZED="false"
 STAPLED="false"
 
 if [ "$LAUNCH_SMOKE" = "1" ]; then
-  echo "[4/5] Launch-Smoke..."
+  echo "[5/6] Launch-Smoke..."
   APP_ABS="$(cd "$(dirname "$APP")" && pwd)/$(basename "$APP")"
   open -n "$APP_ABS"
   PID=""
@@ -170,10 +173,10 @@ if [ "$LAUNCH_SMOKE" = "1" ]; then
   kill "$PID" 2>/dev/null || true
   sleep 1
 else
-  echo "[4/5] Launch-Smoke übersprungen."
+  echo "[5/6] Launch-Smoke übersprungen."
 fi
 
-echo "[5/5] Release-Artefakt schreiben..."
+echo "[6/6] Release-Artefakt schreiben..."
 mkdir -p "$DIST_DIR"
 
 DIRTY_SUFFIX=""
@@ -221,6 +224,7 @@ SHA256="$(awk '{print $1}' "$SHA_PATH")"
   printf '  "signingAuthority": "%s",\n' "$SIGNING_AUTHORITY"
   printf '  "notarized": %s,\n' "$NOTARIZED"
   printf '  "stapled": %s,\n' "$STAPLED"
+  printf '  "changelog": "CHANGELOG.md#%s",\n' "$BUNDLE_VERSION"
   printf '  "archive": "%s",\n' "$(basename "$ZIP_PATH")"
   printf '  "sha256": "%s"\n' "$SHA256"
   printf '}\n'
