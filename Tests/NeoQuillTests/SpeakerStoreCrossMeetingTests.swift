@@ -70,6 +70,14 @@ final class SpeakerStoreCrossMeetingTests: XCTestCase {
         XCTAssertEqual(viaUpgraded.first?.meetingId, "rec-001")
     }
 
+    func testReadsStoredMeetingEmbeddingForLaterSpeakerLabeling() {
+        let embedding: [Float] = [0.2, 0.4, 0.6, 0.8]
+        store.recordMeetingEmbedding(meetingId: "rec-001", internalId: "S1", embedding: embedding)
+
+        XCTAssertEqual(store.meetingEmbedding(meetingId: "rec-001", internalId: "S1"), embedding)
+        XCTAssertNil(store.meetingEmbedding(meetingId: "rec-001", internalId: "missing"))
+    }
+
     func testRenameMeetingInternalIdUpdatesRow() {
         let embedding: [Float] = [0.2, 0.6, 0.4, 0.5]
         store.recordMeetingEmbedding(meetingId: "rec-001", internalId: "S1", embedding: embedding)

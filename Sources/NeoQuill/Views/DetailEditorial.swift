@@ -122,7 +122,7 @@ struct DetailEditorial: View {
                 Text("Echte Speaker-Namen importieren?")
                     .font(.neonBody(13, weight: .medium))
                     .foregroundStyle(Neon.textPrimary)
-                Text("Wenn du das offizielle Teams/Meet/Zoom-Transkript hast, ersetzen wir die S1/S2-Stubs.")
+                Text("Wenn du das offizielle Teams/Meet/Zoom-Transkript hast, ersetzen wir S1/S2 durch echte Namen.")
                     .font(.neonBody(11))
                     .foregroundStyle(Neon.textSecondary)
                     .lineLimit(2)

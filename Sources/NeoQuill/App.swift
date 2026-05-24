@@ -99,23 +99,3 @@ struct RootView: View {
         }
     }
 }
-
-// Übergangs-Stub bis Phase C/D Detail- und Recording-Views landen.
-private struct PlaceholderDetail: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("AKTIVES MEETING")
-                .neonEyebrow(Neon.brandPrimary)
-            Text(title)
-                .font(.neonDisplay(28))
-                .foregroundStyle(Neon.textPrimary)
-                .multilineTextAlignment(.center)
-            Text("Detail-Editorial / -Split / Recording-View kommen in Phase C+D.")
-                .font(.neonBody15)
-                .foregroundStyle(Neon.textSecondary)
-        }
-        .padding(48)
-    }
-}

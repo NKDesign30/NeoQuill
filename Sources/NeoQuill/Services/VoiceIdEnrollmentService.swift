@@ -1,5 +1,5 @@
 import Foundation
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 
 // Einmaliges Voice-ID Onboarding für den lokalen Sprecher (Niko/ME).

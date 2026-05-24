@@ -17,9 +17,17 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>0</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>0.9.0</string>
+    <key>NeoQuillGitCommit</key>
+    <string>unknown</string>
+    <key>NeoQuillGitBranch</key>
+    <string>unknown</string>
+    <key>NeoQuillGitDirty</key>
+    <string>unknown</string>
+    <key>NeoQuillBuildDate</key>
+    <string>unknown</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>

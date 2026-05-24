@@ -18,6 +18,7 @@ DO_INSTALL=1
 DO_RUN=1
 DO_CLEAN=0
 ENTITLEMENTS="Resources/NeoQuill.entitlements"
+VERSION_FILE="VERSION"
 
 # Sign-Identity ermitteln:
 # 1. ENV-Override:               NEOQUILL_SIGN_IDENTITY=<hash-or-name>
@@ -99,6 +100,32 @@ fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/NeoQuill"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+
+APP_VERSION="${NEOQUILL_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
+BUILD_NUMBER="${NEOQUILL_BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || date -u +%Y%m%d%H%M)}"
+GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
+  GIT_DIRTY="clean"
+else
+  GIT_DIRTY="dirty"
+fi
+BUILD_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+plist_set_string() {
+  local key="$1"
+  local value="$2"
+  /usr/libexec/PlistBuddy -c "Set :$key $value" "$APP/Contents/Info.plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :$key string $value" "$APP/Contents/Info.plist" >/dev/null
+}
+
+echo "[4/6] Version metadata: v$APP_VERSION build $BUILD_NUMBER ($GIT_BRANCH@$GIT_COMMIT, $GIT_DIRTY)"
+plist_set_string "CFBundleShortVersionString" "$APP_VERSION"
+plist_set_string "CFBundleVersion" "$BUILD_NUMBER"
+plist_set_string "NeoQuillGitCommit" "$GIT_COMMIT"
+plist_set_string "NeoQuillGitBranch" "$GIT_BRANCH"
+plist_set_string "NeoQuillGitDirty" "$GIT_DIRTY"
+plist_set_string "NeoQuillBuildDate" "$BUILD_DATE"
 
 # SPM Resource Bundle (Fonts + AppIcon)
 if [ -e "$BUILD_DIR/NeoQuill_NeoQuill.bundle" ]; then

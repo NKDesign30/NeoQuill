@@ -155,6 +155,28 @@ final class SpeakerStore: ObservableObject {
         sqlite3_step(stmt)
     }
 
+    func meetingEmbedding(meetingId: String, internalId: String) -> [Float]? {
+        let trimmedMeeting = meetingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInternal = internalId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedMeeting.isEmpty, !trimmedInternal.isEmpty else { return nil }
+
+        let sql = """
+            SELECT embedding FROM meeting_speaker_embedding
+             WHERE meeting_id = ? AND internal_id = ?
+             LIMIT 1
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, trimmedMeeting)
+        bindText(stmt, 2, trimmedInternal)
+        guard sqlite3_step(stmt) == SQLITE_ROW,
+              let raw = sqlite3_column_text(stmt, 0)
+        else { return nil }
+        let embedding = decodeEmbedding(String(cString: raw))
+        return embedding.isEmpty ? nil : embedding
+    }
+
     struct MeetingSpeakerMatch: Hashable {
         let meetingId: String
         let internalId: String

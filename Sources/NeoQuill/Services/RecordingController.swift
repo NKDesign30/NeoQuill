@@ -714,9 +714,6 @@ final class RecordingController: ObservableObject {
         return nil
     }
 
-    static let mergeMatchThreshold = 0.5   // Jaccard ab hier = gleiche Aussage
-    static let mergeMinTokens = 4          // kürzere Zeilen ("Ja", "Genau") nicht als Anker/Lücke werten
-
     /// Fusioniert zwei Transkripte EINES doppelt aufgenommenen Meetings —
     /// zeitUNabhängig per Text-Alignment. Nötig, weil parallele Aufnahmen
     /// (NeoQuill + Sprachmemo) nie synchron starten und ein zeitbasiertes
@@ -732,6 +729,8 @@ final class RecordingController: ObservableObject {
         original: [TranscriptLine],
         incoming: [TranscriptLine]
     ) -> [TranscriptLine] {
+        let mergeMatchThreshold = 0.5
+        let mergeMinTokens = 4
         guard !original.isEmpty else { return incoming }
         guard !incoming.isEmpty else { return original }
 
@@ -970,7 +969,9 @@ final class RecordingController: ObservableObject {
     /// gleichen Speaker migriert wurden (fuer UI-Feedback).
     @discardableResult
     func labelSpeaker(internalId: String, name: String, colorHex: UInt32, meetingId: String?) -> Int {
-        let embedding = lastEmbeddings[internalId] ?? []
+        let embedding = lastEmbeddings[internalId]
+            ?? meetingId.flatMap { speakerStore?.meetingEmbedding(meetingId: $0, internalId: internalId) }
+            ?? []
         let canonicalId = canonicalize(name: name)
         if !embedding.isEmpty {
             speakerStore?.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)

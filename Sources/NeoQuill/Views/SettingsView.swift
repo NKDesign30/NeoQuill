@@ -25,6 +25,9 @@ struct SettingsView: View {
 
             PermissionsTab()
                 .tabItem { Label("Berechtigungen", systemImage: "lock.shield") }
+
+            BuildInfoTab()
+                .tabItem { Label("Version", systemImage: "number") }
         }
         .frame(width: 660, height: 540)
     }
@@ -626,6 +629,30 @@ private struct PermissionsTab: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             accessibilityGranted = AXIsProcessTrusted()
         }
+    }
+}
+
+private struct BuildInfoTab: View {
+    private let version = AppVersionInfo.current()
+
+    var body: some View {
+        Form {
+            Section("App") {
+                LabeledContent("Version", value: version.displayVersion)
+                LabeledContent("Build-Datum", value: version.buildDate)
+            }
+
+            Section("GitHub-Stand") {
+                LabeledContent("Commit", value: version.gitCommit)
+                LabeledContent("Branch", value: version.gitBranch)
+                LabeledContent("Status", value: version.gitDirty == "dirty" ? "Lokale Änderungen" : version.gitDirty)
+                Text("Die App-Version kommt aus `VERSION`; das Build-Script schreibt Commit, Branch und Dirty-State in das App-Bundle.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 16)
     }
 }
 
