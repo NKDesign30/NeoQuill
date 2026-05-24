@@ -13,13 +13,19 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Added: First public release. Source-available under proprietary LICENSE
   (All Rights Reserved). Hosted on github.com/NKDesign30/NeoQuill.
+- Added: Branded DMG installer (`scripts/build-dmg.sh`) with retina
+  drag-to-Applications layout, Developer ID signature, Apple notarization
+  and stapled ticket. Hides APFS housekeeping so users with
+  `AppleShowAllFiles=1` see only the app and the Applications shortcut.
 - Added: Sparkle 2 auto-updater wired into the SwiftUI app. The updater
   polls the EdDSA-signed appcast at the repository root and exposes
-  `Nach Updates suchen…` from the app menu.
+  `Nach Updates suchen…` from the app menu plus an `Updates`-Section in
+  Settings (Auto-Check-Toggle + Manual-Check-Button).
 - Added: `scripts/publish-update.sh` generates and signs the appcast,
-  commits it on the current branch and creates the matching GitHub Release.
-- Added: Marketing README with hero icon, screenshot, sales positioning
-  and badge row.
+  commits it on the current branch and creates the matching GitHub Release
+  with both the DMG (primary) and the ZIP (legacy fallback) as assets.
+- Added: Marketing README with Claude-Design hero, sales positioning and
+  badge row.
 - Changed: `scripts/build-app.sh` reads `NEOQUILL_PREFERRED_DEV_EMAIL`
   from the environment instead of a hardcoded email when picking a
   development cert.
