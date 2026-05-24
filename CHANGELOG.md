@@ -9,6 +9,10 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.12] - 2026-05-24
+
+- Changed: README als ehrlichen Produkt-, Architektur-, Build- und Release-Einstieg neu geschrieben.
+
 ## [0.9.11] - 2026-05-24
 
 - Added: Market-Readiness-Preflight für GitHub Release, Changelog, Manifest, SHA256, Signing und Notarization.
