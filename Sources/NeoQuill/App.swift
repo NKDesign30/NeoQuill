@@ -4,6 +4,7 @@ import SwiftUI
 struct NeoQuillApp: App {
 
     @StateObject private var state: AppState
+    @StateObject private var updater = AppUpdater()
 
     init() {
         FontRegistrar.registerAll()
@@ -60,6 +61,9 @@ struct NeoQuillApp: App {
                     .keyboardShortcut("1", modifiers: [.command, .option])
                 Button("Split") { state.detailLayout = .split }
                     .keyboardShortcut("2", modifiers: [.command, .option])
+            }
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesMenuButton(updater: updater)
             }
         }
 
