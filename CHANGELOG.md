@@ -9,6 +9,12 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.13] - 2026-05-24
+
+- Added: Public Builds werden mit Developer ID Application (G2, Niko Knez 6QW75N66YP) signiert und über `xcrun notarytool` bei Apple notarisiert.
+- Added: Notary-Profile `neoquill-notary` für die Release-Pipeline; Konfiguration via `NEOQUILL_NOTARY_PROFILE` in `.env`.
+- Changed: `market-readiness.sh` läuft jetzt grün für Direct-Sale-Distribution.
+
 ## [0.9.12] - 2026-05-24
 
 - Changed: README als ehrlichen Produkt-, Architektur-, Build- und Release-Einstieg neu geschrieben.
