@@ -65,7 +65,7 @@ require_command shasum
 require_command codesign
 require_command security
 
-if [ -n "$(git status --porcelain)" ]; then
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   fail "Git-Working-Tree ist dirty"
 else
   pass "Git-Working-Tree ist clean"
@@ -192,7 +192,7 @@ if command -v gh >/dev/null 2>&1; then
     RELEASE_TAG="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["tagName"])' <<<"$RELEASE_JSON")"
     RELEASE_DRAFT="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["isDraft"]).lower())' <<<"$RELEASE_JSON")"
     RELEASE_PRERELEASE="$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["isPrerelease"]).lower())' <<<"$RELEASE_JSON")"
-    RELEASE_ASSETS="$(python3 -c 'import json,sys; print("\\n".join(asset["name"] for asset in json.load(sys.stdin)["assets"]))' <<<"$RELEASE_JSON")"
+    RELEASE_ASSETS="$(python3 -c 'import json,sys; print("\n".join(asset["name"] for asset in json.load(sys.stdin)["assets"]))' <<<"$RELEASE_JSON")"
 
     if [ "$RELEASE_TAG" = "$TAG_NAME" ]; then
       pass "GitHub Release $TAG_NAME existiert"
