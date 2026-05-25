@@ -80,14 +80,25 @@ fi
 
 echo "  Artefakte: ${ASSETS[*]}"
 
-echo "[1/4] generate_appcast über dist/"
+APPCAST_SOURCE_DIR="$(mktemp -d)"
+trap 'rm -rf "$APPCAST_SOURCE_DIR"' EXIT
+
+for archive in dist/NeoQuill-v*.dmg dist/NeoQuill-v*.zip; do
+  [ -e "$archive" ] || continue
+  if [ -n "$DMG_PATH" ] && [ "$archive" = "$ZIP_PATH" ]; then
+    continue
+  fi
+  cp "$archive" "$APPCAST_SOURCE_DIR/"
+done
+
+echo "[1/4] generate_appcast über $APPCAST_SOURCE_DIR/"
 if [ "$DRY_RUN" = "1" ]; then
-  echo "  würde laufen: $SPARKLE_BIN/generate_appcast dist/"
+  echo "  würde laufen: $SPARKLE_BIN/generate_appcast $APPCAST_SOURCE_DIR/"
 else
-  "$SPARKLE_BIN/generate_appcast" dist/
+  "$SPARKLE_BIN/generate_appcast" "$APPCAST_SOURCE_DIR/"
 fi
 
-GENERATED_APPCAST="dist/appcast.xml"
+GENERATED_APPCAST="$APPCAST_SOURCE_DIR/appcast.xml"
 if [ "$DRY_RUN" != "1" ] && [ ! -f "$GENERATED_APPCAST" ]; then
   echo "FEHLER: generate_appcast hat keinen dist/appcast.xml geschrieben."
   exit 1
