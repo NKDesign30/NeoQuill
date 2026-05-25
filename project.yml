@@ -47,8 +47,8 @@ targets:
         DEVELOPMENT_TEAM: 3LB3937L9H
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
-        MARKETING_VERSION: "0.9.15"
-        CURRENT_PROJECT_VERSION: "90"
+        MARKETING_VERSION: "0.9.16"
+        CURRENT_PROJECT_VERSION: "98"
 
 schemes:
   NeoQuill:

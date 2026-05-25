@@ -9,6 +9,12 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.16] - 2026-05-25
+
+- Fixed: Installed app builds no longer crash at launch during font and icon
+  registration when SwiftPM's generated `Bundle.module` accessor cannot resolve
+  the resource bundle.
+
 ## [0.9.15] - 2026-05-25
 
 - Added: Canonical Transcript JSON export with engine metadata, audio

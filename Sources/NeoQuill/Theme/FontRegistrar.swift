@@ -36,11 +36,6 @@ enum FontRegistrar {
     }
 
     private static func candidateBundles() -> [Bundle] {
-        var list: [Bundle] = [.main, .module]
-        if let url = Bundle.main.url(forResource: "NeoQuill_NeoQuill", withExtension: "bundle"),
-           let sub = Bundle(url: url) {
-            list.append(sub)
-        }
-        return list
+        AppResourceBundle.candidates()
     }
 }

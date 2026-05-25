@@ -9,7 +9,7 @@ struct AppIconView: View {
 
     var body: some View {
         Group {
-            if let url = Bundle.module.url(forResource: "quill-app-icon", withExtension: "png"),
+            if let url = AppResourceBundle.url(forResource: "quill-app-icon", withExtension: "png"),
                let img = NSImage(contentsOf: url) {
                 Image(nsImage: img)
                     .resizable()
