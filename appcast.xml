@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>NeoQuill</title>
+        <item>
+            <title>0.9.15</title>
+            <pubDate>Mon, 25 May 2026 22:11:25 +0200</pubDate>
+            <sparkle:version>92</sparkle:version>
+            <sparkle:shortVersionString>0.9.15</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/NKDesign30/NeoQuill/releases/download/NeoQuill-v0.9.15-build92-44853a6.dmg" length="15051121" type="application/octet-stream" sparkle:edSignature="Woq1b3znPNzldVgPJSe+iA2sHaI21X8/vRyuwoy4tssdeK0gp49o5/a4t6T0KmZuAi02YaMIM1EEW+mpoW5kBQ=="/>
+        </item>
+    </channel>
+</rss>
