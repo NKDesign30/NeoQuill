@@ -21,8 +21,16 @@ protocol FirstLaunchMarkerStoring {
 /// Real-Keychain-Implementierung. Service-Identifier nach NeoQuill-Konvention
 /// (com.neon.quill.<bereich>).
 final class KeychainFirstLaunchMarker: FirstLaunchMarkerStoring {
-    private let service = "com.neon.quill.licensing.first-launch"
-    private let account = "marker"
+    private let service: String
+    private let account: String
+
+    init(
+        service: String = "com.neon.quill.licensing.first-launch",
+        account: String = "marker"
+    ) {
+        self.service = service
+        self.account = account
+    }
 
     func firstLaunchDate() -> Date? {
         let query: [CFString: CFTypeRef] = [

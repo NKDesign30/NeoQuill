@@ -9,6 +9,24 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.9.15] - 2026-05-25
+
+- Added: Canonical Transcript JSON export with engine metadata, audio
+  fingerprint, quality report, segments and word timings for reproducible
+  reprocessing.
+- Added: XcodeGen project support so NeoQuill can be opened and run from Xcode
+  without losing the SwiftPM build path.
+- Changed: Beta builds stay free for all `0.9.x` versions; paid license
+  enforcement starts only with `1.0.0`.
+- Fixed: Large transcript views now page and collapse repeated runs so meetings
+  with thousands of transcript rows do not freeze the app.
+- Fixed: Final-STT rejects repeated hallucination transcripts before they are
+  persisted as final meeting text.
+- Fixed: Sparkle is embedded in the app bundle so installed builds no longer
+  crash at launch because the framework is missing.
+- Changed: The app surfaces its current version in the UI for support and
+  tester feedback.
+
 ## [0.9.14] - 2026-05-24
 
 - Added: First public release. Source-available under proprietary LICENSE

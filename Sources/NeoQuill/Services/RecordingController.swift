@@ -391,12 +391,12 @@ final class RecordingController: ObservableObject {
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         var allLines = await transcribeFinalAudio(
+            meetingId: id,
             mic: captured.mic,
             system: captured.sys,
             mixed: captured.mixed,
             language: lang
         )
-        let provisionalTitle = generateTitle(from: allLines, started: started)
         var participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
 
         var pendingEmbeddings: [String: [Float]] = [:]
@@ -425,8 +425,9 @@ final class RecordingController: ObservableObject {
             )
         }
 
-        let enrichedLines = allLines
-        let wordCount = enrichedLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let summaryLines = TranscriptNoiseFilter.filtered(allLines)
+        let wordCount = TranscriptNoiseFilter.wordCount(allLines)
+        let provisionalTitle = generateTitle(from: summaryLines.isEmpty ? allLines : summaryLines, started: started)
 
         // Detail mit echten Lines updaten (Provisional ist schon eingefuegt).
         let transcribed = MeetingDetail(
@@ -442,7 +443,7 @@ final class RecordingController: ObservableObject {
             highlights: [],
             tasks: [],
             chapters: [],
-            transcript: enrichedLines,
+            transcript: allLines,
             audioURL: nil,
             processing: true
         )
@@ -459,7 +460,7 @@ final class RecordingController: ObservableObject {
         let result = await PostProcessor.process(
             meetingId: id,
             mixedSamples: [],
-            transcriptLines: enrichedLines,
+            transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
@@ -498,7 +499,7 @@ final class RecordingController: ObservableObject {
             highlights: highlights,
             tasks: tasks,
             chapters: chapters,
-            transcript: enrichedLines,
+            transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : finalAudioPath,
             processing: false
         )
@@ -534,7 +535,13 @@ final class RecordingController: ObservableObject {
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
 
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
-        let lines = await transcribeFinalAudio(mic: samples, system: [], mixed: samples, language: lang)
+        let lines = await transcribeFinalAudio(
+            meetingId: meetingId,
+            mic: samples,
+            system: [],
+            mixed: samples,
+            language: lang
+        )
 
         guard !lines.isEmpty else {
             let empty = MeetingDetail(
@@ -551,8 +558,9 @@ final class RecordingController: ObservableObject {
             return
         }
 
+        let summaryLines = TranscriptNoiseFilter.filtered(lines)
         let participants = collectParticipants(lines: lines, baseDuration: durationShort)
-        let wordCount = lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let wordCount = TranscriptNoiseFilter.wordCount(lines)
 
         let transcribed = MeetingDetail(
             id: meetingId, title: fileName, dateLong: dateLong, timeRange: timeRange,
@@ -567,7 +575,7 @@ final class RecordingController: ObservableObject {
         let result = await PostProcessor.process(
             meetingId: meetingId,
             mixedSamples: [],
-            transcriptLines: lines,
+            transcriptLines: summaryLines.isEmpty ? lines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
@@ -637,6 +645,7 @@ final class RecordingController: ObservableObject {
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         let incoming = await transcribeFinalAudio(
+            meetingId: meetingId,
             mic: samples,
             system: [],
             mixed: samples,
@@ -663,8 +672,9 @@ final class RecordingController: ObservableObject {
         }
 
         let mergedLines = Self.fuseTranscripts(original: detail.transcript, incoming: incoming)
+        let summaryLines = TranscriptNoiseFilter.filtered(mergedLines)
         let addedCount = mergedLines.count - detail.transcript.count
-        let wordCount = mergedLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let wordCount = TranscriptNoiseFilter.wordCount(mergedLines)
 
         var participants = detail.participants
         if addedCount > 0, !participants.contains(where: { $0.id == Self.mergedExternalSpeakerId }) {
@@ -690,7 +700,7 @@ final class RecordingController: ObservableObject {
         let result = await PostProcessor.process(
             meetingId: meetingId,
             mixedSamples: [],
-            transcriptLines: mergedLines,
+            transcriptLines: summaryLines.isEmpty ? mergedLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
@@ -815,6 +825,7 @@ final class RecordingController: ObservableObject {
         let storedAudio = readStoredAudio(meetingId: meetingId, detail: detail)
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         var allLines = await transcribeFinalAudio(
+            meetingId: meetingId,
             mic: storedAudio.mic,
             system: storedAudio.system,
             mixed: storedAudio.mixed,
@@ -854,7 +865,8 @@ final class RecordingController: ObservableObject {
             persistPlatformIdentities(from: allLines, platform: detail.platform)
         }
 
-        let wordCount = allLines.reduce(0) { $0 + $1.body.split(separator: " ").count }
+        let summaryLines = TranscriptNoiseFilter.filtered(allLines)
+        let wordCount = TranscriptNoiseFilter.wordCount(allLines)
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         guard !allLines.isEmpty else {
             let empty = rebuiltDetail(
@@ -880,7 +892,7 @@ final class RecordingController: ObservableObject {
 
         let transcribed = rebuiltDetail(
             from: detail,
-            title: generateTitle(from: allLines, started: Date()),
+            title: generateTitle(from: summaryLines.isEmpty ? allLines : summaryLines, started: Date()),
             wordCount: wordCount,
             participants: participants,
             tldr: "KI-Zusammenfassung läuft…",
@@ -896,7 +908,7 @@ final class RecordingController: ObservableObject {
         let result = await PostProcessor.process(
             meetingId: detail.id,
             mixedSamples: [],
-            transcriptLines: allLines,
+            transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
@@ -1143,18 +1155,37 @@ final class RecordingController: ObservableObject {
     }
 
     private func transcribeFinalAudio(
+        meetingId: String,
         mic: [Float],
         system: [Float],
         mixed: [Float],
         language: String
     ) async -> [TranscriptLine] {
-        let micLines = await transcribeFinalStem(audioData: mic, speaker: LocalSpeakerProfile.id, language: language)
-        let systemLines = await transcribeFinalStem(audioData: system, speaker: "S1", language: language)
+        let micLines = await transcribeFinalStem(
+            audioData: mic,
+            speaker: LocalSpeakerProfile.id,
+            language: language,
+            meetingId: meetingId,
+            stem: "mic"
+        )
+        let systemLines = await transcribeFinalStem(
+            audioData: system,
+            speaker: "S1",
+            language: language,
+            meetingId: meetingId,
+            stem: "system"
+        )
         var lines = sortedTranscript(micLines + systemLines)
 
         if transcriptNeedsMixedFallback(lines: lines, totalSamples: max(mic.count, system.count)),
            !mixed.isEmpty {
-            let mixedLines = await transcribeFinalStem(audioData: mixed, speaker: "S1", language: language)
+            let mixedLines = await transcribeFinalStem(
+                audioData: mixed,
+                speaker: "S1",
+                language: language,
+                meetingId: meetingId,
+                stem: "mixed"
+            )
             if transcriptWordCount(mixedLines) > transcriptWordCount(lines) {
                 lines = sortedTranscript(mixedLines)
             }
@@ -1174,6 +1205,11 @@ final class RecordingController: ObservableObject {
         if lines.isEmpty { return true }
         let seconds = totalSamples / 16_000
         if seconds >= 12 && words < max(4, seconds / 3) { return true }
+        let quality = TranscriptQualityScorer.evaluate(
+            lines: lines,
+            audioDurationSeconds: TimeInterval(totalSamples) / AudioImporter.targetSampleRate
+        )
+        if quality.status == .failed { return true }
         let uniqueTexts = Set(lines.map { $0.body.lowercased() })
         if lines.count >= 4 && uniqueTexts.count <= lines.count / 2 { return true }
         return false
@@ -1215,23 +1251,70 @@ final class RecordingController: ObservableObject {
         )
     }
 
-    private func transcribeFinalStem(audioData: [Float], speaker: String, language: String) async -> [TranscriptLine] {
+    private func transcribeFinalStem(
+        audioData: [Float],
+        speaker: String,
+        language: String,
+        meetingId: String,
+        stem: String
+    ) async -> [TranscriptLine] {
         guard !audioData.isEmpty else { return [] }
         if FinalSTTTranscriber.isAvailable {
             do {
-                return try await FinalSTTTranscriber.transcribe(
+                let result = try await FinalSTTTranscriber.transcribe(
                     audioData: audioData,
                     speaker: speaker,
-                    language: language
+                    language: language,
+                    meetingId: meetingId,
+                    stem: stem
                 )
+                persistTranscriptRun(result.run)
+                return result.lines
+            } catch FinalSTTError.qualityRejected(let run) {
+                persistTranscriptRun(run)
+                NSLog("[NeoQuill] Final-STT Quality rejected (\(speaker)/\(stem)): \(run.quality.warnings.map(\.rawValue).joined(separator: ","))")
+                return []
             } catch {
-                print("[NeoQuill] Final-STT Fallback auf WhisperKit (\(speaker)): \(error)")
+                NSLog("[NeoQuill] Final-STT Fallback auf WhisperKit (\(speaker)/\(stem)): \(error)")
             }
         }
         let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: language)
         _ = await transcriber.loadModel(model: model, language: lang)
-        return await transcriber.transcribeFull(audioData: audioData, speaker: speaker)
+        let lines = await transcriber.transcribeFull(audioData: audioData, speaker: speaker)
+        let duration = TimeInterval(audioData.count) / AudioImporter.targetSampleRate
+        let settings = TranscriptRunSettings(
+            language: lang,
+            maxContextTokens: 0,
+            vadEnabled: false,
+            fullJSON: false,
+            chunkDurationSeconds: duration,
+            overlapSeconds: 0
+        )
+        let run = TranscriptRun.fromLines(
+            meetingId: meetingId,
+            stem: stem,
+            audioSampleRate: AudioImporter.targetSampleRate,
+            audioDurationSeconds: duration,
+            engine: TranscriptEngineInfo(name: "WhisperKit", model: model, version: nil),
+            settings: settings,
+            lines: lines,
+            audioSha256: AudioFingerprint.sha256(samples: audioData)
+        )
+        persistTranscriptRun(run)
+        if run.quality.status == .failed {
+            NSLog("[NeoQuill] WhisperKit Quality rejected (\(speaker)/\(stem)): \(run.quality.warnings.map(\.rawValue).joined(separator: ","))")
+            return []
+        }
+        return lines
+    }
+
+    private func persistTranscriptRun(_ run: TranscriptRun) {
+        do {
+            _ = try TranscriptRunStore.write(run)
+        } catch {
+            NSLog("[NeoQuill] Transcript-Run konnte nicht gespeichert werden: \(error)")
+        }
     }
 
     private func detectedPlatform() -> Platform {

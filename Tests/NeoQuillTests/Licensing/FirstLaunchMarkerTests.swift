@@ -43,11 +43,10 @@ final class FirstLaunchMarkerTests: XCTestCase {
         XCTAssertEqual(preloaded.firstLaunchDate(), preset)
     }
 
-    /// Smoke-Test gegen die Keychain-Implementierung: wir erzeugen eine Instanz
-    /// mit eigenem Service-Identifier-Pattern und prüfen das write→read→reset-Round-Trip.
-    /// Wird nur lokal sinnvoll laufen (CI ohne Keychain überspringt).
+    /// Smoke-Test gegen die Keychain-Implementierung mit eigenem Service-Identifier,
+    /// damit der echte First-Launch-Marker der lokal installierten App unangetastet bleibt.
     func test_keychainRoundtrip_smoke() throws {
-        let real = KeychainFirstLaunchMarker()
+        let real = KeychainFirstLaunchMarker(service: "com.neon.quill.tests.first-launch.\(UUID().uuidString)")
         real.reset()
         defer { real.reset() }
 

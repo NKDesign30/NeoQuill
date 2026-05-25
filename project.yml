@@ -1,0 +1,63 @@
+name: NeoQuill
+
+options:
+  minimumXcodeGenVersion: 2.45.0
+  deploymentTarget:
+    macOS: "15.0"
+
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    from: "0.9.0"
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    from: "0.5.0"
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle.git
+    from: "2.9.2"
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  NeoQuill:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/NeoQuill
+        excludes:
+          - "**/.DS_Store"
+      - path: XcodeSupport/BundleModule.swift
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
+      - package: Sparkle
+        product: Sparkle
+    settings:
+      base:
+        PRODUCT_NAME: NeoQuill
+        PRODUCT_BUNDLE_IDENTIFIER: com.neon.neoquill
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/NeoQuill.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 3LB3937L9H
+        ENABLE_HARDENED_RUNTIME: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        MARKETING_VERSION: "0.9.15"
+        CURRENT_PROJECT_VERSION: "90"
+
+schemes:
+  NeoQuill:
+    build:
+      targets:
+        NeoQuill: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

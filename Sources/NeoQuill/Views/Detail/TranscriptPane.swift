@@ -8,25 +8,66 @@ struct TranscriptPane: View {
     @Binding var query: String
     var accent: Color = Neon.brandPrimary
 
-    private var filtered: [TranscriptLine] {
-        guard !query.isEmpty else { return meeting.transcript }
-        let q = query.lowercased()
-        return meeting.transcript.filter { $0.body.lowercased().contains(q) }
-    }
+    @State private var visibleCount = TranscriptPaging.pageSize
+    @State private var pagedMeetingId: String?
+    @State private var pagedQuery = ""
+    @State private var showsRawTranscript = false
 
     var body: some View {
+        let displayRows = TranscriptPresentation.rows(
+            from: meeting.transcript,
+            mode: showsRawTranscript ? .raw : .collapsedRepeatedRuns
+        )
+        let filtered = TranscriptPresentation.filteredRows(displayRows, query: query)
+        let requestedVisibleCount = isPagingCurrent ? visibleCount : TranscriptPaging.pageSize
+        let clampedVisibleCount = TranscriptPaging.visibleCount(total: filtered.count, requested: requestedVisibleCount)
+        let visibleRows = Array(filtered.prefix(clampedVisibleCount))
+
         VStack(alignment: .leading, spacing: 20) {
-            searchBar
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(filtered) { line in
-                    TranscriptRow(line: line, meeting: meeting, accent: accent, query: query)
+            searchBar(
+                filteredCount: filtered.count,
+                loadedCount: clampedVisibleCount,
+                totalCount: meeting.transcript.count,
+                isRaw: showsRawTranscript
+            )
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ForEach(visibleRows) { row in
+                    switch row.kind {
+                    case .line(let line):
+                        TranscriptRow(line: line, meeting: meeting, accent: accent, query: query)
+                    case .collapsedRun(let firstLine, let hiddenCount):
+                        TranscriptCollapsedRunRow(line: firstLine, hiddenCount: hiddenCount, accent: accent)
+                    }
                 }
+                TranscriptLoadMoreFooter(
+                    visibleCount: clampedVisibleCount,
+                    totalCount: filtered.count,
+                    accent: accent,
+                    loadMore: {
+                        pagedMeetingId = meeting.id
+                        pagedQuery = query
+                        visibleCount = TranscriptPaging.nextCount(current: clampedVisibleCount, total: filtered.count)
+                    }
+                )
             }
         }
         .frame(maxWidth: 760, alignment: .leading)
+        .onAppear(perform: resetPaging)
+        .onChange(of: meeting.id) { _, _ in resetPaging() }
+        .onChange(of: query) { _, _ in resetPaging() }
+        .onChange(of: showsRawTranscript) { _, _ in resetPaging() }
     }
 
-    private var searchBar: some View {
+    private var isPagingCurrent: Bool {
+        pagedMeetingId == meeting.id && pagedQuery == query
+    }
+
+    private func searchBar(
+        filteredCount: Int,
+        loadedCount: Int,
+        totalCount: Int,
+        isRaw: Bool
+    ) -> some View {
         HStack(spacing: 10) {
             GlyphView(name: .search, size: 13, color: Neon.textTertiary)
             TextField("Im Transkript suchen…", text: $query)
@@ -34,9 +75,29 @@ struct TranscriptPane: View {
                 .font(.neonBody(13))
                 .foregroundStyle(Neon.textPrimary)
             Spacer()
-            Text("\(filtered.count) / \(meeting.transcript.count)")
+            Text(countLabel(
+                filteredCount: filteredCount,
+                loadedCount: loadedCount,
+                totalCount: totalCount,
+                isRaw: isRaw
+            ))
                 .font(.neonMono(10))
                 .foregroundStyle(Neon.textTertiary)
+            Button {
+                showsRawTranscript.toggle()
+            } label: {
+                Text(isRaw ? "Roh" : "Clean")
+                    .font(.neonMono(10))
+                    .foregroundStyle(isRaw ? Neon.statusWarning : accent)
+                    .padding(.horizontal, 8)
+                    .frame(height: 22)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill((isRaw ? Neon.statusWarning : accent).opacity(0.12))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(isRaw ? "Rohtranskript anzeigen" : "Bereinigtes Transkript anzeigen")
         }
         .padding(.horizontal, 12)
         .frame(height: 34)
@@ -48,6 +109,69 @@ struct TranscriptPane: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
         )
+    }
+
+    private func resetPaging() {
+        pagedMeetingId = meeting.id
+        pagedQuery = query
+        visibleCount = TranscriptPaging.pageSize
+    }
+
+    private func countLabel(
+        filteredCount: Int,
+        loadedCount: Int,
+        totalCount: Int,
+        isRaw: Bool
+    ) -> String {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if isRaw {
+                return "\(loadedCount) geladen · \(totalCount) roh"
+            }
+            return "\(loadedCount) Blöcke · \(totalCount) roh repräsentiert"
+        }
+        if isRaw {
+            return "\(loadedCount) geladen · \(filteredCount) Treffer · \(totalCount) roh"
+        }
+        return "\(loadedCount) Blöcke · \(filteredCount) Treffer · \(totalCount) roh"
+    }
+}
+
+private struct TranscriptCollapsedRunRow: View {
+    let line: TranscriptLine
+    let hiddenCount: Int
+    let accent: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text(line.timestamp)
+                .font(.neonMono(11))
+                .foregroundStyle(Neon.textTertiary)
+                .frame(width: 42, alignment: .trailing)
+                .padding(.top, 3)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    GlyphView(name: .chevDown, size: 11, color: accent)
+                    Text("\(hiddenCount.formatted()) Wiederholungen kollabiert")
+                        .font(.neonMono(10, weight: .semibold))
+                        .foregroundStyle(accent)
+                    Text(line.body)
+                        .font(.neonBody(12))
+                        .foregroundStyle(Neon.textTertiary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(accent.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(accent.opacity(0.16), lineWidth: Neon.hairlineWidth)
+                )
+            }
+        }
     }
 }
 

@@ -66,14 +66,16 @@ enum MeetingExporter {
         pb.setString(markdown(m), forType: .string)
     }
 
-    /// Schreibt eine .md-Datei nach ~/Desktop/<id>.md und öffnet die Datei im Finder-Reveal.
+    /// Schreibt Markdown und das kanonische Transcript-JSON nach ~/Desktop.
     static func exportToDesktop(_ m: MeetingDetail) -> URL? {
         let desktop = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
         let safeTitle = m.title.replacingOccurrences(of: "/", with: "-")
         let url = desktop.appendingPathComponent("\(safeTitle).md")
         do {
             try markdown(m).write(to: url, atomically: true, encoding: .utf8)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
+            let transcriptURL = desktop.appendingPathComponent("\(safeTitle).transcript.json")
+            try transcriptJSONData(m).write(to: transcriptURL, options: [.atomic])
+            NSWorkspace.shared.activateFileViewerSelecting([url, transcriptURL])
             return url
         } catch {
             NSLog("[MeetingExporter] export failed: \(error)")
@@ -92,8 +94,16 @@ enum MeetingExporter {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         for meeting in meetings {
-            let fileName = safeFilename("\(meeting.dateLong)-\(meeting.title)").appending(".md")
-            try markdown(meeting).write(to: folder.appendingPathComponent(fileName), atomically: true, encoding: .utf8)
+            let baseName = safeFilename("\(meeting.dateLong)-\(meeting.title)")
+            try markdown(meeting).write(
+                to: folder.appendingPathComponent(baseName.appending(".md")),
+                atomically: true,
+                encoding: .utf8
+            )
+            try transcriptJSONData(meeting).write(
+                to: folder.appendingPathComponent(baseName.appending(".transcript.json")),
+                options: [.atomic]
+            )
         }
         return folder
     }
@@ -117,5 +127,42 @@ enum MeetingExporter {
             .joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Meeting" : cleaned
+    }
+
+    private static func transcriptJSONData(_ meeting: MeetingDetail) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(transcriptRun(for: meeting))
+    }
+
+    private static func transcriptRun(for meeting: MeetingDetail) -> TranscriptRun {
+        let storedRuns = (try? TranscriptRunStore.readRuns(meetingId: meeting.id)) ?? []
+        if let passed = storedRuns
+            .filter({ $0.quality.status == .passed })
+            .max(by: { $0.createdAt < $1.createdAt }) {
+            return passed
+        }
+        if let latest = storedRuns.max(by: { $0.createdAt < $1.createdAt }) {
+            return latest
+        }
+
+        let duration = meeting.transcript.map(\.endSeconds).max() ?? 0
+        return TranscriptRun.fromLines(
+            meetingId: meeting.id,
+            stem: "meeting",
+            audioSampleRate: AudioImporter.targetSampleRate,
+            audioDurationSeconds: duration,
+            engine: TranscriptEngineInfo(name: "NeoQuill", model: "persisted-transcript", version: nil),
+            settings: TranscriptRunSettings(
+                language: "unknown",
+                maxContextTokens: 0,
+                vadEnabled: false,
+                fullJSON: false,
+                chunkDurationSeconds: duration,
+                overlapSeconds: 0
+            ),
+            lines: meeting.transcript
+        )
     }
 }

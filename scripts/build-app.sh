@@ -120,7 +120,7 @@ echo "[3/6] Bundle zusammenbauen..."
 if [ -e "$APP" ]; then
   mv "$APP" "/tmp/neoquill-old-$(date +%s)" 2>/dev/null || true
 fi
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN" "$APP/Contents/MacOS/NeoQuill"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 
@@ -153,6 +153,13 @@ plist_set_string "NeoQuillBuildDate" "$BUILD_DATE"
 # SPM Resource Bundle (Fonts + AppIcon)
 if [ -e "$BUILD_DIR/NeoQuill_NeoQuill.bundle" ]; then
   cp -R "$BUILD_DIR/NeoQuill_NeoQuill.bundle" "$APP/Contents/Resources/"
+fi
+
+if [ -d "$BUILD_DIR/Sparkle.framework" ]; then
+  ditto "$BUILD_DIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+  if ! otool -l "$APP/Contents/MacOS/NeoQuill" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/NeoQuill"
+  fi
 fi
 
 # AppIcon direkt im Bundle (für Finder/Dock)
@@ -205,7 +212,8 @@ if [ "$DO_INSTALL" = "1" ]; then
     if [ -n "$PID" ]; then
       echo "  NeoQuill läuft, PID $PID"
     else
-      echo "  NeoQuill gestartet"
+      echo "FEHLER: NeoQuill wurde gestartet, aber kein laufender Prozess gefunden."
+      exit 1
     fi
   fi
 else

@@ -17,9 +17,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>0</string>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.9.8</string>
+    <string>$(MARKETING_VERSION)</string>
     <key>NeoQuillGitCommit</key>
     <string>unknown</string>
     <key>NeoQuillGitBranch</key>

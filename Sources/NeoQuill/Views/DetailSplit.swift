@@ -8,6 +8,8 @@ struct DetailSplit: View {
 
     @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
+    @State private var visibleTranscriptCount = TranscriptPaging.pageSize
+    @State private var pagedTranscriptMeetingId: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,8 +31,18 @@ struct DetailSplit: View {
     }
 
     private var transcript: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        let requestedVisibleCount = pagedTranscriptMeetingId == meeting.id
+            ? visibleTranscriptCount
+            : TranscriptPaging.pageSize
+        let displayRows = TranscriptPresentation.rows(from: meeting.transcript, mode: .collapsedRepeatedRuns)
+        let clampedVisibleCount = TranscriptPaging.visibleCount(
+            total: displayRows.count,
+            requested: requestedVisibleCount
+        )
+        let visibleRows = Array(displayRows.prefix(clampedVisibleCount))
+
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text("· \(meeting.platform.rawValue) · \(meeting.dateLong)")
                         .neonEyebrow(accent)
@@ -40,14 +52,53 @@ struct DetailSplit: View {
                     .foregroundStyle(Neon.textPrimary)
                     .padding(.bottom, 4)
 
-                ForEach(meeting.transcript) { line in
-                    SplitTranscriptRow(line: line, meeting: meeting, accent: accent)
+                ForEach(visibleRows) { row in
+                    switch row.kind {
+                    case .line(let line):
+                        SplitTranscriptRow(line: line, meeting: meeting, accent: accent)
+                    case .collapsedRun(let line, let hiddenCount):
+                        HStack(spacing: 8) {
+                            GlyphView(name: .chevDown, size: 11, color: accent)
+                            Text("\(hiddenCount.formatted()) Wiederholungen kollabiert")
+                                .font(.neonMono(10, weight: .semibold))
+                                .foregroundStyle(accent)
+                            Text(line.body)
+                                .font(.neonBody(12))
+                                .foregroundStyle(Neon.textTertiary)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(accent.opacity(0.08))
+                        )
+                    }
                 }
+                TranscriptLoadMoreFooter(
+                    visibleCount: clampedVisibleCount,
+                    totalCount: displayRows.count,
+                    accent: accent,
+                    loadMore: {
+                        pagedTranscriptMeetingId = meeting.id
+                        visibleTranscriptCount = TranscriptPaging.nextCount(
+                            current: clampedVisibleCount,
+                            total: displayRows.count
+                        )
+                    }
+                )
             }
             .padding(.horizontal, 40)
             .padding(.vertical, 32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onAppear(perform: resetTranscriptPaging)
+        .onChange(of: meeting.id) { _, _ in resetTranscriptPaging() }
+    }
+
+    private func resetTranscriptPaging() {
+        pagedTranscriptMeetingId = meeting.id
+        visibleTranscriptCount = TranscriptPaging.pageSize
     }
 
     private var summaryRail: some View {

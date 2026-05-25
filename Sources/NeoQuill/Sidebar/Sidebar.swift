@@ -5,6 +5,7 @@ import SwiftUI
 struct Sidebar: View {
 
     @EnvironmentObject private var state: AppState
+    private let appVersion = AppVersionInfo.current()
 
     private var grouped: [(String, [MeetingSummary])] {
         let filtered: [MeetingSummary]
@@ -109,6 +110,12 @@ struct Sidebar: View {
                 .font(.neonMono(10))
                 .tracking(0.4)
                 .foregroundStyle(Neon.textTertiary)
+            Text(appVersion.displayVersion)
+                .font(.neonMono(10))
+                .tracking(0.4)
+                .foregroundStyle(Neon.textTertiary.opacity(0.8))
+                .lineLimit(1)
+                .help(appVersion.displayGit)
             Spacer()
             NewRecordingButton(recording: state.isRecording) {
                 state.isRecording ? state.stopRecording() : state.startRecording()
