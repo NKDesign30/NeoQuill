@@ -91,10 +91,10 @@ cp "$APPCAST_ARCHIVE" "$APPCAST_SOURCE_DIR/"
 
 echo "[1/4] generate_appcast über $APPCAST_SOURCE_DIR/"
 if [ "$DRY_RUN" = "1" ]; then
-  echo "  würde laufen: $SPARKLE_BIN/generate_appcast --download-url-prefix https://github.com/${REPO}/releases/download/${TAG_NAME} $APPCAST_SOURCE_DIR/"
+  echo "  würde laufen: $SPARKLE_BIN/generate_appcast --download-url-prefix https://github.com/${REPO}/releases/download/${TAG_NAME}/ $APPCAST_SOURCE_DIR/"
 else
   "$SPARKLE_BIN/generate_appcast" \
-    --download-url-prefix "https://github.com/${REPO}/releases/download/${TAG_NAME}" \
+    --download-url-prefix "https://github.com/${REPO}/releases/download/${TAG_NAME}/" \
     "$APPCAST_SOURCE_DIR/"
 fi
 
