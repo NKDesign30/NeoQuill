@@ -40,6 +40,10 @@ final class RecordingController: ObservableObject {
     weak var store: MeetingStore?
     weak var speakerStore: SpeakerStore?
 
+    /// Lizenz-Gate für AI-Summaries. Wird vom AppState gesetzt. Default `true`
+    /// damit Tests + Builds ohne LicenseService weiterhin funktionieren.
+    var licenseAllowsSummary: () -> Bool = { true }
+
     private var detectorCancellable: AnyCancellable?
     private var deviceCancellable: AnyCancellable?
     private var levelCancellable: AnyCancellable?
@@ -454,7 +458,8 @@ final class RecordingController: ObservableObject {
             meetingId: id,
             mixedSamples: [],
             transcriptLines: enrichedLines,
-            locale: lang
+            locale: lang,
+            licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
 
         let highlights = result.highlights.map { mapAIHighlight($0) }
@@ -561,7 +566,8 @@ final class RecordingController: ObservableObject {
             meetingId: meetingId,
             mixedSamples: [],
             transcriptLines: lines,
-            locale: lang
+            locale: lang,
+            licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         let highlights = result.highlights.map { mapAIHighlight($0) }
         let tasks = result.tasks.enumerated().map { idx, t in
@@ -683,7 +689,8 @@ final class RecordingController: ObservableObject {
             meetingId: meetingId,
             mixedSamples: [],
             transcriptLines: mergedLines,
-            locale: lang
+            locale: lang,
+            licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         let highlights = result.highlights.map { mapAIHighlight($0) }
         let tasks = result.tasks.enumerated().map { idx, t in
@@ -888,7 +895,8 @@ final class RecordingController: ObservableObject {
             meetingId: detail.id,
             mixedSamples: [],
             transcriptLines: allLines,
-            locale: lang
+            locale: lang,
+            licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         let highlights = result.highlights.map { mapAIHighlight($0) }
         let tasks = result.tasks.enumerated().map { idx, t in

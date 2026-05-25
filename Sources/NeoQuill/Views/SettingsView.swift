@@ -27,6 +27,9 @@ struct SettingsView: View {
             PermissionsTab()
                 .tabItem { Label("Berechtigungen", systemImage: "lock.shield") }
 
+            LicenseSettingsTab()
+                .tabItem { Label("Lizenz", systemImage: "key.fill") }
+
             BuildInfoTab()
                 .tabItem { Label("Version", systemImage: "number") }
         }

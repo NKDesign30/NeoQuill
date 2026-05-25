@@ -10,6 +10,7 @@ enum PlatformImportService {
         case unsupportedFormat
         case empty
         case parser(String)
+        case licenseBlocked
 
         var errorDescription: String? {
             switch self {
@@ -21,6 +22,8 @@ enum PlatformImportService {
                 return "Keine Transkript-Einträge in der Datei gefunden."
             case .parser(let detail):
                 return "Parser-Fehler: \(detail)"
+            case .licenseBlocked:
+                return "Plattform-Import ist Pro-Feature. Aktiviere deine Lizenz oder starte den Trial."
             }
         }
     }

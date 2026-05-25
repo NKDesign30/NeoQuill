@@ -34,6 +34,8 @@ final class AppState: ObservableObject {
     @Published var showProfileOnboarding: Bool = false
     @Published var pendingTranscriptDetection: TranscriptDetectionEvent?
     @Published var transientNotice: String?
+    @Published var showLicenseGate: Bool = false
+    @Published var showBetaGracePrompt: Bool = false
 
     private var transientNoticeTask: Task<Void, Never>?
 
@@ -79,6 +81,7 @@ final class AppState: ObservableObject {
     let calendar = CalendarParticipantsService()
     let cloudOAuth = CloudOAuthService()
     let cloudReconcile: PlatformReconcileService
+    let license: LicenseService
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
@@ -96,6 +99,42 @@ final class AppState: ObservableObject {
         recorder.speakerStore = speakerStore
         voiceIdEnrollment = VoiceIdEnrollmentService(diarizer: recorder.diarizer, speakerStore: speakerStore)
         cloudReconcile = PlatformReconcileService(oauth: cloudOAuth)
+
+        // Lizenz-System: in Phase A (Master-Switch `disabled`) passiv — schreibt
+        // nur den FirstLaunchMarker damit Beta-User später erkennbar bleiben.
+        let licenseValidator = LicenseValidator(
+            client: LemonSqueezyLicenseClient(),
+            secretStore: KeychainLicenseSecretStore()
+        )
+        self.license = LicenseService(
+            marker: KeychainFirstLaunchMarker(),
+            trial: KeychainTrialTracker(),
+            validator: licenseValidator,
+            modeProvider: { LicenseEnforcement.currentMode() },
+            cutoffProvider: { nil }   // Cutoff wird gesetzt wenn Niko den Switch macht
+        )
+        Task { [license] in await license.bootstrap() }
+
+        // Lizenz-Gate in den Recorder verdrahten. Recorder ruft das Closure
+        // pro PostProcessor-Lauf auf — bei `disabled` immer true (siehe
+        // LicenseEnforcement.canUseSummary).
+        recorder.licenseAllowsSummary = { [license] in
+            LicenseEnforcement.canUseSummary(license.snapshot)
+        }
+
+        // Beta-Grace-Prompt einmalig zeigen wenn der User als Beta-User
+        // erkannt wurde und das Flag noch nicht gesetzt ist. Reagiert auf
+        // jede Snapshot-Änderung — sobald `.betaGrace` im Enforced-Mode
+        // erscheint, wird das Sheet aufgepoppt.
+        license.$snapshot
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] snapshot in
+                guard let self else { return }
+                if BetaGracePrompt.shouldShow(snapshot: snapshot, defaults: .standard) {
+                    self.showBetaGracePrompt = true
+                }
+            }
+            .store(in: &cancellables)
         dockBadge.bind(to: recorder)
         menuBar.install(with: recorder)
         pill.bind(to: recorder)
@@ -266,6 +305,10 @@ final class AppState: ObservableObject {
     /// laeuft asynchron im RecordingController.
     @discardableResult
     func importPlatformTranscript(meetingId: String, fileURL: URL) throws -> PlatformImportService.Outcome {
+        // Lizenz-Gate: Plattform-Imports sind Pro-Feature
+        guard LicenseEnforcement.canImportTranscript(license.snapshot) else {
+            throw PlatformImportService.ImportError.licenseBlocked
+        }
         let fallback = store.detail(for: meetingId)?.platform ?? .meet
         let outcome = try PlatformImportService.detectAndParse(url: fileURL, fallbackPlatform: fallback)
         recorder.applyPlatformImport(meetingId: meetingId, events: outcome.events)

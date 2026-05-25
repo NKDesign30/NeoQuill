@@ -19,7 +19,8 @@ enum PostProcessor {
         meetingId: String,
         mixedSamples: [Float],
         transcriptLines: [TranscriptLine],
-        locale: String = "de"
+        locale: String = "de",
+        licenseAllowsSummary: () -> Bool = { true }
     ) async -> PostProcessResult {
         let audioURL = persistAudio(meetingId: meetingId, samples: mixedSamples)
 
@@ -36,7 +37,12 @@ enum PostProcessor {
             )
         }
 
-        let ai = await summarize(transcript: transcript, locale: locale)
+        // Lizenz-Gate. Recording + Transkript bleiben frei, nur die
+        // AI-Summary-Stufe ist Pro. Bei block: Fallback-Title/TLDR aus
+        // erstem Transkript-Satz, keine Highlights/Tasks/Chapters.
+        let ai: MeetingSummaryAI? = licenseAllowsSummary()
+            ? await summarize(transcript: transcript, locale: locale)
+            : nil
 
         return PostProcessResult(
             title: ai?.title ?? fallbackTitle(from: transcriptLines),

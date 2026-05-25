@@ -36,6 +36,17 @@ struct NeoQuillApp: App {
                     )
                     .environmentObject(state)
                 }
+                .sheet(isPresented: $state.showLicenseGate) {
+                    LicenseGateSheet()
+                        .environmentObject(state)
+                        .preferredColorScheme(.dark)
+                }
+                .sheet(isPresented: $state.showBetaGracePrompt, onDismiss: {
+                    BetaGracePrompt.markAsShown(defaults: .standard)
+                }) {
+                    BetaGracePromptView()
+                        .preferredColorScheme(.dark)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -79,28 +90,47 @@ struct NeoQuillApp: App {
 struct RootView: View {
 
     @EnvironmentObject private var state: AppState
+    @State private var snapshot: LicenseSnapshot = LicenseSnapshot(
+        status: .notRequired, mode: .disabled,
+        firstLaunchDate: nil, cutoffDate: nil, activation: nil
+    )
 
     var body: some View {
         QuillWindow {
             Sidebar()
-            ZStack {
-                switch state.viewMode {
-                case .empty:
-                    EmptyView()
-                case .detail:
-                    if let meeting = state.activeMeeting {
-                        switch state.detailLayout {
-                        case .editorial: DetailEditorial(meeting: meeting)
-                        case .split:     DetailSplit(meeting: meeting)
-                        }
-                    } else {
-                        EmptyView()
-                    }
-                case .recording:
-                    RecordingView(recorder: state.recorder, onStop: state.stopRecording)
+            VStack(spacing: 0) {
+                TrialBannerView(snapshot: snapshot) {
+                    state.showLicenseGate = true
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                ZStack {
+                    switch state.viewMode {
+                    case .empty:
+                        EmptyView()
+                    case .detail:
+                        if let meeting = state.activeMeeting {
+                            switch state.detailLayout {
+                            case .editorial: DetailEditorial(meeting: meeting)
+                            case .split:     DetailSplit(meeting: meeting)
+                            }
+                        } else {
+                            EmptyView()
+                        }
+                    case .recording:
+                        RecordingView(recorder: state.recorder, onStop: state.stopRecording)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .task {
+            // Initial sync + dann auf License-Service-Änderungen reagieren.
+            snapshot = state.license.snapshot
+            for await s in state.license.$snapshot.values {
+                snapshot = s
+            }
         }
     }
 }

@@ -1,0 +1,70 @@
+{
+  "store_id": "386920",
+  "product": {
+    "id": "1086348",
+    "name": "NeoQuill"
+  },
+  "variants": [
+    {
+      "slot": "Lifetime",
+      "id": "1702242",
+      "name": "Lifetime (1.x)",
+      "price_cents": 8900,
+      "has_license_keys": true,
+      "activation_limit": 1,
+      "status": "published",
+      "slug": "715a69f4-bfd8-4841-8f3f-4747d5fc1e46",
+      "buy_url": "https://neon-studio.lemonsqueezy.com/checkout/buy/715a69f4-bfd8-4841-8f3f-4747d5fc1e46"
+    },
+    {
+      "slot": "Major Upgrade",
+      "id": "1702265",
+      "name": "Major Upgrade to 2.0",
+      "price_cents": 3900,
+      "has_license_keys": true,
+      "activation_limit": 1,
+      "status": "published",
+      "slug": "87a07ac9-2346-482a-8120-338a85bc60ab",
+      "buy_url": "https://neon-studio.lemonsqueezy.com/checkout/buy/87a07ac9-2346-482a-8120-338a85bc60ab"
+    },
+    {
+      "slot": "5 seats",
+      "id": "1702269",
+      "name": "Team — 5 seats",
+      "price_cents": 34900,
+      "has_license_keys": true,
+      "activation_limit": 5,
+      "status": "published",
+      "slug": "3c0e6ae1-4012-40fa-a207-89c55f9bed73",
+      "buy_url": "https://neon-studio.lemonsqueezy.com/checkout/buy/3c0e6ae1-4012-40fa-a207-89c55f9bed73"
+    },
+    {
+      "slot": "10 seats",
+      "id": "1702271",
+      "name": "Team — 10 seats",
+      "price_cents": 59900,
+      "has_license_keys": true,
+      "activation_limit": 10,
+      "status": "published",
+      "slug": "f9c42edd-b339-4a80-bb29-3533389c8dc2",
+      "buy_url": "https://neon-studio.lemonsqueezy.com/checkout/buy/f9c42edd-b339-4a80-bb29-3533389c8dc2"
+    }
+  ],
+  "missing_variants": [],
+  "discounts": [
+    {
+      "id": "1028794",
+      "code": "BETA100",
+      "name": "Beta Tester Lifetime",
+      "amount_type": "percent",
+      "amount": 100,
+      "duration": "once",
+      "max_redemptions": 100,
+      "is_limited_to_products": true,
+      "applies_to_variants": ["1702242", "1702265", "1702269", "1702271"],
+      "test_mode": true,
+      "created_at": "2026-05-25T16:47:16Z"
+    }
+  ],
+  "last_synced_at": "2026-05-25T16:48:00Z"
+}
