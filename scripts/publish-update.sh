@@ -83,13 +83,11 @@ echo "  Artefakte: ${ASSETS[*]}"
 APPCAST_SOURCE_DIR="$(mktemp -d)"
 trap 'rm -rf "$APPCAST_SOURCE_DIR"' EXIT
 
-for archive in dist/NeoQuill-v*.dmg dist/NeoQuill-v*.zip; do
-  [ -e "$archive" ] || continue
-  if [ -n "$DMG_PATH" ] && [ "$archive" = "$ZIP_PATH" ]; then
-    continue
-  fi
-  cp "$archive" "$APPCAST_SOURCE_DIR/"
-done
+APPCAST_ARCHIVE="$DMG_PATH"
+if [ -z "$APPCAST_ARCHIVE" ]; then
+  APPCAST_ARCHIVE="$ZIP_PATH"
+fi
+cp "$APPCAST_ARCHIVE" "$APPCAST_SOURCE_DIR/"
 
 echo "[1/4] generate_appcast über $APPCAST_SOURCE_DIR/"
 if [ "$DRY_RUN" = "1" ]; then
