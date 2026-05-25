@@ -91,14 +91,16 @@ cp "$APPCAST_ARCHIVE" "$APPCAST_SOURCE_DIR/"
 
 echo "[1/4] generate_appcast über $APPCAST_SOURCE_DIR/"
 if [ "$DRY_RUN" = "1" ]; then
-  echo "  würde laufen: $SPARKLE_BIN/generate_appcast $APPCAST_SOURCE_DIR/"
+  echo "  würde laufen: $SPARKLE_BIN/generate_appcast --download-url-prefix https://github.com/${REPO}/releases/download/${TAG_NAME} $APPCAST_SOURCE_DIR/"
 else
-  "$SPARKLE_BIN/generate_appcast" "$APPCAST_SOURCE_DIR/"
+  "$SPARKLE_BIN/generate_appcast" \
+    --download-url-prefix "https://github.com/${REPO}/releases/download/${TAG_NAME}" \
+    "$APPCAST_SOURCE_DIR/"
 fi
 
 GENERATED_APPCAST="$APPCAST_SOURCE_DIR/appcast.xml"
 if [ "$DRY_RUN" != "1" ] && [ ! -f "$GENERATED_APPCAST" ]; then
-  echo "FEHLER: generate_appcast hat keinen dist/appcast.xml geschrieben."
+  echo "FEHLER: generate_appcast hat keinen appcast geschrieben: $GENERATED_APPCAST"
   exit 1
 fi
 
@@ -107,20 +109,20 @@ if [ "$DRY_RUN" = "1" ]; then
   echo "  würde kopieren: $GENERATED_APPCAST → ./appcast.xml"
 else
   cp "$GENERATED_APPCAST" ./appcast.xml
-  if git diff --quiet appcast.xml 2>/dev/null; then
+  git add appcast.xml
+  if git diff --cached --quiet appcast.xml 2>/dev/null; then
     echo "  appcast.xml hat sich nicht geändert."
   else
-    git --no-pager diff --stat appcast.xml
+    git --no-pager diff --cached --stat appcast.xml
   fi
 fi
 
 echo "[3/4] Commit appcast.xml"
 if [ "$DRY_RUN" = "1" ]; then
   echo "  würde commiten: appcast.xml für $TAG_NAME"
-elif git diff --quiet appcast.xml 2>/dev/null && git diff --cached --quiet appcast.xml 2>/dev/null; then
+elif git diff --cached --quiet appcast.xml 2>/dev/null; then
   echo "  Nichts zu commiten — appcast.xml bereits auf dem Stand."
 else
-  git add appcast.xml
   git commit -m "chore(release): publish appcast for $TAG_NAME"
   if [ "$SKIP_PUSH" != "1" ]; then
     BRANCH="$(git rev-parse --abbrev-ref HEAD)"
