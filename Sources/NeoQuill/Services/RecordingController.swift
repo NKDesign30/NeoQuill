@@ -43,6 +43,8 @@ final class RecordingController: ObservableObject {
     /// Lizenz-Gate für AI-Summaries. Wird vom AppState gesetzt. Default `true`
     /// damit Tests + Builds ohne LicenseService weiterhin funktionieren.
     var licenseAllowsSummary: () -> Bool = { true }
+    /// Lizenz-Gate für Cross-Meeting-Speaker-Backfill. Lokales Labeln bleibt frei.
+    var licenseAllowsCrossMeetingSpeakerID: () -> Bool = { true }
 
     private var detectorCancellable: AnyCancellable?
     private var deviceCancellable: AnyCancellable?
@@ -1006,6 +1008,7 @@ final class RecordingController: ObservableObject {
             )
             speakerStore?.renameMeetingInternalId(meetingId: meetingId, from: internalId, to: canonicalId)
         }
+        guard licenseAllowsCrossMeetingSpeakerID() else { return 0 }
         return backfillCrossMeetings(
             embedding: embedding,
             canonicalId: canonicalId,

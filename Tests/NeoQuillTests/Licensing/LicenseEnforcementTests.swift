@@ -18,18 +18,70 @@ final class LicenseEnforcementTests: XCTestCase {
     // MARK: - Mode-Resolution
 
     func test_currentMode_returnsDisabled_byDefault() {
-        let mode = LicenseEnforcement.currentMode()
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: nil,
+            appVersionRaw: nil
+        )
         XCTAssertEqual(mode, .disabled)
     }
 
-    func test_currentMode_respectsUserDefaultsOverride() {
+    func test_currentMode_keepsZeroNineBuildsFree_evenWhenConfiguredEnforced() {
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: "enforced",
+            appVersionRaw: "0.9.14"
+        )
+        XCTAssertEqual(mode, .disabled)
+    }
+
+    func test_currentMode_enforcesByDefault_fromVersionOne() {
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: nil,
+            appVersionRaw: "1.0.0"
+        )
+        XCTAssertEqual(mode, .enforced)
+    }
+
+    func test_currentMode_respectsInfoPlistDisabled_fromVersionOne() {
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: "disabled",
+            appVersionRaw: "1.0.0"
+        )
+        XCTAssertEqual(mode, .disabled)
+    }
+
+    func test_currentMode_ignoresUserDefaultsOverrideByDefault() {
         UserDefaults.standard.set("enforced", forKey: LicenseEnforcement.userDefaultsKey)
-        XCTAssertEqual(LicenseEnforcement.currentMode(), .enforced)
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: "disabled",
+            appVersionRaw: "1.0.0"
+        )
+        XCTAssertEqual(mode, .disabled)
+    }
+
+    func test_currentMode_respectsExplicitUserDefaultsOverride_forQA() {
+        UserDefaults.standard.set("disabled", forKey: LicenseEnforcement.userDefaultsKey)
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: "enforced",
+            appVersionRaw: "1.0.0",
+            allowUserDefaultsOverride: true
+        )
+        XCTAssertEqual(mode, .disabled)
     }
 
     func test_currentMode_ignoresInvalidUserDefaultsValue() {
         UserDefaults.standard.set("blub", forKey: LicenseEnforcement.userDefaultsKey)
-        XCTAssertEqual(LicenseEnforcement.currentMode(), .disabled)
+        let mode = LicenseEnforcement.currentMode(
+            configuredModeRaw: "enforced",
+            appVersionRaw: "1.0.0",
+            allowUserDefaultsOverride: true
+        )
+        XCTAssertEqual(mode, .enforced)
+    }
+
+    func test_releaseVersionPolicy_parsesPrereleaseAsCoreVersion() {
+        XCTAssertTrue(ReleaseVersionPolicy.isPaidVersion("1.0.0-beta.1"))
+        XCTAssertFalse(ReleaseVersionPolicy.isPaidVersion("0.9.99"))
+        XCTAssertFalse(ReleaseVersionPolicy.isPaidVersion(nil))
     }
 
     // MARK: - Feature-Gates

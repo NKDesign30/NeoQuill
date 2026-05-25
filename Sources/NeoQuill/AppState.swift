@@ -121,6 +121,9 @@ final class AppState: ObservableObject {
         recorder.licenseAllowsSummary = { [license] in
             LicenseEnforcement.canUseSummary(license.snapshot)
         }
+        recorder.licenseAllowsCrossMeetingSpeakerID = { [license] in
+            LicenseEnforcement.canCrossMeetingSpeakerID(license.snapshot)
+        }
 
         // Beta-Grace-Prompt einmalig zeigen wenn der User als Beta-User
         // erkannt wurde und das Flag noch nicht gesetzt ist. Reagiert auf

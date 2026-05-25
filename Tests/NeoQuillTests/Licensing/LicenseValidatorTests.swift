@@ -188,6 +188,20 @@ final class LicenseValidatorTests: XCTestCase {
         XCTAssertNil(store.loadActivation())
     }
 
+    func test_validate_http4xx_doesNotUseOfflineGrace() async throws {
+        let (validator, client, store) = makeValidator()
+        client.activateResult = .success(successfulActivation())
+        _ = try await validator.activate(licenseKey: "ABCD-1234", machineName: "Mac", now: now)
+
+        client.validateResult = .failure(LSLicenseError.httpStatus(404, "{\"error\":\"license_key not found\"}"))
+
+        let twoDaysLater = now.addingTimeInterval(2 * day)
+        let outcome = await validator.validate(now: twoDaysLater)
+
+        XCTAssertEqual(outcome, .invalidated(.keyNotFound))
+        XCTAssertNil(store.loadActivation())
+    }
+
     // MARK: - Deactivate
 
     func test_deactivate_callsLSAndClearsRecord() async throws {
@@ -203,7 +217,7 @@ final class LicenseValidatorTests: XCTestCase {
         XCTAssertEqual(client.lastDeactivateArgs?.key, "ABCD-1234")
     }
 
-    func test_deactivate_clearsRecord_evenWhenLSFails() async throws {
+    func test_deactivate_keepsRecord_whenLSFails() async throws {
         let (validator, client, store) = makeValidator()
         client.activateResult = .success(successfulActivation())
         _ = try await validator.activate(licenseKey: "ABCD-1234", machineName: "Mac", now: now)
@@ -212,7 +226,7 @@ final class LicenseValidatorTests: XCTestCase {
 
         let ok = await validator.deactivate()
         XCTAssertFalse(ok)
-        // Lokaler Record wird trotzdem entfernt — User wollte deaktivieren
-        XCTAssertNil(store.loadActivation())
+        // Slot bleibt remote aktiv, also dürfen wir den Instance-Record nicht verlieren.
+        XCTAssertNotNil(store.loadActivation())
     }
 }

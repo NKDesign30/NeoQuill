@@ -109,25 +109,31 @@ final class LicenseValidator: LicenseValidating {
                 return .invalidated(reason)
             }
         } catch {
-            // Netz-Fehler oder LS down → Offline-Grace prüfen
-            let age = now.timeIntervalSince(record.lastValidatedAt)
-            if age <= offlineGracePeriod {
+            // Netz-Fehler oder LS down → Offline-Grace prüfen.
+            // LS-4XX ist dagegen eine autoritative API-Ablehnung und darf
+            // nicht als "offline" weitergewunken werden.
+            if Self.allowsOfflineGrace(for: error),
+               now.timeIntervalSince(record.lastValidatedAt) <= offlineGracePeriod {
                 return .offlineGrace(record)
-            } else {
-                secretStore.clearActivation()
-                return .invalidated(.other)
             }
+            secretStore.clearActivation()
+            return .invalidated(Self.mapInvalidation(error: error))
         }
     }
 
     func deactivate() async -> Bool {
         guard let record = secretStore.loadActivation() else { return true }
-        let response = try? await client.deactivate(
-            licenseKey: record.licenseKey,
-            instanceID: record.lemonSqueezyInstanceID
-        )
-        secretStore.clearActivation()
-        return response?.deactivated ?? false
+        do {
+            let response = try await client.deactivate(
+                licenseKey: record.licenseKey,
+                instanceID: record.lemonSqueezyInstanceID
+            )
+            guard response.deactivated else { return false }
+            secretStore.clearActivation()
+            return true
+        } catch {
+            return false
+        }
     }
 
     func currentRecord() -> ActivationRecord? {
@@ -151,5 +157,34 @@ final class LicenseValidator: LicenseValidating {
             if msg.contains("not found") { return .keyNotFound }
         }
         return .other
+    }
+
+    private static func allowsOfflineGrace(for error: Error) -> Bool {
+        guard let licenseError = error as? LSLicenseError else { return true }
+        switch licenseError {
+        case .httpStatus(let code, _):
+            return !(400..<500).contains(code)
+        case .transport, .nonHTTPResponse, .invalidJSON:
+            return true
+        case .malformedURL:
+            return false
+        }
+    }
+
+    private static func mapInvalidation(error: Error) -> InvalidationReason {
+        guard let licenseError = error as? LSLicenseError else { return .other }
+        switch licenseError {
+        case .httpStatus(let code, let body):
+            let message = body?.lowercased() ?? ""
+            if code == 404 || message.contains("not found") { return .keyNotFound }
+            if message.contains("refund") { return .refunded }
+            if message.contains("disabled") || message.contains("revoked") { return .revokedByOwner }
+            if message.contains("activation") && message.contains("limit") {
+                return .activationLimitExceeded
+            }
+            return .other
+        case .malformedURL, .transport, .nonHTTPResponse, .invalidJSON:
+            return .other
+        }
     }
 }
