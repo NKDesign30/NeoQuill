@@ -76,6 +76,15 @@ final class AudioCapture: NSObject, ObservableObject {
     // input stays byte-identical to before.
     private var micRecordingHQ: [Float] = []
     private var sysRecordingHQ: [Float] = []
+    // Start time of the recording and the per-source offset of the first HQ
+    // sample. The mic and system sources start at different times (the mic often
+    // falls back to AVAudioEngine a few seconds in), so without this the later
+    // source would be aligned to index 0 and play time-shifted. We pad each HQ
+    // stem at the front by its offset to keep mic and system in sync.
+    private var hqStartTime: Date?
+    private var micHQStartOffset: TimeInterval?
+    private var sysHQStartOffset: TimeInterval?
+    private let hqSampleRate: Double = 48_000
     private var lastLevelUpdate: Date = .distantPast
     private var lastDebugLog: Date = .distantPast
     private var nonZeroSamplesTotal = 0
@@ -134,6 +143,9 @@ final class AudioCapture: NSObject, ObservableObject {
         sysRecording = []
         micRecordingHQ = []
         sysRecordingHQ = []
+        hqStartTime = Date()
+        micHQStartOffset = nil
+        sysHQStartOffset = nil
         micRmsAccum = 0
         micRmsSampleCount = 0
         tapRmsAccum = 0
@@ -528,12 +540,16 @@ final class AudioCapture: NSObject, ObservableObject {
 
     /// Appends 48 kHz mono samples to the high-resolution archive stems. Separate
     /// from `appendAudio` so the 16 kHz ASR buffers are never touched by this path.
+    /// Records each source's first-sample offset so the stems can be time-aligned.
     fileprivate func appendAudioHQ(_ samples: [Float], source: String) {
         guard !samples.isEmpty else { return }
         let cleaned: [Float] = samples.map { $0.isFinite ? min(max($0, -1), 1) : 0 }
+        let offset = hqStartTime.map { Date().timeIntervalSince($0) }
         if source == "Tap" {
+            if sysHQStartOffset == nil { sysHQStartOffset = offset }
             sysRecordingHQ.append(contentsOf: cleaned)
         } else {
+            if micHQStartOffset == nil { micHQStartOffset = offset }
             micRecordingHQ.append(contentsOf: cleaned)
         }
     }
@@ -548,10 +564,26 @@ final class AudioCapture: NSObject, ObservableObject {
     }
 
     /// Snapshot of the high-resolution 48 kHz mono stems (mic + system) for the
-    /// stereo playback/export archive. Empty arrays if that source never produced
-    /// HQ samples (then the caller falls back to the 16 kHz mix).
+    /// stereo playback/export archive, time-aligned so both start at the recording
+    /// start. Each stem is front-padded with silence by its own first-sample
+    /// offset, so a source that started late (e.g. the mic falling back to
+    /// AVAudioEngine a few seconds in) no longer plays time-shifted against the
+    /// other. Empty arrays if no HQ samples were produced (caller falls back to
+    /// the 16 kHz mix).
     func collectFinalAudioHQ() -> (micHQ: [Float], sysHQ: [Float]) {
-        return (micRecordingHQ, sysRecordingHQ)
+        let mic = Self.frontPadded(micRecordingHQ, offset: micHQStartOffset, sampleRate: hqSampleRate)
+        let sys = Self.frontPadded(sysRecordingHQ, offset: sysHQStartOffset, sampleRate: hqSampleRate)
+        return (mic, sys)
+    }
+
+    /// Prepends `offset` seconds of silence so stems captured with different start
+    /// times line up on a common timeline. Caps the padding defensively so a
+    /// clock glitch can never allocate an absurd buffer. Internal for testing.
+    nonisolated static func frontPadded(_ samples: [Float], offset: TimeInterval?, sampleRate: Double) -> [Float] {
+        guard !samples.isEmpty, let offset, offset > 0.01, offset.isFinite else { return samples }
+        let padFrames = min(Int(offset * sampleRate), Int(sampleRate * 600))  // <= 10 min guard
+        guard padFrames > 0 else { return samples }
+        return [Float](repeating: 0, count: padFrames) + samples
     }
 
     /// Buffer leeren (vor neuer Aufnahme).
@@ -560,6 +592,8 @@ final class AudioCapture: NSObject, ObservableObject {
         sysRecording.removeAll()
         micRecordingHQ.removeAll()
         sysRecordingHQ.removeAll()
+        micHQStartOffset = nil
+        sysHQStartOffset = nil
         micBuffer.removeAll()
         sysBuffer.removeAll()
     }
