@@ -45,4 +45,54 @@ final class AudioCaptureAlignmentTests: XCTestCase {
         let out = AudioCapture.frontPadded(s, offset: 99_999, sampleRate: 48_000)
         XCTAssertLessThanOrEqual(out.count, 48_000 * 600 + 1)  // capped at 10 min
     }
+
+    // MARK: - alignedMix (mono mix is front-padded just like the HQ archive)
+
+    func testAlignedMixPadsLateMicOntoSystemTimeline() {
+        // System starts immediately, mic 2s late (AVAudioEngine fallback). At 16k
+        // the mic content must begin at 2s, not at index 0 over the system audio.
+        let mic = Array(repeating: Float(0.4), count: 16_000)       // 1s mic
+        let sys = Array(repeating: Float(0.5), count: 16_000 * 3)   // 3s system
+        let mixed = AudioCapture.alignedMix(
+            mic: mic, micOffset: 2.0,
+            system: sys, systemOffset: 0.0,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(mixed.count, 16_000 * 3)            // system defines the length
+        XCTAssertEqual(mixed[0], 0.5, accuracy: 1e-6)      // first 2s: system only
+        XCTAssertEqual(mixed[16_000], 0.5, accuracy: 1e-6) // still system-only at 1s
+        XCTAssertEqual(mixed[16_000 * 2], 0.9, accuracy: 1e-6) // mic joins at 2s (0.4+0.5)
+    }
+
+    func testAlignedMixWithoutOffsetsMatchesNaiveSum() {
+        // No offsets (legacy/mic-only) → behaves like the old index-0 mix.
+        let mic: [Float] = [0.2, 0.2, 0.2]
+        let sys: [Float] = [0.1, 0.1]
+        let mixed = AudioCapture.alignedMix(
+            mic: mic, micOffset: nil,
+            system: sys, systemOffset: nil,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(mixed.count, 3)
+        XCTAssertEqual(mixed[0], 0.3, accuracy: 1e-6)
+        XCTAssertEqual(mixed[1], 0.3, accuracy: 1e-6)
+        XCTAssertEqual(mixed[2], 0.2, accuracy: 1e-6)
+    }
+
+    func testAlignedMixClipsPeaks() {
+        let mic: [Float] = [0.8, 0.8]
+        let sys: [Float] = [0.8, 0.8]
+        let mixed = AudioCapture.alignedMix(
+            mic: mic, micOffset: nil,
+            system: sys, systemOffset: nil,
+            sampleRate: 16_000
+        )
+        XCTAssertEqual(mixed, [0.95, 0.95])  // 1.6 hard-clipped to 0.95
+    }
+
+    func testAlignedMixEmptyInputs() {
+        XCTAssertTrue(AudioCapture.alignedMix(
+            mic: [], micOffset: nil, system: [], systemOffset: nil, sampleRate: 16_000
+        ).isEmpty)
+    }
 }

@@ -1000,14 +1000,17 @@ final class RecordingController: ObservableObject {
             _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: captured.sys)
 
             // High-resolution stereo archive (mic = left, system = right) is the
-            // user-facing playback/export file. Falls back to the 16 kHz mix if no
-            // HQ samples were captured (e.g. mic-only legacy path).
-            let hqURL = try AudioWriter.persistStereo(
+            // user-facing playback/export file — but only when BOTH sources carry
+            // audio. A hard-panned stereo file with one empty channel would play
+            // in one ear only, so mic-only / system-only captures keep the 16 kHz
+            // mono mix as the playback file.
+            let bothStems = !capturedHQ.micHQ.isEmpty && !capturedHQ.sysHQ.isEmpty
+            let hqURL = bothStems ? try AudioWriter.persistStereo(
                 id: meetingId,
                 stem: .hq,
                 left: capturedHQ.micHQ,
                 right: capturedHQ.sysHQ
-            )
+            ) : nil
             return hqURL ?? mixURL
         } catch {
             NSLog("[RecordingController] Stem persist failed: \(error)")
@@ -1191,7 +1194,25 @@ final class RecordingController: ObservableObject {
             ? ((try? AudioWriter.readSamples(from: systemURL)) ?? [])
             : []
         let mixed = mixURL.flatMap { try? AudioWriter.readSamples(from: $0) } ?? []
-        return (mic: mic, system: system, mixed: mixed, audioURL: mixURL)
+        // Playback prefers the 48 kHz stereo archive, but only when BOTH stems
+        // carry audio — a hard-panned stereo file with one empty channel plays in
+        // one ear only, so mic-only / system-only meetings keep the mono mix.
+        // Re-processing/recovery must otherwise never downgrade a meeting that
+        // already has a good .hq archive back to the mono mix.
+        let bothStems = !mic.isEmpty && !system.isEmpty
+        let playbackURL = bothStems
+            ? preferredPlaybackURL(meetingId: meetingId, mixFallback: mixURL)
+            : mixURL
+        return (mic: mic, system: system, mixed: mixed, audioURL: playbackURL)
+    }
+
+    /// Returns the high-resolution stereo archive (`.hq`) if present on disk,
+    /// otherwise the provided mono-mix fallback. Used so re-transcription and
+    /// orphan recovery keep pointing playback at the good stereo file.
+    private func preferredPlaybackURL(meetingId: String, mixFallback: URL?) -> URL? {
+        let hqURL = AudioWriter.url(id: meetingId, stem: .hq)
+        if FileManager.default.fileExists(atPath: hqURL.path) { return hqURL }
+        return mixFallback
     }
 
     private func transcribeFinalAudio(

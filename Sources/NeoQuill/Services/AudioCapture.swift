@@ -599,20 +599,42 @@ final class AudioCapture: NSObject, ObservableObject {
     }
 
     private func getMixedAudio() -> [Float] {
-        let length = max(micRecording.count, sysRecording.count)
+        // Use the same first-sample offsets the HQ archive uses, so the mono mix
+        // is aligned on the shared timeline too. Without this the mic (which often
+        // starts a few seconds late on AVAudioEngine fallback) was mixed from
+        // index 0 and played time-shifted against the system audio.
+        Self.alignedMix(
+            mic: micRecording,
+            micOffset: micHQStartOffset,
+            system: sysRecording,
+            systemOffset: sysHQStartOffset,
+            sampleRate: 16_000
+        )
+    }
+
+    /// Mixes mic + system into one mono track, each front-padded by its own
+    /// first-sample offset so a late-starting source lines up on the shared
+    /// timeline instead of being pulled to the front. Peaks are hard-clipped
+    /// (no global normalisation, which used to crush quiet meetings). Internal
+    /// for testing.
+    nonisolated static func alignedMix(
+        mic: [Float],
+        micOffset: TimeInterval?,
+        system: [Float],
+        systemOffset: TimeInterval?,
+        sampleRate: Double
+    ) -> [Float] {
+        let m = frontPadded(mic, offset: micOffset, sampleRate: sampleRate)
+        let s = frontPadded(system, offset: systemOffset, sampleRate: sampleRate)
+        let length = max(m.count, s.count)
         guard length > 0 else { return [] }
 
         var mixed = [Float](repeating: 0, count: length)
-        for i in 0..<micRecording.count { mixed[i] = micRecording[i] }
-        for i in 0..<sysRecording.count { mixed[i] += sysRecording[i] }
-
-        // Peak-Limiter: Spikes hart clippen statt globale Normalisierung.
-        // Alte Methode skalierte ALLES runter wenn ein einziger Spike existierte,
-        // was Meetings auf -50 dB drückte und Transkription unmöglich machte.
+        for i in 0..<m.count { mixed[i] = m[i] }
+        for i in 0..<s.count { mixed[i] += s[i] }
         for i in 0..<mixed.count {
             mixed[i] = min(max(mixed[i], -0.95), 0.95)
         }
-
         return mixed
     }
 
