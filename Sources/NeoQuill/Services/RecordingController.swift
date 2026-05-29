@@ -281,6 +281,34 @@ final class RecordingController: ObservableObject {
         }
     }
 
+    /// Re-runs final STT for meetings left stuck in `processing` with no
+    /// transcript — i.e. the app was quit or crashed mid-transcription, so the
+    /// whisper subprocess died and the meeting would otherwise show
+    /// "Wird transkribiert…" forever. Runs at app start. Sequential on purpose so
+    /// we never spawn several whisper-cli processes at once. The reprocess path
+    /// always clears `processing`, so even a meeting whose audio is gone gets
+    /// unstuck rather than hanging again.
+    func recoverOrphanedTranscripts() {
+        guard let store else { return }
+        let orphans = store.details.values
+            .filter { $0.processing && $0.transcript.isEmpty }
+            .map(\.id)
+        guard !orphans.isEmpty else { return }
+        Task { [weak self] in
+            guard let self, let store = self.store else { return }
+            for id in orphans {
+                // Clear the stuck `processing` flag first — reprocessMeetingAsync
+                // bails out on `!detail.processing`, which is exactly the state an
+                // orphaned meeting is in. Without this the re-run is a no-op.
+                if var detail = store.detail(for: id) {
+                    detail.processing = false
+                    store.updateDetail(detail)
+                }
+                await self.reprocessMeetingAsync(id)
+            }
+        }
+    }
+
     /// Importiert eine externe Audiodatei (iPhone-Sprachmemo, Diktiergerät,
     /// beliebige .m4a/.mp3/.wav/.caf) als eigenständige Aufnahme: dekodieren,
     /// als Mic-Stem persistieren und durch die normale Final-STT- plus

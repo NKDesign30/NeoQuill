@@ -143,8 +143,12 @@ final class AppState: ObservableObject {
         pill.bind(to: recorder)
 
         // Whisper- und Diarizer-Modelle im Hintergrund laden damit der erste
-        // Recording-Start nahezu sofort funktioniert.
-        Task { [weak recorder] in await recorder?.prewarmModels() }
+        // Recording-Start nahezu sofort funktioniert. Danach hängengebliebene
+        // Transkripte (App während STT beendet/abgestürzt) automatisch nachholen.
+        Task { @MainActor [weak recorder] in
+            await recorder?.prewarmModels()
+            recorder?.recoverOrphanedTranscripts()
+        }
         store.$meetings
             .receive(on: DispatchQueue.main)
             .sink { [weak self] list in
