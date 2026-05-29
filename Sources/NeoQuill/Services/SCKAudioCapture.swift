@@ -29,15 +29,9 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
     private let audioQueue = DispatchQueue(label: "com.quill.sck-audio", qos: .userInitiated)
     private let videoQueue = DispatchQueue(label: "com.quill.sck-video-discard", qos: .background)
 
-    private var formatConverter: AVAudioConverter?
+    private lazy var asrConverter = PCMStreamConverter(targetSampleRate: 16_000)
     private lazy var hqConverter = PCMStreamConverter(targetSampleRate: 48_000)
     private var sckCallbackCount = 0
-    private let targetFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16000,
-        channels: 1,
-        interleaved: false
-    )!
 
     /// Startet Audio-Capture fuer die App mit dem gegebenen Bundle Identifier.
     func start(bundleIdentifiers: [String]) async throws {
@@ -119,7 +113,6 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
         }
 
         self.stream = nil
-        self.formatConverter = nil
         print("[Quill] SCK Audio-Capture gestoppt")
     }
 
@@ -143,39 +136,9 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
     }
 
     private func resampleTo16kHzMono(_ buffer: AVAudioPCMBuffer) -> [Float]? {
-        if formatConverter == nil {
-            formatConverter = AVAudioConverter(from: buffer.format, to: targetFormat)
-        }
-        guard let converter = formatConverter else { return nil }
-
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-        guard outputFrameCount > 0 else { return nil }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: outputFrameCount
-        ) else { return nil }
-
-        var error: NSError?
-        var hasData = true
-
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return buffer
-            } else {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-        }
-
-        guard error == nil,
-              let channelData = outputBuffer.floatChannelData,
-              outputBuffer.frameLength > 0 else { return nil }
-
-        return Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
+        // Drain-correct streaming conversion, same path as the process tap. The
+        // old floor()-sized one-shot path lost the fractional frame per buffer.
+        asrConverter?.convert(buffer)
     }
 }
 

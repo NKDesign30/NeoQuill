@@ -46,17 +46,14 @@ final class AudioCapture: NSObject, ObservableObject {
     private var micFallbackTimer: Timer?
     private let micOutputQueue = DispatchQueue(label: "com.quill.mic-capture", qos: .userInitiated)
     nonisolated(unsafe) var micCallbackCount: Int = 0
-    nonisolated(unsafe) var micConverter: AVAudioConverter?
-    /// 48 kHz mono converter for the high-resolution archive path. The AVCapture
-    /// delegate and the AVAudioEngine fallback never run at the same time (the
-    /// fallback replaces the delegate), so one shared converter is safe.
+    /// Drain-correct 16 kHz converter for the mic ASR path, shared by the
+    /// AVCapture delegate and the AVAudioEngine fallback (they never run at the
+    /// same time — the fallback replaces the delegate). Recreated on start() and
+    /// on the fallback switch so no resampler filter state leaks across sources.
+    nonisolated(unsafe) var micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
+    /// 48 kHz mono converter for the high-resolution archive path. Same
+    /// single-active-source invariant as above.
     nonisolated(unsafe) var micHQConverter = PCMStreamConverter(targetSampleRate: 48_000)
-    private let micTargetFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16000,
-        channels: 1,
-        interleaved: false
-    )!
 
     // Process Tap (System Audio) — Primary
     private var processTap: ProcessAudioTap?
@@ -143,6 +140,7 @@ final class AudioCapture: NSObject, ObservableObject {
         sysRecording = []
         micRecordingHQ = []
         sysRecordingHQ = []
+        micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
         hqStartTime = Date()
         micHQStartOffset = nil
         sysHQStartOffset = nil
@@ -275,7 +273,9 @@ final class AudioCapture: NSObject, ObservableObject {
         micSession?.stopRunning()
         micSession = nil
         micOutput = nil
-        micConverter = nil
+        // Fresh converter: the engine fallback's source format differs from the
+        // AVCapture delegate's, so the held resampler must not carry over.
+        micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
 
         do {
             try startMicEngineFallback()
@@ -304,7 +304,6 @@ final class AudioCapture: NSObject, ObservableObject {
         micSession?.stopRunning()
         micSession = nil
         micOutput = nil
-        micConverter = nil
         micEngine?.inputNode.removeTap(onBus: 0)
         micEngine?.stop()
         micEngine = nil
@@ -413,7 +412,7 @@ final class AudioCapture: NSObject, ObservableObject {
         }
 
         input.installTap(onBus: 0, bufferSize: 2048, format: sourceFormat) { buffer, _ in
-            if let samples = Self.convertTo16kMono(buffer) {
+            if let samples = self.micASRConverter?.convert(buffer), !samples.isEmpty {
                 Task { @MainActor in
                     self.appendAudio(samples, source: "Mic")
                 }
@@ -430,40 +429,6 @@ final class AudioCapture: NSObject, ObservableObject {
         currentMicName = currentMicName.isEmpty ? "System-Mikrofon" : "\(currentMicName) · Engine"
         logger.warning("Mic-Fallback AVAudioEngine gestartet: \(sourceFormat, privacy: .public)")
         diagLog("MIC ENGINE STARTED: format=\(sourceFormat)")
-    }
-
-    nonisolated private static func convertTo16kMono(_ buffer: AVAudioPCMBuffer) -> [Float]? {
-        let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 16_000,
-            channels: 1,
-            interleaved: false
-        )!
-        guard buffer.frameLength > 0,
-              let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else { return nil }
-
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-        guard outputFrameCount > 0,
-              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount)
-        else { return nil }
-
-        var error: NSError?
-        var hasData = true
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return buffer
-            }
-            outStatus.pointee = .noDataNow
-            return nil
-        }
-
-        guard error == nil,
-              let channel = outputBuffer.floatChannelData?[0],
-              outputBuffer.frameLength > 0 else { return nil }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(outputBuffer.frameLength)))
     }
 
     // MARK: - Buffer Management
@@ -684,41 +649,9 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
         }
         guard let pcmBuffer = pcmBuffer else { return }
 
-        if self.micConverter == nil {
-            self.micConverter = AVAudioConverter(from: sourceFormat, to: self.micTargetFormat)
-        }
-        guard let converter = self.micConverter else { return }
-
-        let ratio = self.micTargetFormat.sampleRate / sourceFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(pcmBuffer.frameLength) * ratio)
-        guard outputFrameCount > 0 else { return }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: self.micTargetFormat,
-            frameCapacity: outputFrameCount
-        ) else { return }
-
-        var error: NSError?
-        var hasData = true
-        converter.reset()
-
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return pcmBuffer
-            } else {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-        }
-
-        guard error == nil,
-              let channelData = outputBuffer.floatChannelData,
-              outputBuffer.frameLength > 0 else { return }
-
-        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
-        guard !samples.isEmpty else { return }
+        // Drain-correct 16 kHz resampling, same path as the system tap. Replaces
+        // the old reset()-per-buffer + floor() converter.
+        guard let samples = self.micASRConverter?.convert(pcmBuffer), !samples.isEmpty else { return }
 
         self.micCallbackCount += 1
         if self.micCallbackCount <= 5 {
