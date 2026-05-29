@@ -385,7 +385,8 @@ final class RecordingController: ObservableObject {
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
 
         let captured = audioCapture.collectFinalAudio()
-        let audioURL = persistCapturedAudio(meetingId: id, captured: captured)
+        let capturedHQ = audioCapture.collectFinalAudioHQ()
+        let audioURL = persistCapturedAudio(meetingId: id, captured: captured, capturedHQ: capturedHQ)
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
@@ -962,13 +963,24 @@ final class RecordingController: ObservableObject {
 
     private func persistCapturedAudio(
         meetingId: String,
-        captured: (mic: [Float], sys: [Float], mixed: [Float])
+        captured: (mic: [Float], sys: [Float], mixed: [Float]),
+        capturedHQ: (micHQ: [Float], sysHQ: [Float])
     ) -> URL? {
         do {
             let mixURL = try AudioWriter.persist(id: meetingId, stem: .mix, samples: captured.mixed)
             _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: captured.mic)
             _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: captured.sys)
-            return mixURL
+
+            // High-resolution stereo archive (mic = left, system = right) is the
+            // user-facing playback/export file. Falls back to the 16 kHz mix if no
+            // HQ samples were captured (e.g. mic-only legacy path).
+            let hqURL = try AudioWriter.persistStereo(
+                id: meetingId,
+                stem: .hq,
+                left: capturedHQ.micHQ,
+                right: capturedHQ.sysHQ
+            )
+            return hqURL ?? mixURL
         } catch {
             NSLog("[RecordingController] Stem persist failed: \(error)")
             return nil

@@ -47,6 +47,10 @@ final class AudioCapture: NSObject, ObservableObject {
     private let micOutputQueue = DispatchQueue(label: "com.quill.mic-capture", qos: .userInitiated)
     nonisolated(unsafe) var micCallbackCount: Int = 0
     nonisolated(unsafe) var micConverter: AVAudioConverter?
+    /// 48 kHz mono converter for the high-resolution archive path. The AVCapture
+    /// delegate and the AVAudioEngine fallback never run at the same time (the
+    /// fallback replaces the delegate), so one shared converter is safe.
+    nonisolated(unsafe) var micHQConverter = PCMStreamConverter(targetSampleRate: 48_000)
     private let micTargetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
         sampleRate: 16000,
@@ -67,6 +71,11 @@ final class AudioCapture: NSObject, ObservableObject {
     // Vollstaendige Aufnahme-Buffer (werden NIE geleert, nur beim Mix am Ende)
     private var micRecording: [Float] = []
     private var sysRecording: [Float] = []
+    // High-resolution 48 kHz mono stems for the playback/export archive.
+    // Kept separate from the 16 kHz ASR buffers above so the ASR/diarization
+    // input stays byte-identical to before.
+    private var micRecordingHQ: [Float] = []
+    private var sysRecordingHQ: [Float] = []
     private var lastLevelUpdate: Date = .distantPast
     private var lastDebugLog: Date = .distantPast
     private var nonZeroSamplesTotal = 0
@@ -123,6 +132,8 @@ final class AudioCapture: NSObject, ObservableObject {
         sysBuffer = []
         micRecording = []
         sysRecording = []
+        micRecordingHQ = []
+        sysRecordingHQ = []
         micRmsAccum = 0
         micRmsSampleCount = 0
         tapRmsAccum = 0
@@ -206,6 +217,11 @@ final class AudioCapture: NSObject, ObservableObject {
             sck.onSamples = { [weak self] samples in
                 Task { @MainActor in
                     self?.appendAudio(samples, source: "Tap")
+                }
+            }
+            sck.onSamplesHQ = { [weak self] hq in
+                Task { @MainActor in
+                    self?.appendAudioHQ(hq, source: "Tap")
                 }
             }
             sckCapture = sck
@@ -309,6 +325,11 @@ final class AudioCapture: NSObject, ObservableObject {
                 self?.appendAudio(samples, source: "Tap")
             }
         }
+        tap.onSamplesHQ = { [weak self] hq in
+            Task { @MainActor in
+                self?.appendAudioHQ(hq, source: "Tap")
+            }
+        }
 
         try tap.start(bundleIdentifiers: targetBundleIds)
         processTap = tap
@@ -380,9 +401,15 @@ final class AudioCapture: NSObject, ObservableObject {
         }
 
         input.installTap(onBus: 0, bufferSize: 2048, format: sourceFormat) { buffer, _ in
-            guard let samples = Self.convertTo16kMono(buffer) else { return }
-            Task { @MainActor in
-                self.appendAudio(samples, source: "Mic")
+            if let samples = Self.convertTo16kMono(buffer) {
+                Task { @MainActor in
+                    self.appendAudio(samples, source: "Mic")
+                }
+            }
+            if let hq = self.micHQConverter?.convert(buffer), !hq.isEmpty {
+                Task { @MainActor in
+                    self.appendAudioHQ(hq, source: "Mic")
+                }
             }
         }
         engine.prepare()
@@ -499,6 +526,18 @@ final class AudioCapture: NSObject, ObservableObject {
         audioLevel = sqrt(sumSquares / Float(max(cleaned.count, 1)))
     }
 
+    /// Appends 48 kHz mono samples to the high-resolution archive stems. Separate
+    /// from `appendAudio` so the 16 kHz ASR buffers are never touched by this path.
+    fileprivate func appendAudioHQ(_ samples: [Float], source: String) {
+        guard !samples.isEmpty else { return }
+        let cleaned: [Float] = samples.map { $0.isFinite ? min(max($0, -1), 1) : 0 }
+        if source == "Tap" {
+            sysRecordingHQ.append(contentsOf: cleaned)
+        } else {
+            micRecordingHQ.append(contentsOf: cleaned)
+        }
+    }
+
     /// Snapshot der bisherigen Recording-Buffer ohne sie zu leeren.
     /// Nach `stop()` aufrufen, um finales Transkript + Diarization zu bauen.
     func collectFinalAudio() -> (mic: [Float], sys: [Float], mixed: [Float]) {
@@ -508,10 +547,19 @@ final class AudioCapture: NSObject, ObservableObject {
         return (mic, sys, mixed)
     }
 
+    /// Snapshot of the high-resolution 48 kHz mono stems (mic + system) for the
+    /// stereo playback/export archive. Empty arrays if that source never produced
+    /// HQ samples (then the caller falls back to the 16 kHz mix).
+    func collectFinalAudioHQ() -> (micHQ: [Float], sysHQ: [Float]) {
+        return (micRecordingHQ, sysRecordingHQ)
+    }
+
     /// Buffer leeren (vor neuer Aufnahme).
     func clearRecording() {
         micRecording.removeAll()
         sysRecording.removeAll()
+        micRecordingHQ.removeAll()
+        sysRecordingHQ.removeAll()
         micBuffer.removeAll()
         sysBuffer.removeAll()
     }
@@ -625,6 +673,13 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
 
         Task { @MainActor in
             self.appendAudio(samples, source: "Mic")
+        }
+
+        // High-resolution archive path: 48 kHz mono from the same native buffer.
+        if let hq = self.micHQConverter?.convert(pcmBuffer), !hq.isEmpty {
+            Task { @MainActor in
+                self.appendAudioHQ(hq, source: "Mic")
+            }
         }
     }
 }

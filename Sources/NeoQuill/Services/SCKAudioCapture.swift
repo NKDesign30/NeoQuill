@@ -20,6 +20,9 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
     /// Called with 16kHz mono Float32 samples
     var onSamples: (([Float]) -> Void)?
 
+    /// Called with 48kHz mono Float32 samples for the high-resolution archive.
+    var onSamplesHQ: (([Float]) -> Void)?
+
     private var stream: SCStream?
     private var isRunning = false
 
@@ -27,6 +30,7 @@ final class SCKAudioCapture: NSObject, @unchecked Sendable {
     private let videoQueue = DispatchQueue(label: "com.quill.sck-video-discard", qos: .background)
 
     private var formatConverter: AVAudioConverter?
+    private lazy var hqConverter = PCMStreamConverter(targetSampleRate: 48_000)
     private var sckCallbackCount = 0
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
@@ -200,6 +204,10 @@ extension SCKAudioCapture: SCStreamOutput {
                     print("[Quill] SCK Audio Callback #\(sckCallbackCount): \(samples.count) samples, max=\(maxVal), rms=\(rms), format=\(pcmBuffer.format)")
                 }
                 onSamples?(samples)
+            }
+            // High-resolution archive path: 48 kHz mono from the same native buffer.
+            if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
+                onSamplesHQ(hq)
             }
         @unknown default:
             break

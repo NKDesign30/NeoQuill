@@ -31,6 +31,9 @@ final class ProcessAudioTap: @unchecked Sendable {
     /// Called with 16kHz mono Float32 samples
     var onSamples: (([Float]) -> Void)?
 
+    /// Called with 48kHz mono Float32 samples for the high-resolution archive.
+    var onSamplesHQ: (([Float]) -> Void)?
+
     private var processTapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
     private var deviceProcID: AudioDeviceIOProcID?
@@ -44,6 +47,7 @@ final class ProcessAudioTap: @unchecked Sendable {
         channels: 1,
         interleaved: false
     )!
+    private lazy var hqConverter = PCMStreamConverter(targetSampleRate: 48_000)
     private var callbackCount = 0
 
     /// Startet den Process Tap fuer die angegebenen Bundle IDs.
@@ -240,6 +244,12 @@ final class ProcessAudioTap: @unchecked Sendable {
         }
 
         onSamples?(samples)
+
+        // High-resolution archive path: convert the same native buffer to 48 kHz
+        // mono with the drain-correct converter (independent of the 16 kHz ASR path).
+        if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
+            onSamplesHQ(hq)
+        }
     }
 
     // MARK: - Process Discovery
