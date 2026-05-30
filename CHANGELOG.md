@@ -7,6 +7,10 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 ## [Unreleased]
 
+- Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
+
+## [0.10.0] - 2026-05-30
+
 - Added: Audio-Soak- und Sample-Rate-Invariant-Tests sichern den getrennten
   48kHz-Stereo-HQ-Pfad und den 16kHz-ASR-Pfad über lange Converter-Läufe ab.
 - Added: Support-Diagnostics exportiert privacy-safe WAV-Metadaten und
