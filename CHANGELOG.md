@@ -7,7 +7,13 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 ## [Unreleased]
 
-- Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
+- Added: Audio-Soak- und Sample-Rate-Invariant-Tests sichern den getrennten
+  48kHz-Stereo-HQ-Pfad und den 16kHz-ASR-Pfad über lange Converter-Läufe ab.
+- Added: Support-Diagnostics exportiert privacy-safe WAV-Metadaten und
+  Codesign-Status ohne Audio- oder Transcript-Inhalte.
+- Changed: Release-Pipeline und Market-Readiness-Gate prüfen DMG-primary
+  Distribution, Sparkle-Appcast, ZIP-Fallback, SHA256-Sidecars und Manifest als
+  zusammengehörigen Artefakt-Satz.
 
 ## [0.9.16] - 2026-05-25
 

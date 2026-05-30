@@ -35,6 +35,10 @@ final class VoiceIdEnrollmentService: ObservableObject {
     private var engine: AVAudioEngine?
     private var samples: [Float] = []
     private var countdownTask: Task<Void, Never>?
+    /// Drain-correct 16 kHz converter for the enrollment mic stream, recreated per
+    /// enrollment. The old fresh-converter-per-buffer + floor() path truncated the
+    /// resampler tail, skewing the speaker embedding written to SpeakerStore.
+    nonisolated(unsafe) private var asrConverter = PCMStreamConverter(targetSampleRate: 16_000)
 
     init(diarizer: SpeakerDiarizer, speakerStore: SpeakerStore) {
         self.diarizer = diarizer
@@ -46,6 +50,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
     func startEnrollment() async {
         guard phase != .recording(secondsRemaining: Self.recordingDuration), phase != .processing else { return }
         samples.removeAll(keepingCapacity: true)
+        asrConverter = PCMStreamConverter(targetSampleRate: 16_000)
 
         phase = .requestingPermission
         let granted = await requestPermission()
@@ -103,7 +108,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
         }
 
         input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-            guard let chunk = Self.convertTo16kMono(buffer) else { return }
+            guard let self, let chunk = self.asrConverter?.convert(buffer), !chunk.isEmpty else { return }
             let level = Self.peakLevel(chunk)
             Task { @MainActor [weak self] in
                 self?.samples.append(contentsOf: chunk)
@@ -172,36 +177,6 @@ final class VoiceIdEnrollmentService: ObservableObject {
     private func ensureDiarizerReady() async -> Bool {
         await diarizer.warmUp()
         return diarizer.isReady
-    }
-
-    nonisolated private static func convertTo16kMono(_ buffer: AVAudioPCMBuffer) -> [Float]? {
-        let target = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 16_000,
-            channels: 1,
-            interleaved: false
-        )!
-        guard buffer.frameLength > 0,
-              let converter = AVAudioConverter(from: buffer.format, to: target) else { return nil }
-
-        let ratio = target.sampleRate / buffer.format.sampleRate
-        let outFrames = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-        guard outFrames > 0,
-              let outBuffer = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: outFrames) else { return nil }
-
-        var hasData = true
-        var error: NSError?
-        converter.convert(to: outBuffer, error: &error) { _, status in
-            if hasData {
-                hasData = false
-                status.pointee = .haveData
-                return buffer
-            }
-            status.pointee = .noDataNow
-            return nil
-        }
-        guard error == nil, let channel = outBuffer.floatChannelData?[0] else { return nil }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(outBuffer.frameLength)))
     }
 
     nonisolated private static func peakLevel(_ samples: [Float]) -> Float {

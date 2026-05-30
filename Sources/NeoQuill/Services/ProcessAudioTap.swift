@@ -31,19 +31,22 @@ final class ProcessAudioTap: @unchecked Sendable {
     /// Called with 16kHz mono Float32 samples
     var onSamples: (([Float]) -> Void)?
 
+    /// Called with 48kHz mono Float32 samples for the high-resolution archive.
+    var onSamplesHQ: (([Float]) -> Void)?
+
     private var processTapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioObjectID = kAudioObjectUnknown
     private var deviceProcID: AudioDeviceIOProcID?
     private var tapStreamDescription: AudioStreamBasicDescription?
     private let audioQueue = DispatchQueue(label: "com.quill.process-tap", qos: .userInitiated)
 
-    private var formatConverter: AVAudioConverter?
-    private let targetFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16000,
-        channels: 1,
-        interleaved: false
-    )!
+    /// Drain-correct streaming converter for the 16 kHz ASR path. The old
+    /// reset()-per-buffer + floor() converter lost ~half the frames at the tap's
+    /// tiny ~154-frame 48 kHz callbacks (ratio 0.333), so remote voices played
+    /// back ~2x too fast / high-pitched. A fresh ProcessAudioTap is created per
+    /// recording, so this instance never carries state across recordings.
+    private lazy var asrConverter = PCMStreamConverter(targetSampleRate: 16_000)
+    private lazy var hqConverter = PCMStreamConverter(targetSampleRate: 48_000)
     private var callbackCount = 0
 
     /// Startet den Process Tap fuer die angegebenen Bundle IDs.
@@ -115,7 +118,6 @@ final class ProcessAudioTap: @unchecked Sendable {
 
         // 5. IOProc starten — hier kommen die Audio-Daten
         callbackCount = 0
-        formatConverter = nil
 
         err = AudioDeviceCreateIOProcIDWithBlock(&deviceProcID, aggregateDeviceID, audioQueue) {
             [weak self] inNow, inInputData, inInputTime, outOutputData, inOutputTime in
@@ -154,7 +156,6 @@ final class ProcessAudioTap: @unchecked Sendable {
             processTapID = kAudioObjectUnknown
         }
 
-        formatConverter = nil
         tapStreamDescription = nil
         logger.warning("ProcessTap gestoppt")
     }
@@ -188,42 +189,17 @@ final class ProcessAudioTap: @unchecked Sendable {
         guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, bufferListNoCopy: bufferList) else { return }
         guard pcmBuffer.frameLength > 0 else { return }
 
-        // Converter erstellen/cachen
-        if formatConverter == nil {
-            formatConverter = AVAudioConverter(from: sourceFormat, to: targetFormat)
-        }
-        guard let converter = formatConverter else { return }
-
-        let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(pcmBuffer.frameLength) * ratio)
-        guard outputFrameCount > 0 else { return }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: outputFrameCount
-        ) else { return }
-
-        var error: NSError?
-        var hasData = true
-        converter.reset()
-
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return pcmBuffer
-            } else {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
+        // High-resolution archive path: convert the same native buffer to 48 kHz
+        // mono with the drain-correct converter (independent of the 16 kHz ASR path).
+        if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
+            onSamplesHQ(hq)
         }
 
-        guard error == nil,
-              let channelData = outputBuffer.floatChannelData,
-              outputBuffer.frameLength > 0 else { return }
-
-        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
-        guard !samples.isEmpty else { return }
+        // 16 kHz ASR path via the drain-correct streaming converter. The previous
+        // reset()-per-buffer + floor() converter dropped the resampler filter tail
+        // on every tiny ~154-frame callback, losing ~50% of the samples at 48k→16k
+        // and time-compressing the remote audio ~2x.
+        guard let samples = asrConverter?.convert(pcmBuffer), !samples.isEmpty else { return }
 
         callbackCount += 1
         if callbackCount <= 5 {

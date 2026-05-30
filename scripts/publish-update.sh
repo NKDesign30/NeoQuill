@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Publish a notarized NeoQuill release to the public update channel.
 #
-# Prerequisites (all produced by scripts/package-release.sh --strict-distribution --notarize):
-#   - dist/NeoQuill-vX.Y.Z-*.zip               (Developer ID signed + Apple notarized + stapled)
+# Prerequisites:
+#   - dist/NeoQuill-vX.Y.Z-*.dmg               (primary Direct-Sale artefact)
+#   - dist/NeoQuill-vX.Y.Z-*.dmg.sha256
+#   - dist/NeoQuill-vX.Y.Z-*.zip               (legacy/scripted fallback)
 #   - dist/NeoQuill-vX.Y.Z-*.zip.sha256
-#   - dist/NeoQuill-vX.Y.Z-*.json              (build manifest)
+#   - dist/NeoQuill-vX.Y.Z-*.json              (build manifest next to ZIP)
 #
 # What this script does:
-#   1. Runs generate_appcast against dist/, which scans every ZIP, reads its
-#      Info.plist for version metadata and signs the entry with the Sparkle
-#      EdDSA private key stored in the macOS Keychain.
+#   1. Uses the newest JSON manifest as source of truth, requires matching
+#      DMG/ZIP artefacts plus sidecars, and runs generate_appcast against the
+#      matching DMG. Sparkle reads its Info.plist for version metadata and signs
+#      the entry with the Sparkle EdDSA private key stored in the macOS Keychain.
 #   2. Copies the generated appcast.xml to the repo root.
 #   3. Commits the appcast.xml on the current branch.
 #   4. Creates (or updates) a GitHub Release for tag vX.Y.Z and uploads the
-#      ZIP, SHA256 and manifest as assets.
+#      DMG, ZIP, SHA256 sidecars and manifest as assets.
 #
 # Usage:
 #   ./scripts/publish-update.sh                                # publish current VERSION
@@ -47,6 +50,11 @@ SPARKLE_BIN="${NEOQUILL_SPARKLE_BIN:-$HOME/.neoquill-signing/sparkle/bin}"
 VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
 TAG_NAME="v$VERSION_VALUE"
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "FEHLER: python3 fehlt."
+  exit 1
+fi
+
 if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   echo "FEHLER: generate_appcast nicht gefunden in $SPARKLE_BIN"
   echo "  Sparkle Release-Bundle entpacken nach ~/.neoquill-signing/sparkle/ oder"
@@ -54,40 +62,132 @@ if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
   exit 1
 fi
 
-# Prefer DMG over ZIP — DMG is the public Direct-Sale artefact, ZIP is the
-# legacy/fallback enclosure for Sparkle clients without DMG support.
-DMG_PATH=$(ls -1t dist/NeoQuill-${TAG_NAME}-*.dmg 2>/dev/null | head -1 || true)
-ZIP_PATH=$(ls -1t dist/NeoQuill-${TAG_NAME}-*.zip 2>/dev/null | head -1 || true)
+latest_dist_file() {
+  local pattern="$1"
+  python3 - "$pattern" <<'PY'
+import glob
+import os
+import re
+import sys
 
-if [ -z "$DMG_PATH" ] && [ -z "$ZIP_PATH" ]; then
-  echo "FEHLER: keine dist/NeoQuill-${TAG_NAME}-*.{dmg,zip} gefunden."
-  echo "  Erst ./scripts/build-dmg.sh --notarize oder"
-  echo "  ./scripts/package-release.sh --strict-distribution --notarize ausführen."
+files = glob.glob(sys.argv[1])
+
+def sort_key(path):
+    name = os.path.basename(path)
+    match = re.search(r"-build(\d+)-", name)
+    build = int(match.group(1)) if match else -1
+    return (build, os.path.getmtime(path), name)
+
+if files:
+    print(max(files, key=sort_key))
+PY
+}
+
+manifest_value() {
+  local path="$1"
+  local key="$2"
+  python3 - "$path" "$key" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+value = data.get(sys.argv[2])
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(value)
+PY
+}
+
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [ ! -f "$path" ]; then
+    echo "FEHLER: $label fehlt: $path"
+    exit 1
+  fi
+}
+
+require_main_for_public_publish() {
+  if [ "$DRY_RUN" = "1" ] || [ "$SKIP_PUSH" = "1" ]; then
+    return
+  fi
+  local branch
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  if [ "$branch" != "main" ]; then
+    echo "FEHLER: Public publish muss auf main laufen; aktueller Branch ist '$branch'."
+    echo "  --dry-run für Preview oder --skip-push für lokalen Appcast-Commit nutzen."
+    exit 1
+  fi
+}
+
+require_clean_tracked_worktree() {
+  if [ "$DRY_RUN" = "1" ]; then
+    return
+  fi
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "FEHLER: Git-Working-Tree enthält tracked Änderungen."
+    echo "  Erst committen/stashen. publish-update committet nur appcast.xml."
+    exit 1
+  fi
+}
+
+MANIFEST_PATH="$(latest_dist_file "dist/NeoQuill-${TAG_NAME}-*.json")"
+if [ -z "$MANIFEST_PATH" ]; then
+  echo "FEHLER: kein dist/NeoQuill-${TAG_NAME}-*.json gefunden."
+  echo "  Erst ./scripts/package-release.sh --strict-distribution --notarize ausführen."
   exit 1
 fi
 
-# Collect every uploadable artefact for this tag (DMG/ZIP + their sidecars).
-ASSETS=()
-for f in "$DMG_PATH" "$ZIP_PATH"; do
-  [ -n "$f" ] || continue
-  ASSETS+=("$f")
-  [ -f "${f}.sha256" ] && ASSETS+=("${f}.sha256")
-done
-# Manifest sits next to the ZIP today; if we only have a DMG, skip it.
-if [ -n "$ZIP_PATH" ] && [ -f "${ZIP_PATH%.zip}.json" ]; then
-  ASSETS+=("${ZIP_PATH%.zip}.json")
+MANIFEST_VERSION="$(manifest_value "$MANIFEST_PATH" version)"
+MANIFEST_ARCHIVE="$(manifest_value "$MANIFEST_PATH" archive)"
+MANIFEST_BUILD="$(manifest_value "$MANIFEST_PATH" build)"
+MANIFEST_COMMIT="$(manifest_value "$MANIFEST_PATH" gitCommit)"
+
+if [ "$MANIFEST_VERSION" != "$VERSION_VALUE" ]; then
+  echo "FEHLER: Manifest-Version ist '$MANIFEST_VERSION', erwartet '$VERSION_VALUE'."
+  exit 1
 fi
+
+if [ -z "$MANIFEST_ARCHIVE" ] || [ -z "$MANIFEST_BUILD" ] || [ -z "$MANIFEST_COMMIT" ]; then
+  echo "FEHLER: Manifest ist unvollständig: $MANIFEST_PATH"
+  exit 1
+fi
+
+if [[ "$MANIFEST_ARCHIVE" != NeoQuill-"$TAG_NAME"-*.zip ]]; then
+  echo "FEHLER: Manifest-Archiv passt nicht zu $TAG_NAME: $MANIFEST_ARCHIVE"
+  exit 1
+fi
+
+ZIP_PATH="dist/$MANIFEST_ARCHIVE"
+DMG_PATH="dist/NeoQuill-${TAG_NAME}-build${MANIFEST_BUILD}-${MANIFEST_COMMIT}.dmg"
+
+require_file "$ZIP_PATH" "ZIP"
+require_file "$ZIP_PATH.sha256" "ZIP-SHA256"
+require_file "$DMG_PATH" "DMG"
+require_file "$DMG_PATH.sha256" "DMG-SHA256"
+
+ASSETS=(
+  "$DMG_PATH"
+  "$DMG_PATH.sha256"
+  "$ZIP_PATH"
+  "$ZIP_PATH.sha256"
+  "$MANIFEST_PATH"
+)
+
+require_main_for_public_publish
+require_clean_tracked_worktree
 
 echo "  Artefakte: ${ASSETS[*]}"
 
 APPCAST_SOURCE_DIR="$(mktemp -d)"
 trap 'rm -rf "$APPCAST_SOURCE_DIR"' EXIT
 
-APPCAST_ARCHIVE="$DMG_PATH"
-if [ -z "$APPCAST_ARCHIVE" ]; then
-  APPCAST_ARCHIVE="$ZIP_PATH"
-fi
-cp "$APPCAST_ARCHIVE" "$APPCAST_SOURCE_DIR/"
+cp "$DMG_PATH" "$APPCAST_SOURCE_DIR/"
 
 echo "[1/4] generate_appcast über $APPCAST_SOURCE_DIR/"
 if [ "$DRY_RUN" = "1" ]; then

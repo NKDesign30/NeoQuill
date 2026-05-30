@@ -46,13 +46,14 @@ final class AudioCapture: NSObject, ObservableObject {
     private var micFallbackTimer: Timer?
     private let micOutputQueue = DispatchQueue(label: "com.quill.mic-capture", qos: .userInitiated)
     nonisolated(unsafe) var micCallbackCount: Int = 0
-    nonisolated(unsafe) var micConverter: AVAudioConverter?
-    private let micTargetFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32,
-        sampleRate: 16000,
-        channels: 1,
-        interleaved: false
-    )!
+    /// Drain-correct 16 kHz converter for the mic ASR path, shared by the
+    /// AVCapture delegate and the AVAudioEngine fallback (they never run at the
+    /// same time — the fallback replaces the delegate). Recreated on start() and
+    /// on the fallback switch so no resampler filter state leaks across sources.
+    nonisolated(unsafe) var micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
+    /// 48 kHz mono converter for the high-resolution archive path. Same
+    /// single-active-source invariant as above.
+    nonisolated(unsafe) var micHQConverter = PCMStreamConverter(targetSampleRate: 48_000)
 
     // Process Tap (System Audio) — Primary
     private var processTap: ProcessAudioTap?
@@ -67,6 +68,20 @@ final class AudioCapture: NSObject, ObservableObject {
     // Vollstaendige Aufnahme-Buffer (werden NIE geleert, nur beim Mix am Ende)
     private var micRecording: [Float] = []
     private var sysRecording: [Float] = []
+    // High-resolution 48 kHz mono stems for the playback/export archive.
+    // Kept separate from the 16 kHz ASR buffers above so the ASR/diarization
+    // input stays byte-identical to before.
+    private var micRecordingHQ: [Float] = []
+    private var sysRecordingHQ: [Float] = []
+    // Start time of the recording and the per-source offset of the first HQ
+    // sample. The mic and system sources start at different times (the mic often
+    // falls back to AVAudioEngine a few seconds in), so without this the later
+    // source would be aligned to index 0 and play time-shifted. We pad each HQ
+    // stem at the front by its offset to keep mic and system in sync.
+    private var hqStartTime: Date?
+    private var micHQStartOffset: TimeInterval?
+    private var sysHQStartOffset: TimeInterval?
+    private let hqSampleRate: Double = 48_000
     private var lastLevelUpdate: Date = .distantPast
     private var lastDebugLog: Date = .distantPast
     private var nonZeroSamplesTotal = 0
@@ -123,6 +138,12 @@ final class AudioCapture: NSObject, ObservableObject {
         sysBuffer = []
         micRecording = []
         sysRecording = []
+        micRecordingHQ = []
+        sysRecordingHQ = []
+        micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
+        hqStartTime = Date()
+        micHQStartOffset = nil
+        sysHQStartOffset = nil
         micRmsAccum = 0
         micRmsSampleCount = 0
         tapRmsAccum = 0
@@ -208,6 +229,11 @@ final class AudioCapture: NSObject, ObservableObject {
                     self?.appendAudio(samples, source: "Tap")
                 }
             }
+            sck.onSamplesHQ = { [weak self] hq in
+                Task { @MainActor in
+                    self?.appendAudioHQ(hq, source: "Tap")
+                }
+            }
             sckCapture = sck
             Task {
                 do {
@@ -247,7 +273,9 @@ final class AudioCapture: NSObject, ObservableObject {
         micSession?.stopRunning()
         micSession = nil
         micOutput = nil
-        micConverter = nil
+        // Fresh converter: the engine fallback's source format differs from the
+        // AVCapture delegate's, so the held resampler must not carry over.
+        micASRConverter = PCMStreamConverter(targetSampleRate: 16_000)
 
         do {
             try startMicEngineFallback()
@@ -276,7 +304,6 @@ final class AudioCapture: NSObject, ObservableObject {
         micSession?.stopRunning()
         micSession = nil
         micOutput = nil
-        micConverter = nil
         micEngine?.inputNode.removeTap(onBus: 0)
         micEngine?.stop()
         micEngine = nil
@@ -307,6 +334,11 @@ final class AudioCapture: NSObject, ObservableObject {
         tap.onSamples = { [weak self] samples in
             Task { @MainActor in
                 self?.appendAudio(samples, source: "Tap")
+            }
+        }
+        tap.onSamplesHQ = { [weak self] hq in
+            Task { @MainActor in
+                self?.appendAudioHQ(hq, source: "Tap")
             }
         }
 
@@ -380,9 +412,15 @@ final class AudioCapture: NSObject, ObservableObject {
         }
 
         input.installTap(onBus: 0, bufferSize: 2048, format: sourceFormat) { buffer, _ in
-            guard let samples = Self.convertTo16kMono(buffer) else { return }
-            Task { @MainActor in
-                self.appendAudio(samples, source: "Mic")
+            if let samples = self.micASRConverter?.convert(buffer), !samples.isEmpty {
+                Task { @MainActor in
+                    self.appendAudio(samples, source: "Mic")
+                }
+            }
+            if let hq = self.micHQConverter?.convert(buffer), !hq.isEmpty {
+                Task { @MainActor in
+                    self.appendAudioHQ(hq, source: "Mic")
+                }
             }
         }
         engine.prepare()
@@ -391,40 +429,6 @@ final class AudioCapture: NSObject, ObservableObject {
         currentMicName = currentMicName.isEmpty ? "System-Mikrofon" : "\(currentMicName) · Engine"
         logger.warning("Mic-Fallback AVAudioEngine gestartet: \(sourceFormat, privacy: .public)")
         diagLog("MIC ENGINE STARTED: format=\(sourceFormat)")
-    }
-
-    nonisolated private static func convertTo16kMono(_ buffer: AVAudioPCMBuffer) -> [Float]? {
-        let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: 16_000,
-            channels: 1,
-            interleaved: false
-        )!
-        guard buffer.frameLength > 0,
-              let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else { return nil }
-
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
-        guard outputFrameCount > 0,
-              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount)
-        else { return nil }
-
-        var error: NSError?
-        var hasData = true
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return buffer
-            }
-            outStatus.pointee = .noDataNow
-            return nil
-        }
-
-        guard error == nil,
-              let channel = outputBuffer.floatChannelData?[0],
-              outputBuffer.frameLength > 0 else { return nil }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(outputBuffer.frameLength)))
     }
 
     // MARK: - Buffer Management
@@ -499,6 +503,22 @@ final class AudioCapture: NSObject, ObservableObject {
         audioLevel = sqrt(sumSquares / Float(max(cleaned.count, 1)))
     }
 
+    /// Appends 48 kHz mono samples to the high-resolution archive stems. Separate
+    /// from `appendAudio` so the 16 kHz ASR buffers are never touched by this path.
+    /// Records each source's first-sample offset so the stems can be time-aligned.
+    fileprivate func appendAudioHQ(_ samples: [Float], source: String) {
+        guard !samples.isEmpty else { return }
+        let cleaned: [Float] = samples.map { $0.isFinite ? min(max($0, -1), 1) : 0 }
+        let offset = hqStartTime.map { Date().timeIntervalSince($0) }
+        if source == "Tap" {
+            if sysHQStartOffset == nil { sysHQStartOffset = offset }
+            sysRecordingHQ.append(contentsOf: cleaned)
+        } else {
+            if micHQStartOffset == nil { micHQStartOffset = offset }
+            micRecordingHQ.append(contentsOf: cleaned)
+        }
+    }
+
     /// Snapshot der bisherigen Recording-Buffer ohne sie zu leeren.
     /// Nach `stop()` aufrufen, um finales Transkript + Diarization zu bauen.
     func collectFinalAudio() -> (mic: [Float], sys: [Float], mixed: [Float]) {
@@ -508,29 +528,78 @@ final class AudioCapture: NSObject, ObservableObject {
         return (mic, sys, mixed)
     }
 
+    /// Snapshot of the high-resolution 48 kHz mono stems (mic + system) for the
+    /// stereo playback/export archive, time-aligned so both start at the recording
+    /// start. Each stem is front-padded with silence by its own first-sample
+    /// offset, so a source that started late (e.g. the mic falling back to
+    /// AVAudioEngine a few seconds in) no longer plays time-shifted against the
+    /// other. Empty arrays if no HQ samples were produced (caller falls back to
+    /// the 16 kHz mix).
+    func collectFinalAudioHQ() -> (micHQ: [Float], sysHQ: [Float]) {
+        let mic = Self.frontPadded(micRecordingHQ, offset: micHQStartOffset, sampleRate: hqSampleRate)
+        let sys = Self.frontPadded(sysRecordingHQ, offset: sysHQStartOffset, sampleRate: hqSampleRate)
+        return (mic, sys)
+    }
+
+    /// Prepends `offset` seconds of silence so stems captured with different start
+    /// times line up on a common timeline. Caps the padding defensively so a
+    /// clock glitch can never allocate an absurd buffer. Internal for testing.
+    nonisolated static func frontPadded(_ samples: [Float], offset: TimeInterval?, sampleRate: Double) -> [Float] {
+        guard !samples.isEmpty, let offset, offset > 0.01, offset.isFinite else { return samples }
+        let padFrames = min(Int(offset * sampleRate), Int(sampleRate * 600))  // <= 10 min guard
+        guard padFrames > 0 else { return samples }
+        return [Float](repeating: 0, count: padFrames) + samples
+    }
+
     /// Buffer leeren (vor neuer Aufnahme).
     func clearRecording() {
         micRecording.removeAll()
         sysRecording.removeAll()
+        micRecordingHQ.removeAll()
+        sysRecordingHQ.removeAll()
+        micHQStartOffset = nil
+        sysHQStartOffset = nil
         micBuffer.removeAll()
         sysBuffer.removeAll()
     }
 
     private func getMixedAudio() -> [Float] {
-        let length = max(micRecording.count, sysRecording.count)
+        // Use the same first-sample offsets the HQ archive uses, so the mono mix
+        // is aligned on the shared timeline too. Without this the mic (which often
+        // starts a few seconds late on AVAudioEngine fallback) was mixed from
+        // index 0 and played time-shifted against the system audio.
+        Self.alignedMix(
+            mic: micRecording,
+            micOffset: micHQStartOffset,
+            system: sysRecording,
+            systemOffset: sysHQStartOffset,
+            sampleRate: 16_000
+        )
+    }
+
+    /// Mixes mic + system into one mono track, each front-padded by its own
+    /// first-sample offset so a late-starting source lines up on the shared
+    /// timeline instead of being pulled to the front. Peaks are hard-clipped
+    /// (no global normalisation, which used to crush quiet meetings). Internal
+    /// for testing.
+    nonisolated static func alignedMix(
+        mic: [Float],
+        micOffset: TimeInterval?,
+        system: [Float],
+        systemOffset: TimeInterval?,
+        sampleRate: Double
+    ) -> [Float] {
+        let m = frontPadded(mic, offset: micOffset, sampleRate: sampleRate)
+        let s = frontPadded(system, offset: systemOffset, sampleRate: sampleRate)
+        let length = max(m.count, s.count)
         guard length > 0 else { return [] }
 
         var mixed = [Float](repeating: 0, count: length)
-        for i in 0..<micRecording.count { mixed[i] = micRecording[i] }
-        for i in 0..<sysRecording.count { mixed[i] += sysRecording[i] }
-
-        // Peak-Limiter: Spikes hart clippen statt globale Normalisierung.
-        // Alte Methode skalierte ALLES runter wenn ein einziger Spike existierte,
-        // was Meetings auf -50 dB drückte und Transkription unmöglich machte.
+        for i in 0..<m.count { mixed[i] = m[i] }
+        for i in 0..<s.count { mixed[i] += s[i] }
         for i in 0..<mixed.count {
             mixed[i] = min(max(mixed[i], -0.95), 0.95)
         }
-
         return mixed
     }
 
@@ -580,41 +649,16 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
         }
         guard let pcmBuffer = pcmBuffer else { return }
 
-        if self.micConverter == nil {
-            self.micConverter = AVAudioConverter(from: sourceFormat, to: self.micTargetFormat)
-        }
-        guard let converter = self.micConverter else { return }
-
-        let ratio = self.micTargetFormat.sampleRate / sourceFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(pcmBuffer.frameLength) * ratio)
-        guard outputFrameCount > 0 else { return }
-
-        guard let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: self.micTargetFormat,
-            frameCapacity: outputFrameCount
-        ) else { return }
-
-        var error: NSError?
-        var hasData = true
-        converter.reset()
-
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-            if hasData {
-                hasData = false
-                outStatus.pointee = .haveData
-                return pcmBuffer
-            } else {
-                outStatus.pointee = .noDataNow
-                return nil
+        // High-resolution archive path: 48 kHz mono from the same native buffer.
+        if let hq = self.micHQConverter?.convert(pcmBuffer), !hq.isEmpty {
+            Task { @MainActor in
+                self.appendAudioHQ(hq, source: "Mic")
             }
         }
 
-        guard error == nil,
-              let channelData = outputBuffer.floatChannelData,
-              outputBuffer.frameLength > 0 else { return }
-
-        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(outputBuffer.frameLength)))
-        guard !samples.isEmpty else { return }
+        // Drain-correct 16 kHz resampling, same path as the system tap. Replaces
+        // the old reset()-per-buffer + floor() converter.
+        guard let samples = self.micASRConverter?.convert(pcmBuffer), !samples.isEmpty else { return }
 
         self.micCallbackCount += 1
         if self.micCallbackCount <= 5 {

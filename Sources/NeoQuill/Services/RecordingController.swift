@@ -281,6 +281,34 @@ final class RecordingController: ObservableObject {
         }
     }
 
+    /// Re-runs final STT for meetings left stuck in `processing` with no
+    /// transcript — i.e. the app was quit or crashed mid-transcription, so the
+    /// whisper subprocess died and the meeting would otherwise show
+    /// "Wird transkribiert…" forever. Runs at app start. Sequential on purpose so
+    /// we never spawn several whisper-cli processes at once. The reprocess path
+    /// always clears `processing`, so even a meeting whose audio is gone gets
+    /// unstuck rather than hanging again.
+    func recoverOrphanedTranscripts() {
+        guard let store else { return }
+        let orphans = store.details.values
+            .filter { $0.processing && $0.transcript.isEmpty }
+            .map(\.id)
+        guard !orphans.isEmpty else { return }
+        Task { [weak self] in
+            guard let self, let store = self.store else { return }
+            for id in orphans {
+                // Clear the stuck `processing` flag first — reprocessMeetingAsync
+                // bails out on `!detail.processing`, which is exactly the state an
+                // orphaned meeting is in. Without this the re-run is a no-op.
+                if var detail = store.detail(for: id) {
+                    detail.processing = false
+                    store.updateDetail(detail)
+                }
+                await self.reprocessMeetingAsync(id)
+            }
+        }
+    }
+
     /// Importiert eine externe Audiodatei (iPhone-Sprachmemo, Diktiergerät,
     /// beliebige .m4a/.mp3/.wav/.caf) als eigenständige Aufnahme: dekodieren,
     /// als Mic-Stem persistieren und durch die normale Final-STT- plus
@@ -385,7 +413,8 @@ final class RecordingController: ObservableObject {
         let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
 
         let captured = audioCapture.collectFinalAudio()
-        let audioURL = persistCapturedAudio(meetingId: id, captured: captured)
+        let capturedHQ = audioCapture.collectFinalAudioHQ()
+        let audioURL = persistCapturedAudio(meetingId: id, captured: captured, capturedHQ: capturedHQ)
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
@@ -962,13 +991,27 @@ final class RecordingController: ObservableObject {
 
     private func persistCapturedAudio(
         meetingId: String,
-        captured: (mic: [Float], sys: [Float], mixed: [Float])
+        captured: (mic: [Float], sys: [Float], mixed: [Float]),
+        capturedHQ: (micHQ: [Float], sysHQ: [Float])
     ) -> URL? {
         do {
             let mixURL = try AudioWriter.persist(id: meetingId, stem: .mix, samples: captured.mixed)
             _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: captured.mic)
             _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: captured.sys)
-            return mixURL
+
+            // High-resolution stereo archive (mic = left, system = right) is the
+            // user-facing playback/export file — but only when BOTH sources carry
+            // audio. A hard-panned stereo file with one empty channel would play
+            // in one ear only, so mic-only / system-only captures keep the 16 kHz
+            // mono mix as the playback file.
+            let bothStems = !capturedHQ.micHQ.isEmpty && !capturedHQ.sysHQ.isEmpty
+            let hqURL = bothStems ? try AudioWriter.persistStereo(
+                id: meetingId,
+                stem: .hq,
+                left: capturedHQ.micHQ,
+                right: capturedHQ.sysHQ
+            ) : nil
+            return hqURL ?? mixURL
         } catch {
             NSLog("[RecordingController] Stem persist failed: \(error)")
             return nil
@@ -1151,7 +1194,25 @@ final class RecordingController: ObservableObject {
             ? ((try? AudioWriter.readSamples(from: systemURL)) ?? [])
             : []
         let mixed = mixURL.flatMap { try? AudioWriter.readSamples(from: $0) } ?? []
-        return (mic: mic, system: system, mixed: mixed, audioURL: mixURL)
+        // Playback prefers the 48 kHz stereo archive, but only when BOTH stems
+        // carry audio — a hard-panned stereo file with one empty channel plays in
+        // one ear only, so mic-only / system-only meetings keep the mono mix.
+        // Re-processing/recovery must otherwise never downgrade a meeting that
+        // already has a good .hq archive back to the mono mix.
+        let bothStems = !mic.isEmpty && !system.isEmpty
+        let playbackURL = bothStems
+            ? preferredPlaybackURL(meetingId: meetingId, mixFallback: mixURL)
+            : mixURL
+        return (mic: mic, system: system, mixed: mixed, audioURL: playbackURL)
+    }
+
+    /// Returns the high-resolution stereo archive (`.hq`) if present on disk,
+    /// otherwise the provided mono-mix fallback. Used so re-transcription and
+    /// orphan recovery keep pointing playback at the good stereo file.
+    private func preferredPlaybackURL(meetingId: String, mixFallback: URL?) -> URL? {
+        let hqURL = AudioWriter.url(id: meetingId, stem: .hq)
+        if FileManager.default.fileExists(atPath: hqURL.path) { return hqURL }
+        return mixFallback
     }
 
     private func transcribeFinalAudio(

@@ -54,6 +54,85 @@ else:
 PY
 }
 
+appcast_value() {
+  local path="$1"
+  local requested_version="$2"
+  local key="$3"
+  python3 - "$path" "$requested_version" "$key" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+
+path, requested_version, key = sys.argv[1:4]
+root = ET.parse(path).getroot()
+
+def local_name(tag):
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+def child_text(element, name):
+    for child in element:
+        if local_name(child.tag) == name:
+            return (child.text or "").strip()
+    return ""
+
+def enclosure_for(item):
+    return next((child for child in item if local_name(child.tag) == "enclosure"), None)
+
+def appcast_short_version(item):
+    enclosure = enclosure_for(item)
+    enclosure_short_version = enclosure.get(f"{{{SPARKLE_NS}}}shortVersionString", "") if enclosure is not None else ""
+    return child_text(item, "shortVersionString") or enclosure_short_version
+
+items = [element for element in root.iter() if local_name(element.tag) == "item"]
+if not items:
+    raise SystemExit("no appcast item found")
+
+selected = None
+for item in items:
+    if appcast_short_version(item) == requested_version:
+        selected = item
+        break
+if selected is None:
+    selected = items[0]
+
+enclosure = enclosure_for(selected)
+enclosure_short_version = enclosure.get(f"{{{SPARKLE_NS}}}shortVersionString", "") if enclosure is not None else ""
+enclosure_version = enclosure.get(f"{{{SPARKLE_NS}}}version", "") if enclosure is not None else ""
+
+values = {
+    "shortVersionString": child_text(selected, "shortVersionString") or enclosure_short_version,
+    "version": child_text(selected, "version") or enclosure_version,
+    "enclosureURL": enclosure.get("url", "") if enclosure is not None else "",
+    "enclosureLength": enclosure.get("length", "") if enclosure is not None else "",
+    "edSignature": enclosure.get(f"{{{SPARKLE_NS}}}edSignature", "") if enclosure is not None else "",
+}
+
+print(values.get(key, ""))
+PY
+}
+
+latest_dist_file() {
+  local pattern="$1"
+  python3 - "$pattern" <<'PY'
+import glob
+import os
+import re
+import sys
+
+files = glob.glob(sys.argv[1])
+
+def sort_key(path):
+    name = os.path.basename(path)
+    match = re.search(r"-build(\d+)-", name)
+    build = int(match.group(1)) if match else -1
+    return (build, os.path.getmtime(path), name)
+
+if files:
+    print(max(files, key=sort_key))
+PY
+}
+
 echo "NeoQuill Market Readiness"
 echo "Version: $VERSION_VALUE"
 echo ""
@@ -64,6 +143,7 @@ require_command python3
 require_command shasum
 require_command codesign
 require_command security
+require_command xcrun
 
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   fail "Git-Working-Tree ist dirty"
@@ -108,12 +188,17 @@ else
   fail "Changelog enthält keinen gültigen Abschnitt für $VERSION_VALUE"
 fi
 
-MANIFEST_PATH="$(find dist -maxdepth 1 -type f -name "NeoQuill-v${VERSION_VALUE}-*.json" -print | sort | tail -1 || true)"
+MANIFEST_BUILD=""
+MANIFEST_COMMIT=""
+ARCHIVE_PATH=""
+MANIFEST_PATH="$(latest_dist_file "dist/NeoQuill-v${VERSION_VALUE}-*.json")"
 if [ -z "$MANIFEST_PATH" ]; then
   fail "Release-Manifest für $VERSION_VALUE fehlt in dist/"
 else
   pass "Release-Manifest gefunden: $MANIFEST_PATH"
   MANIFEST_VERSION="$(manifest_value "$MANIFEST_PATH" version)"
+  MANIFEST_BUILD="$(manifest_value "$MANIFEST_PATH" build)"
+  MANIFEST_COMMIT="$(manifest_value "$MANIFEST_PATH" gitCommit)"
   MANIFEST_DIRTY="$(manifest_value "$MANIFEST_PATH" gitDirty)"
   MANIFEST_ARCHIVE="$(manifest_value "$MANIFEST_PATH" archive)"
   MANIFEST_SHA="$(manifest_value "$MANIFEST_PATH" sha256)"
@@ -171,6 +256,105 @@ else
   fi
 fi
 
+DMG_PATH=""
+if [ -n "$MANIFEST_BUILD" ] && [ -n "$MANIFEST_COMMIT" ]; then
+  DMG_PATH="dist/NeoQuill-v${VERSION_VALUE}-build${MANIFEST_BUILD}-${MANIFEST_COMMIT}.dmg"
+else
+  fail "Manifest enthält keinen Build/Commit für DMG-Abgleich"
+fi
+
+if [ -z "$DMG_PATH" ] || [ ! -f "$DMG_PATH" ]; then
+  fail "DMG für Manifest-Build fehlt: $DMG_PATH"
+else
+  pass "DMG passend zum Manifest gefunden: $DMG_PATH"
+  DMG_SHA_PATH="$DMG_PATH.sha256"
+  if [ -f "$DMG_SHA_PATH" ]; then
+    ACTUAL_DMG_SHA="$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')"
+    RECORDED_DMG_SHA="$(awk '{print $1}' "$DMG_SHA_PATH")"
+    if [ "$ACTUAL_DMG_SHA" = "$RECORDED_DMG_SHA" ]; then
+      pass "DMG-SHA256 passt"
+    else
+      fail "DMG-SHA256 passt nicht zu $DMG_SHA_PATH"
+    fi
+  else
+    fail "DMG-SHA256 fehlt: $DMG_SHA_PATH"
+  fi
+
+  if codesign --verify --verbose=2 "$DMG_PATH" >/dev/null 2>&1; then
+    pass "DMG-Signatur ist gültig"
+  else
+    fail "DMG-Signatur ist ungültig"
+  fi
+
+  if xcrun stapler validate "$DMG_PATH" >/dev/null 2>&1; then
+    pass "DMG hat ein gültiges stapled Notarization-Ticket"
+  else
+    fail "DMG hat kein gültiges stapled Notarization-Ticket"
+  fi
+fi
+
+APPCAST_PATH="appcast.xml"
+if [ -f "$APPCAST_PATH" ]; then
+  pass "appcast.xml gefunden"
+  if APPCAST_SHORT_VERSION="$(appcast_value "$APPCAST_PATH" "$VERSION_VALUE" shortVersionString)" \
+     && APPCAST_BUILD_VERSION="$(appcast_value "$APPCAST_PATH" "$VERSION_VALUE" version)" \
+     && APPCAST_ENCLOSURE_URL="$(appcast_value "$APPCAST_PATH" "$VERSION_VALUE" enclosureURL)" \
+     && APPCAST_ENCLOSURE_LENGTH="$(appcast_value "$APPCAST_PATH" "$VERSION_VALUE" enclosureLength)" \
+     && APPCAST_ED_SIGNATURE="$(appcast_value "$APPCAST_PATH" "$VERSION_VALUE" edSignature)"; then
+    pass "appcast.xml ist parsebar"
+
+    if [ "$APPCAST_SHORT_VERSION" = "$VERSION_VALUE" ]; then
+      pass "Appcast-Version passt"
+    else
+      fail "Appcast-Version ist '$APPCAST_SHORT_VERSION', erwartet '$VERSION_VALUE'"
+    fi
+
+    if [ -n "$MANIFEST_BUILD" ] && [ "$APPCAST_BUILD_VERSION" = "$MANIFEST_BUILD" ]; then
+      pass "Appcast-Build passt zum Manifest"
+    elif [ -n "$APPCAST_BUILD_VERSION" ]; then
+      fail "Appcast-Build ist '$APPCAST_BUILD_VERSION', Manifest-Build ist '$MANIFEST_BUILD'"
+    else
+      fail "Appcast-Build fehlt"
+    fi
+
+    EXPECTED_APPCAST_ARCHIVE=""
+    EXPECTED_APPCAST_ARCHIVE_PATH=""
+    if [ -n "${DMG_PATH:-}" ]; then
+      EXPECTED_APPCAST_ARCHIVE="$(basename "$DMG_PATH")"
+      EXPECTED_APPCAST_ARCHIVE_PATH="$DMG_PATH"
+    elif [ -n "${ARCHIVE_PATH:-}" ] && [ -f "$ARCHIVE_PATH" ]; then
+      EXPECTED_APPCAST_ARCHIVE="$(basename "$ARCHIVE_PATH")"
+      EXPECTED_APPCAST_ARCHIVE_PATH="$ARCHIVE_PATH"
+    fi
+
+    EXPECTED_DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG_NAME}/${EXPECTED_APPCAST_ARCHIVE}"
+    if [ -n "$EXPECTED_APPCAST_ARCHIVE" ] && [ "$APPCAST_ENCLOSURE_URL" = "$EXPECTED_DOWNLOAD_URL" ]; then
+      pass "Appcast-Enclosure zeigt auf erwartetes Release-Artefakt"
+    else
+      fail "Appcast-Enclosure ist '$APPCAST_ENCLOSURE_URL', erwartet '$EXPECTED_DOWNLOAD_URL'"
+    fi
+
+    if [ -n "$EXPECTED_APPCAST_ARCHIVE_PATH" ]; then
+      EXPECTED_APPCAST_LENGTH="$(wc -c < "$EXPECTED_APPCAST_ARCHIVE_PATH" | tr -d '[:space:]')"
+      if [ "$APPCAST_ENCLOSURE_LENGTH" = "$EXPECTED_APPCAST_LENGTH" ]; then
+        pass "Appcast-Enclosure-Length passt"
+      else
+        fail "Appcast-Enclosure-Length ist '$APPCAST_ENCLOSURE_LENGTH', erwartet '$EXPECTED_APPCAST_LENGTH'"
+      fi
+    fi
+
+    if [ -n "$APPCAST_ED_SIGNATURE" ]; then
+      pass "Appcast enthält EdDSA-Signatur"
+    else
+      fail "Appcast enthält keine EdDSA-Signatur"
+    fi
+  else
+    fail "appcast.xml ist nicht parsebar"
+  fi
+else
+  fail "appcast.xml fehlt"
+fi
+
 if security find-identity -v -p codesigning 2>/dev/null | grep -q 'Developer ID Application'; then
   pass "Developer ID Application Zertifikat ist in der Keychain"
 else
@@ -204,12 +388,45 @@ if command -v gh >/dev/null 2>&1; then
     else
       fail "GitHub Release ist draft=$RELEASE_DRAFT prerelease=$RELEASE_PRERELEASE"
     fi
-    if grep -Eq "^NeoQuill-v${VERSION_VALUE}-.*\\.zip$" <<<"$RELEASE_ASSETS" \
-       && grep -Eq "^NeoQuill-v${VERSION_VALUE}-.*\\.zip\\.sha256$" <<<"$RELEASE_ASSETS" \
-       && grep -Eq "^NeoQuill-v${VERSION_VALUE}-.*\\.json$" <<<"$RELEASE_ASSETS"; then
-      pass "GitHub Release enthält ZIP, SHA256 und Manifest"
+    EXPECTED_RELEASE_ASSETS=()
+    if [ -n "${DMG_PATH:-}" ]; then
+      EXPECTED_RELEASE_ASSETS+=("$(basename "$DMG_PATH")" "$(basename "$DMG_PATH").sha256")
+    fi
+    if [ -n "${ARCHIVE_PATH:-}" ]; then
+      EXPECTED_RELEASE_ASSETS+=("$(basename "$ARCHIVE_PATH")" "$(basename "$ARCHIVE_PATH").sha256")
+    fi
+    if [ -n "${MANIFEST_PATH:-}" ]; then
+      EXPECTED_RELEASE_ASSETS+=("$(basename "$MANIFEST_PATH")")
+    fi
+
+    MISSING_RELEASE_ASSETS=()
+    for asset in "${EXPECTED_RELEASE_ASSETS[@]}"; do
+      if ! grep -Fxq "$asset" <<<"$RELEASE_ASSETS"; then
+        MISSING_RELEASE_ASSETS+=("$asset")
+      fi
+    done
+
+    UNEXPECTED_RELEASE_ASSETS=()
+    while IFS= read -r asset; do
+      [ -n "$asset" ] || continue
+      [[ "$asset" == NeoQuill-v${VERSION_VALUE}-* ]] || continue
+      found=0
+      for expected in "${EXPECTED_RELEASE_ASSETS[@]}"; do
+        if [ "$asset" = "$expected" ]; then
+          found=1
+          break
+        fi
+      done
+      if [ "$found" -eq 0 ]; then
+        UNEXPECTED_RELEASE_ASSETS+=("$asset")
+      fi
+    done <<<"$RELEASE_ASSETS"
+
+    if [ "${#MISSING_RELEASE_ASSETS[@]}" -eq 0 ] && [ "${#UNEXPECTED_RELEASE_ASSETS[@]}" -eq 0 ]; then
+      pass "GitHub Release enthält exakt erwartete DMG, ZIP, SHA256-Dateien und Manifest"
     else
-      fail "GitHub Release Assets sind unvollständig"
+      [ "${#MISSING_RELEASE_ASSETS[@]}" -eq 0 ] || fail "GitHub Release Assets fehlen: ${MISSING_RELEASE_ASSETS[*]}"
+      [ "${#UNEXPECTED_RELEASE_ASSETS[@]}" -eq 0 ] || fail "GitHub Release Assets sind unerwartet: ${UNEXPECTED_RELEASE_ASSETS[*]}"
     fi
   else
     fail "GitHub Release $TAG_NAME fehlt oder gh ist nicht authentifiziert"
