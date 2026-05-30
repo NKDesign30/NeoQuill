@@ -1,4 +1,6 @@
+import AVFoundation
 import Foundation
+import Security
 
 struct SupportDiagnosticsReport: Codable, Equatable {
     let generatedAt: String
@@ -15,6 +17,14 @@ struct SupportDiagnosticsApp: Codable, Equatable {
     let gitBranch: String
     let gitDirty: String
     let buildDate: String
+    let signature: SupportDiagnosticsSignature
+}
+
+struct SupportDiagnosticsSignature: Codable, Equatable {
+    let bundlePath: String
+    let bundleIdentifier: String
+    let status: String
+    let statusCode: Int
 }
 
 struct SupportDiagnosticsStorage: Codable, Equatable {
@@ -22,6 +32,7 @@ struct SupportDiagnosticsStorage: Codable, Equatable {
     let meetingsDatabase: SupportDiagnosticsFile
     let speakersDatabase: SupportDiagnosticsFile
     let recordingsDirectory: SupportDiagnosticsDirectory
+    let recordingAudioFiles: [SupportDiagnosticsAudioFile]
 }
 
 struct SupportDiagnosticsFile: Codable, Equatable {
@@ -35,6 +46,17 @@ struct SupportDiagnosticsDirectory: Codable, Equatable {
     let exists: Bool
     let fileCount: Int
     let bytes: Int64
+}
+
+struct SupportDiagnosticsAudioFile: Codable, Equatable {
+    let path: String
+    let stem: String
+    let readable: Bool
+    let bytes: Int64
+    let sampleRate: Double?
+    let channels: Int?
+    let frames: Int64?
+    let durationSeconds: Double?
 }
 
 struct SupportDiagnosticsSetting: Codable, Equatable {
@@ -52,7 +74,9 @@ enum SupportDiagnosticsService {
         defaults: UserDefaults = .standard,
         now: Date = Date(),
         fileManager: FileManager = .default,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        bundleURL: URL = Bundle.main.bundleURL,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) throws -> SupportDiagnosticsReport {
         let generatedAt = iso8601String(from: now)
         let app = SupportDiagnosticsApp(
@@ -61,7 +85,12 @@ enum SupportDiagnosticsService {
             gitCommit: appVersion.gitCommit,
             gitBranch: appVersion.gitBranch,
             gitDirty: appVersion.gitDirty,
-            buildDate: appVersion.buildDate
+            buildDate: appVersion.buildDate,
+            signature: signatureSnapshot(
+                bundleURL: bundleURL,
+                bundleIdentifier: bundleIdentifier,
+                homeDirectory: homeDirectory
+            )
         )
         let storage = SupportDiagnosticsStorage(
             applicationSupportPath: redactedPath(applicationSupportDirectory, homeDirectory: homeDirectory),
@@ -76,6 +105,11 @@ enum SupportDiagnosticsService {
                 homeDirectory: homeDirectory
             ),
             recordingsDirectory: try directorySnapshot(
+                recordingsDirectory,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            ),
+            recordingAudioFiles: try recordingAudioSnapshots(
                 recordingsDirectory,
                 fileManager: fileManager,
                 homeDirectory: homeDirectory
@@ -175,6 +209,45 @@ enum SupportDiagnosticsService {
         )
     }
 
+    private static func signatureSnapshot(
+        bundleURL: URL,
+        bundleIdentifier: String?,
+        homeDirectory: URL
+    ) -> SupportDiagnosticsSignature {
+        var staticCode: SecStaticCode?
+        let createStatus = SecStaticCodeCreateWithPath(
+            bundleURL.absoluteURL as CFURL,
+            SecCSFlags(),
+            &staticCode
+        )
+        guard createStatus == errSecSuccess, let staticCode else {
+            return SupportDiagnosticsSignature(
+                bundlePath: redactedPath(bundleURL, homeDirectory: homeDirectory),
+                bundleIdentifier: normalizedBundleIdentifier(bundleIdentifier),
+                status: "unavailable",
+                statusCode: Int(createStatus)
+            )
+        }
+
+        let checkStatus = SecStaticCodeCheckValidity(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSCheckAllArchitectures),
+            nil
+        )
+        return SupportDiagnosticsSignature(
+            bundlePath: redactedPath(bundleURL, homeDirectory: homeDirectory),
+            bundleIdentifier: normalizedBundleIdentifier(bundleIdentifier),
+            status: checkStatus == errSecSuccess ? "valid" : "invalid",
+            statusCode: Int(checkStatus)
+        )
+    }
+
+    private static func normalizedBundleIdentifier(_ bundleIdentifier: String?) -> String {
+        guard let bundleIdentifier else { return "unknown" }
+        let trimmed = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "unknown" : trimmed
+    }
+
     private static func directorySnapshot(
         _ url: URL,
         fileManager: FileManager,
@@ -209,6 +282,72 @@ enum SupportDiagnosticsService {
         )
     }
 
+    private static func recordingAudioSnapshots(
+        _ url: URL,
+        fileManager: FileManager,
+        homeDirectory: URL
+    ) throws -> [SupportDiagnosticsAudioFile] {
+        guard fileManager.fileExists(atPath: url.path) else { return [] }
+        let files = try fileManager.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+        let wavFiles = files
+            .filter { file in
+                file.pathExtension.lowercased() == "wav"
+                    && ((try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+
+        return wavFiles.map { file in
+            audioFileSnapshot(file, fileManager: fileManager, homeDirectory: homeDirectory)
+        }
+    }
+
+    private static func audioFileSnapshot(
+        _ url: URL,
+        fileManager: FileManager,
+        homeDirectory: URL
+    ) -> SupportDiagnosticsAudioFile {
+        let bytes = fileSize(url, fileManager: fileManager)
+        do {
+            let audioFile = try AVAudioFile(forReading: url)
+            let sampleRate = audioFile.fileFormat.sampleRate
+            let frames = Int64(audioFile.length)
+            let duration = sampleRate > 0 ? Double(frames) / sampleRate : nil
+            return SupportDiagnosticsAudioFile(
+                path: redactedPath(url, homeDirectory: homeDirectory),
+                stem: recordingStem(for: url),
+                readable: true,
+                bytes: bytes,
+                sampleRate: sampleRate,
+                channels: Int(audioFile.fileFormat.channelCount),
+                frames: frames,
+                durationSeconds: duration
+            )
+        } catch {
+            return SupportDiagnosticsAudioFile(
+                path: redactedPath(url, homeDirectory: homeDirectory),
+                stem: recordingStem(for: url),
+                readable: false,
+                bytes: bytes,
+                sampleRate: nil,
+                channels: nil,
+                frames: nil,
+                durationSeconds: nil
+            )
+        }
+    }
+
+    private static func recordingStem(for url: URL) -> String {
+        let name = url.lastPathComponent.lowercased()
+        if name.hasSuffix("\(RecordingAudioStem.hq.suffix).wav") { return "hq" }
+        if name.hasSuffix("\(RecordingAudioStem.mic.suffix).wav") { return "mic" }
+        if name.hasSuffix("\(RecordingAudioStem.system.suffix).wav") { return "system" }
+        return "mix"
+    }
+
     private static func fileSize(_ url: URL, fileManager: FileManager) -> Int64 {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
               let size = attributes[.size] as? NSNumber else {
@@ -231,6 +370,8 @@ enum SupportDiagnosticsService {
         Version: \(report.app.version) (\(report.app.build))
         Git: \(report.app.gitBranch)@\(report.app.gitCommit) \(report.app.gitDirty)
         Erstellt: \(report.generatedAt)
+        Signatur: \(report.app.signature.status) (\(report.app.signature.statusCode))
+        Recordings: \(report.storage.recordingsDirectory.fileCount) Dateien, \(report.storage.recordingAudioFiles.count) Audio-Metadaten
 
         Datenschutz: \(report.privacyNotice)
         """
