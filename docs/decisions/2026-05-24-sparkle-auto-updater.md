@@ -5,12 +5,19 @@ Date: 2026-05-24
 ## Decision
 
 Integrate **Sparkle 2.x** as auto-update framework for NeoQuill Direct-Sale builds.
-Host `appcast.xml` and update ZIPs **directly in `NKDesign30/NeoQuill`** once the
-repository is flipped to public visibility.
+Host `appcast.xml` and update artefacts **directly in `NKDesign30/NeoQuill`**
+once the repository is flipped to public visibility.
 
 > **2026-05-24 update.** The initial plan was a separate public mirror repo to
 > keep the source private. Niko decided to make the main repo public instead, so
 > the mirror plan is dropped. See "Hosting Decision" below.
+>
+> **2026-05-30 update.** The public Direct-Sale artefact is the signed and
+> notarized DMG. The ZIP stays available as a legacy / scripted fallback and as
+> the source for the build manifest. `publish-update.sh` now uses the newest
+> manifest as source of truth and requires a clean tracked worktree plus the
+> matching DMG, ZIP, both SHA256 sidecars and JSON manifest before it publishes
+> the appcast / GitHub Release.
 
 ## Why
 
@@ -29,13 +36,15 @@ NKDesign30/NeoQuill (public)
   ├─ appcast.xml                    ← live Sparkle feed
   ├─ CHANGELOG.md
   └─ Releases/                      ← GitHub Releases UI
-       ├─ NeoQuill-v0.9.14-*.zip
-       ├─ NeoQuill-v0.9.14-*.zip.sha256
-       └─ NeoQuill-v0.9.14-*.json   (build manifest)
+       ├─ NeoQuill-v0.9.16-*.dmg        (primary Direct-Sale installer)
+       ├─ NeoQuill-v0.9.16-*.dmg.sha256
+       ├─ NeoQuill-v0.9.16-*.zip        (legacy / scripted fallback)
+       ├─ NeoQuill-v0.9.16-*.zip.sha256
+       └─ NeoQuill-v0.9.16-*.json       (build manifest)
 
 App (running on user Mac)
   └─ Sparkle  ──HTTPS GET──► raw.githubusercontent.com/NKDesign30/NeoQuill/main/appcast.xml
-              ──HTTPS GET──► github.com/NKDesign30/NeoQuill/releases/download/v*.zip
+              ──HTTPS GET──► github.com/NKDesign30/NeoQuill/releases/download/v*.dmg
               └─ EdDSA-verify against SUPublicEDKey in Info.plist
 ```
 
@@ -61,7 +70,9 @@ obscurity.
 - Private key stored in 1Password Automation Vault (same vault as the Developer
   ID Application cert) — **never in repo, never in CI logs**.
 - Public key embedded in `Info.plist` as `SUPublicEDKey`.
-- `generate_appcast` signs every release ZIP with the private key.
+- `generate_appcast` signs the selected release archive with the private key.
+  Current public pipeline signs the DMG enclosure; ZIP remains a release asset
+  for legacy / scripted fallback.
 - Sparkle on the user's Mac verifies signatures before installing.
 
 If the private key is ever compromised, every future update would require a new
@@ -88,35 +99,44 @@ key). Treat with same care as the P12 password.
 
 ## Build/Release Pipeline Integration
 
-- `scripts/package-release.sh` keeps producing the signed + notarized ZIP in
-  `dist/`.
-- New `scripts/publish-update.sh`:
-  1. Reads `dist/NeoQuill-vX.Y.Z-*.zip` and matching manifest.
-  2. Runs `generate_appcast` against `dist/`, signing with the EdDSA private
-     key from the macOS Keychain.
-  3. Copies the updated `appcast.xml` into the repo root.
-  4. Commits `appcast.xml` on `main` and pushes.
-  5. Creates a GitHub Release for tag `vX.Y.Z` with the ZIP, SHA256 and
-     manifest as assets.
-- `scripts/market-readiness.sh` gets an extra check: `appcast.xml` lists the
-  current `VERSION`.
+- `scripts/package-release.sh` keeps producing the signed + notarized ZIP and
+  JSON manifest in `dist/`.
+- `scripts/build-dmg.sh --notarize` packages the signed app into the branded,
+  signed, notarized and stapled DMG installer.
+- `scripts/publish-update.sh`:
+  1. Selects the newest `dist/NeoQuill-vX.Y.Z-*.json` by build number.
+  2. Requires a clean tracked worktree, the matching ZIP from the manifest,
+     matching DMG by build/commit and both SHA256 sidecars.
+  3. Runs `generate_appcast` against a temporary directory containing only the
+     matching DMG, signing with the EdDSA private key from the macOS Keychain.
+  4. Copies the updated `appcast.xml` into the repo root.
+  5. Commits `appcast.xml` on `main` for full public publish; `--dry-run` and
+     `--skip-push` stay available for preview / local review.
+  6. Creates a GitHub Release for tag `vX.Y.Z` with DMG, DMG SHA256, ZIP, ZIP
+     SHA256 and manifest assets.
+- `scripts/market-readiness.sh` checks the current `VERSION`, local manifest /
+  ZIP / SHA256, signed + stapled local DMG, GitHub Release assets and appcast
+  readiness.
 
 ## Verify Path
 
 Live smoke after each Sparkle change:
 
-1. Build + install v0.9.13 (already done locally).
-2. Build v0.9.14 with a visible change (e.g., changelog entry).
-3. Publish v0.9.14 via `publish-update.sh`.
-4. Launch v0.9.13 → menu → `Nach Updates suchen…` → must show v0.9.14, install,
-   relaunch.
+1. Build + install the previous public release.
+2. Build/package the next release via `package-release.sh` and
+   `build-dmg.sh --notarize`.
+3. Publish the next release via `publish-update.sh`.
+4. Launch the previous app → menu → `Nach Updates suchen…` → must show the next
+   release, download the appcast archive, install and relaunch.
 5. After relaunch: `defaults read com.neon.neoquill SUFeedURL` matches; app
-   version shows v0.9.14.
+   version shows the published release.
+6. Run `./scripts/market-readiness.sh`; it must pass the DMG, ZIP, manifest,
+   GitHub Release and appcast checks for the current `VERSION`.
 
 ## Non-Goals
 
 - Delta / binary-diff updates (Sparkle supports them but they need extra
-  storage; ship full ZIPs for v1).
+  storage; ship full DMGs for the public channel and ZIP fallback for v1).
 - Sandboxed update path (NeoQuill is not sandboxed by design — Direct-Sale only).
 - Crash reporting integration (separate decision; out of scope here).
 - In-app license check gating update access (license layer is its own slice).
@@ -128,6 +148,7 @@ Live smoke after each Sparkle change:
 | EdDSA private key loss | 1Password backup, rotation plan documented in this file |
 | Pushing while a tag is half-published | `publish-update.sh` is idempotent; rerun overwrites |
 | User downgrades by editing `SUFeedURL` | `SUFeedURL` in Info.plist is signed via codesign; tampering invalidates Developer ID signature |
-| Apple notary delay blocks update publish | `publish-update.sh` runs AFTER package-release.sh, which already waits for notarization |
+| Apple notary delay blocks update publish | `publish-update.sh` runs after `package-release.sh` and `build-dmg.sh --notarize`; `market-readiness.sh` validates DMG signature and stapled ticket before public ship |
+| ZIP fallback drifts from DMG release | `market-readiness.sh` requires the GitHub Release to contain DMG, ZIP, both SHA256 sidecars and the JSON manifest |
 | `raw.githubusercontent.com` CDN cache | TTL ~5min; acceptable for non-critical updates |
 | Public source visible to competitors | Trade-off accepted; differentiation moves to license layer, brand, distribution |

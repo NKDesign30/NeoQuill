@@ -122,7 +122,7 @@ external provider or connector.
 | Audio capture | AVFoundation · CoreAudio Process Tap · ScreenCaptureKit |
 | Storage | SQLite (WAL mode) |
 | Updates | [Sparkle 2](https://sparkle-project.org) with EdDSA-signed appcast |
-| Distribution | GitHub Releases — Developer ID signed + Apple notarized ZIPs |
+| Distribution | GitHub Releases — Developer ID signed + Apple notarized DMG, ZIP fallback |
 
 ## Development
 
@@ -173,14 +173,16 @@ NEOQUILL_NOTARY_PROFILE=<profile> ./scripts/package-release.sh --strict-distribu
 notarized DMG installer (drag-to-Applications layout, retina background,
 github.com/NKDesign30/NeoQuill footer).
 
-`publish-update.sh` generates and signs the Sparkle appcast, commits it on the
-current branch and creates the matching GitHub Release with the DMG (and the
-legacy ZIP) as assets.
+`publish-update.sh` uses the latest manifest as source of truth, requires a
+clean tracked worktree plus matching DMG, ZIP and SHA256 sidecars, generates and
+signs the Sparkle appcast, commits it on `main` and creates the matching GitHub
+Release. Use `--dry-run` for previews or `--skip-push` for a local appcast
+commit without touching GitHub.
 
 Release artifacts are written to `dist/`:
 
 - `NeoQuill-v<version>-build<build>-<commit>.dmg` — branded installer, primary download
-- `NeoQuill-v<version>-build<build>-<commit>.zip` — Sparkle / scripted fallback
+- `NeoQuill-v<version>-build<build>-<commit>.zip` — legacy / scripted fallback
 - matching `.sha256` for each archive
 - matching `.json` manifest
 

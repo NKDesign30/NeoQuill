@@ -12,7 +12,9 @@ Spotify-Learning für NeoQuill: Professionelle Produkte gewinnen nicht durch meh
 
 - `dev` ist der Arbeitsstand; `main` ist nur verifizierter Release-Stand.
 - Jede App zeigt Version, Build, Branch, Commit, Dirty-State und Build-Datum.
-- Jeder Release läuft durch Tests, Bundle-Build, Signaturcheck, ZIP und SHA256-Manifest.
+- Jeder Release läuft durch Tests, Bundle-Build, Signaturcheck, ZIP/Manifest,
+  signiertes + notarized DMG, EdDSA-signierten Sparkle-Appcast und
+  `market-readiness.sh`.
 - Kritische Produktpfade haben Regressionstests: Aufnahme, Playback, Transkript, Speaker, Export, Diagnostics.
 - Support-Diagnosen bleiben privacy-safe und erklären den Build-Stand ohne Audio-/Transcript-Leak.
 - Feature-Entscheidungen folgen dem Local-first-Versprechen: Cloud nur optional, nie heimlich.
@@ -138,7 +140,8 @@ NeoQuill sollte deshalb nicht "noch ein Meeting-Abo" sein, sondern: lokale Mac-A
 2. Custom Webhook Adapter: Request/Response Contract dokumentieren.
 3. Paywall/Lizenz: Direct-License zuerst, StoreKit danach.
 4. Privacy Export: lokaler Datenordner, Delete-All ohne Re-Seed, Markdown-Archiv, Audio-Retention.
-5. Auto-Updater/Notarization: Sparkle oder eigenes Release-Manifest.
+5. Auto-Updater/Notarization: Sparkle 2, DMG-primary GitHub Release,
+   ZIP-Fallback und hartes Market-Readiness-Gate.
 
 ## AI-Funktionen für v1.5
 
@@ -178,7 +181,8 @@ Nächste echte Connector-Slices:
 - Demo-Video unter 90 Sekunden.
 - Datenschutzseite: lokale Daten, Provider-Keys, Cloud-Toggle.
 - Refund-Policy und Support-Mail.
-- Signed + notarized Release-Bundle.
+- Signed + notarized DMG, ZIP-Fallback, EdDSA-Appcast und grünes
+  `market-readiness.sh`.
 - App Store erst nach Direct-Sale-Learnings.
 
 ## Quellen
