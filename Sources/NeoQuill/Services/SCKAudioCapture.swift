@@ -157,8 +157,13 @@ extension SCKAudioCapture: SCStreamOutput {
         case .screen, .microphone:
             break  // Video/Mic-Frames verwerfen — wir wollen nur App-Audio
         case .audio:
-            guard let pcmBuffer = extractPCMBuffer(from: sampleBuffer),
-                  let samples = resampleTo16kHzMono(pcmBuffer) else { return }
+            guard let pcmBuffer = extractPCMBuffer(from: sampleBuffer) else { return }
+            // High-resolution archive path: 48 kHz mono from the same native buffer.
+            if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
+                onSamplesHQ(hq)
+            }
+
+            guard let samples = resampleTo16kHzMono(pcmBuffer) else { return }
             if !samples.isEmpty {
                 sckCallbackCount += 1
                 if sckCallbackCount <= 3 {
@@ -167,10 +172,6 @@ extension SCKAudioCapture: SCStreamOutput {
                     print("[Quill] SCK Audio Callback #\(sckCallbackCount): \(samples.count) samples, max=\(maxVal), rms=\(rms), format=\(pcmBuffer.format)")
                 }
                 onSamples?(samples)
-            }
-            // High-resolution archive path: 48 kHz mono from the same native buffer.
-            if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
-                onSamplesHQ(hq)
             }
         @unknown default:
             break

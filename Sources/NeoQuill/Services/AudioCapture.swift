@@ -649,6 +649,13 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
         }
         guard let pcmBuffer = pcmBuffer else { return }
 
+        // High-resolution archive path: 48 kHz mono from the same native buffer.
+        if let hq = self.micHQConverter?.convert(pcmBuffer), !hq.isEmpty {
+            Task { @MainActor in
+                self.appendAudioHQ(hq, source: "Mic")
+            }
+        }
+
         // Drain-correct 16 kHz resampling, same path as the system tap. Replaces
         // the old reset()-per-buffer + floor() converter.
         guard let samples = self.micASRConverter?.convert(pcmBuffer), !samples.isEmpty else { return }
@@ -662,13 +669,6 @@ extension AudioCapture: AVCaptureAudioDataOutputSampleBufferDelegate {
 
         Task { @MainActor in
             self.appendAudio(samples, source: "Mic")
-        }
-
-        // High-resolution archive path: 48 kHz mono from the same native buffer.
-        if let hq = self.micHQConverter?.convert(pcmBuffer), !hq.isEmpty {
-            Task { @MainActor in
-                self.appendAudioHQ(hq, source: "Mic")
-            }
         }
     }
 }

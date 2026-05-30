@@ -189,6 +189,12 @@ final class ProcessAudioTap: @unchecked Sendable {
         guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, bufferListNoCopy: bufferList) else { return }
         guard pcmBuffer.frameLength > 0 else { return }
 
+        // High-resolution archive path: convert the same native buffer to 48 kHz
+        // mono with the drain-correct converter (independent of the 16 kHz ASR path).
+        if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
+            onSamplesHQ(hq)
+        }
+
         // 16 kHz ASR path via the drain-correct streaming converter. The previous
         // reset()-per-buffer + floor() converter dropped the resampler filter tail
         // on every tiny ~154-frame callback, losing ~50% of the samples at 48k→16k
@@ -210,12 +216,6 @@ final class ProcessAudioTap: @unchecked Sendable {
         }
 
         onSamples?(samples)
-
-        // High-resolution archive path: convert the same native buffer to 48 kHz
-        // mono with the drain-correct converter (independent of the 16 kHz ASR path).
-        if let onSamplesHQ, let hq = hqConverter?.convert(pcmBuffer), !hq.isEmpty {
-            onSamplesHQ(hq)
-        }
     }
 
     // MARK: - Process Discovery
