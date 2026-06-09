@@ -63,24 +63,40 @@ enum PlatformTranscriptParser {
         return normalize(rawEvents, platform: .meet)
     }
 
+    /// Einziger Zoom-Timeline-Parser. Deckt sowohl die flache Form
+    /// (`speaker_name`/`text` pro Eintrag) als auch den strukturierten
+    /// Zoom-Export mit `users[]`-Talking-State ab.
+    ///
+    /// Users-basierte Einträge sind strenger: sie brauchen einen Sprecher
+    /// (sonst übersprungen) und behalten leere Turns als `[<Sprecher> sprach]`-
+    /// Platzhalter, damit Sprecherwechsel im Transkript sichtbar bleiben. Zoom
+    /// bekommt einheitlich confidence 0.78 (konservativer als die generische
+    /// Default-Confidence, da Timeline-Exports weniger zuverlässig sind als VTT).
     static func parseZoomTimeline(_ data: Data) throws -> [PlatformTranscriptEvent] {
         let root = try jsonRoot(data)
         let dicts = candidateDictionaries(root, preferredKeys: ["transcriptEntries", "entries", "segments", "timeline", "items"])
         let rawEvents: [RawPlatformEvent] = dicts.compactMap { dict in
-            guard let text = firstString(dict, keys: ["text", "content", "transcript"])?.nilIfEmpty else {
-                return nil
-            }
             let (speakerName, speakerId) = zoomSpeakerFields(from: dict)
+            let text = firstString(dict, keys: ["text", "content", "transcript"])
+            let start = firstTimeValue(dict, keys: ["startTime", "start_time", "start", "ts"])
+            let end = firstTimeValue(dict, keys: ["endTime", "end_time", "end", "end_ts"])
+
+            if dict["users"] is [Any] {
+                guard let speakerName else { return nil }
+                if text == nil {
+                    return RawPlatformEvent(
+                        speakerName: speakerName, speakerId: speakerId,
+                        text: "[\(speakerName) sprach]", start: start, end: end, rawPayload: nil
+                    )
+                }
+            }
+            guard let text else { return nil }
             return RawPlatformEvent(
-                speakerName: speakerName,
-                speakerId: speakerId,
-                text: text,
-                start: firstTimeValue(dict, keys: ["startTime", "start_time", "start", "ts"]),
-                end: firstTimeValue(dict, keys: ["endTime", "end_time", "end", "end_ts"]),
-                rawPayload: jsonString(dict)
+                speakerName: speakerName, speakerId: speakerId, text: text,
+                start: start, end: end, rawPayload: jsonString(dict)
             )
         }
-        return normalize(rawEvents, platform: .zoom)
+        return normalize(rawEvents, platform: .zoom, confidence: 0.78)
     }
 
     private static func zoomSpeakerFields(from dict: [String: Any]) -> (name: String?, id: String?) {
@@ -137,7 +153,11 @@ enum PlatformTranscriptParser {
         return out
     }
 
-    private static func normalize(_ rawEvents: [RawPlatformEvent], platform: Platform) -> [PlatformTranscriptEvent] {
+    private static func normalize(
+        _ rawEvents: [RawPlatformEvent],
+        platform: Platform,
+        confidence: Double = 0.94
+    ) -> [PlatformTranscriptEvent] {
         let absoluteStarts = rawEvents.compactMap { event -> Date? in
             if case .absolute(let date)? = event.start { return date }
             return nil
@@ -154,6 +174,7 @@ enum PlatformTranscriptParser {
                 text: raw.text,
                 startSeconds: start,
                 endSeconds: end,
+                confidence: confidence,
                 rawPayload: raw.rawPayload
             )
         }

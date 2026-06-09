@@ -75,14 +75,6 @@ enum PlatformImportService {
                 guard !events.isEmpty else { throw ImportError.empty }
                 return Outcome(platform: .meet, events: events)
 
-            case .zoomTimelineWithUsers:
-                guard let text = String(data: data, encoding: .utf8) else {
-                    throw ImportError.unreadable
-                }
-                let events = try ZoomTranscriptParser.fromTimeline(text)
-                guard !events.isEmpty else { throw ImportError.empty }
-                return Outcome(platform: .zoom, events: events)
-
             case .zoomTimeline:
                 let events = try PlatformTranscriptParser.parseZoomTimeline(data)
                 guard !events.isEmpty else { throw ImportError.empty }
@@ -101,7 +93,6 @@ enum PlatformImportService {
     private enum JSONKind {
         case teamsMetadata
         case meetEntries
-        case zoomTimelineWithUsers
         case zoomTimeline
         case unknown
     }
@@ -117,14 +108,12 @@ enum PlatformImportService {
         let hasSpokenText = allDicts.contains { $0["spokenText"] != nil }
         let hasMeetParticipant = allDicts.contains { $0["participant"] is String }
         let hasTimelineKey = dict["timeline"] != nil
-        let hasUsersArray = allDicts.contains { $0["users"] is [Any] }
         let hasZoomFields = allDicts.contains {
-            $0["user_name"] != nil || $0["speaker_name"] != nil || $0["end_ts"] != nil
+            $0["user_name"] != nil || $0["speaker_name"] != nil || $0["end_ts"] != nil || $0["users"] is [Any]
         }
 
         if hasSpokenText { return .teamsMetadata }
         if hasMeetParticipant { return .meetEntries }
-        if hasTimelineKey && hasUsersArray { return .zoomTimelineWithUsers }
         if hasTimelineKey || hasZoomFields { return .zoomTimeline }
 
         if filename.contains("teams") { return .teamsMetadata }

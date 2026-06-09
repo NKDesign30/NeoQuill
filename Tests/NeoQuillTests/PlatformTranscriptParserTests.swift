@@ -176,9 +176,9 @@ final class PlatformTranscriptParserTests: XCTestCase {
             }
           ]
         }
-        """
+        """.data(using: .utf8)!
 
-        let events = try ZoomTranscriptParser.fromTimeline(json)
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
 
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].speakerName, "Chris Wagner")

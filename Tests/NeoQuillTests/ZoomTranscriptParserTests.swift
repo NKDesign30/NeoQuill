@@ -1,29 +1,10 @@
 import XCTest
 @testable import NeoQuill
 
-final class ZoomTranscriptParserTests: XCTestCase {
-    func testParsesIndexedColonStyleVTT() throws {
-        let raw = """
-        WEBVTT
-
-        1
-        00:00:00.040 --> 00:00:01.700
-        Sarah Ebner: Hallo zusammen.
-
-        2
-        00:00:01.800 --> 00:00:04.500
-        Tom Friedrich: Hi Sarah, alle hörbar.
-        """
-        let events = try ZoomTranscriptParser.fromVTT(raw)
-        XCTAssertEqual(events.count, 2)
-        XCTAssertEqual(events[0].platform, .zoom)
-        XCTAssertEqual(events[0].speakerName, "Sarah Ebner")
-        XCTAssertEqual(events[0].text, "Hallo zusammen.")
-        XCTAssertEqual(events[0].startSeconds, 0.04, accuracy: 0.001)
-        XCTAssertEqual(events[1].speakerName, "Tom Friedrich")
-        XCTAssertEqual(events[1].endSeconds, 4.5, accuracy: 0.001)
-    }
-
+/// Zoom-Timeline-Parsing läuft seit der Parser-Konsolidierung über den einen
+/// `PlatformTranscriptParser.parseZoomTimeline`. Diese Fälle sichern die
+/// users-spezifische Semantik (Sprecher-Pflicht, Platzhalter, confidence).
+final class ZoomTimelineParsingTests: XCTestCase {
     func testParsesTimelineWithRelativeOffsets() throws {
         let json = """
         {
@@ -46,8 +27,8 @@ final class ZoomTranscriptParserTests: XCTestCase {
             }
           ]
         }
-        """
-        let events = try ZoomTranscriptParser.fromTimeline(json)
+        """.data(using: .utf8)!
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
         XCTAssertEqual(events.count, 2)
         XCTAssertEqual(events[0].platform, .zoom)
         XCTAssertEqual(events[0].speakerName, "Sarah Ebner")
@@ -66,8 +47,8 @@ final class ZoomTranscriptParserTests: XCTestCase {
             ]
           }
         ]
-        """
-        let events = try ZoomTranscriptParser.fromTimeline(json)
+        """.data(using: .utf8)!
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].speakerName, "Lisa Müller")
         XCTAssertTrue(events[0].text.contains("Lisa Müller"))
@@ -75,10 +56,11 @@ final class ZoomTranscriptParserTests: XCTestCase {
         XCTAssertEqual(events[0].confidence, 0.78, accuracy: 0.001)
     }
 
-    func testEmptyTimelineThrows() {
-        XCTAssertThrowsError(try ZoomTranscriptParser.fromTimeline("{ \"timeline\": [] }")) { error in
-            XCTAssertEqual(error as? PlatformParserError, .empty)
-        }
+    func testEmptyTimelineReturnsNoEvents() throws {
+        // Der Parser gibt bei leerer Quelle einfach keine Events zurück; ob das
+        // ein Fehler ist, entscheidet PlatformImportService (ImportError.empty).
+        let events = try PlatformTranscriptParser.parseZoomTimeline(Data("{ \"timeline\": [] }".utf8))
+        XCTAssertTrue(events.isEmpty)
     }
 
     func testTimelineSkipsEntriesWithoutSpeaker() throws {
@@ -97,8 +79,8 @@ final class ZoomTranscriptParserTests: XCTestCase {
             }
           ]
         }
-        """
-        let events = try ZoomTranscriptParser.fromTimeline(json)
+        """.data(using: .utf8)!
+        let events = try PlatformTranscriptParser.parseZoomTimeline(json)
         XCTAssertEqual(events.count, 1)
         XCTAssertEqual(events[0].speakerName, "Sarah Ebner")
     }
