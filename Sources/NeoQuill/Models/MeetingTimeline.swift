@@ -31,10 +31,7 @@ struct MeetingTimeline {
 
     /// "12m 3s" / "45s" — auch für Fälle ohne vollständige Timeline nutzbar.
     static func durationShort(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let remainder = Int(seconds) % 60
-        if minutes == 0 { return "\(remainder)s" }
-        return "\(minutes)m \(remainder)s"
+        SpokenDuration.compact(seconds)
     }
 
     /// "14:05" — für Fallback-Titel ("Aufnahme 14:05").

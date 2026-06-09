@@ -1210,10 +1210,7 @@ final class RecordingController: ObservableObject {
     }
 
     nonisolated static func formatSpoke(seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded()))
-        let minutes = total / 60
-        let remainder = total % 60
-        return "\(minutes)m \(remainder)s"
+        SpokenDuration.minutesSeconds(seconds)
     }
 
     private func persistCaptionIdentities(from lines: [TranscriptLine], platform: Platform) {

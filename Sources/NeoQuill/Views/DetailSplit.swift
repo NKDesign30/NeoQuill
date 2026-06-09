@@ -189,7 +189,7 @@ struct DetailSplit: View {
             Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
             Text("SPRECHANTEIL").neonEyebrow()
             VStack(spacing: 12) {
-                let total = ParticipantBar.parseSpoke(meeting.duration)
+                let total = SpokenDuration.seconds(from: meeting.duration) ?? 0
                 ForEach(meeting.participants) { p in
                     ParticipantBar(participant: p, totalSeconds: total, accent: accent)
                 }

@@ -10,7 +10,7 @@ struct ParticipantBar: View {
     @EnvironmentObject private var state: AppState
     @State private var showLabelSheet = false
 
-    private var spokeSeconds: Int { Self.parseSpoke(participant.spoke) }
+    private var spokeSeconds: Int { SpokenDuration.seconds(from: participant.spoke) ?? 0 }
     private var percent: Int {
         guard totalSeconds > 0 else { return 0 }
         return Int((Double(spokeSeconds) / Double(totalSeconds)) * 100.0)
@@ -93,14 +93,4 @@ struct ParticipantBar: View {
         }
     }
 
-    static func parseSpoke(_ s: String) -> Int {
-        // "11m 47s" → 707
-        let cleaned = s.replacingOccurrences(of: "s", with: "")
-        let parts = cleaned.split(separator: "m").map { $0.trimmingCharacters(in: .whitespaces) }
-        guard parts.count >= 2,
-              let m = Int(parts[0]),
-              let sec = Int(parts[1])
-        else { return 0 }
-        return m * 60 + sec
-    }
 }
