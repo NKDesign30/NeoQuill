@@ -27,7 +27,7 @@ struct MeetingActionQueueSection: View {
                             action: action,
                             accent: accent,
                             isLast: index == actions.count - 1,
-                            executeLabel: neoSkillBridgeEnabled ? "An Neo schicken" : action.kind.actionLabel,
+                            executeLabel: neoSkillBridgeEnabled ? "An Inbox senden" : action.kind.actionLabel,
                             onExecute: { execute(action) }
                         )
                     }
@@ -51,7 +51,7 @@ struct MeetingActionQueueSection: View {
             do {
                 if neoSkillBridgeEnabled {
                     _ = try await MeetingInboxBridge.sendMeetingAction(action, from: meeting)
-                    state.notify("An Neo Skill-Bridge gesendet: \(action.kind.displayName)")
+                    state.notify("An Action-Inbox gesendet: \(action.kind.displayName)")
                 } else {
                     let result = try MeetingActionExecutor.execute(action, meeting: meeting)
                     state.notify(result.message)

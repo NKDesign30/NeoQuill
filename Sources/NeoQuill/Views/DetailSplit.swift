@@ -202,7 +202,7 @@ struct DetailSplit: View {
         Task { @MainActor in
             do {
                 _ = try await MeetingInboxBridge.sendActionItem(item, from: meeting)
-                appState.notify("Aufgabe an Neo Inbox: \(item.task)")
+                appState.notify("Aufgabe an Action-Inbox: \(item.task)")
             } catch {
                 appState.notify("Inbox-Fehler: \(error.localizedDescription)")
             }

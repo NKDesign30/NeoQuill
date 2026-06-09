@@ -64,7 +64,7 @@ struct TaskRow: View {
                 Button {
                     onSendToInbox()
                 } label: {
-                    Label("An Neo Inbox senden", systemImage: "tray.and.arrow.up")
+                    Label("An Action-Inbox senden", systemImage: "tray.and.arrow.up")
                 }
             }
         }

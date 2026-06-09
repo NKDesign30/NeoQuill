@@ -279,7 +279,9 @@ private struct ActionConnectorsTab: View {
     @AppStorage(AppSettings.actionDefaultRecipient) private var defaultRecipient = ""
     @AppStorage(AppSettings.actionJiraBaseURL) private var jiraBaseURL = ""
     @AppStorage(AppSettings.actionWebhookURL) private var webhookURL = ""
-    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var neoSkillBridgeEnabled = false
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
+    @AppStorage(AppSettings.actionInboxEndpoint) private var inboxEndpoint = NeonInboxClient.defaultEndpoint.absoluteString
+    @AppStorage(AppSettings.actionJiraMCPEnabled) private var jiraMCPEnabled = false
     @State private var jiraMCPStatus = NeonJiraMCPStatus.empty
     @State private var jiraMCPMessage = ""
     @State private var jiraMCPInstalling = false
@@ -293,14 +295,19 @@ private struct ActionConnectorsTab: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Neo Skill-Bridge") {
-                Toggle("Actions an Neo schicken", isOn: $neoSkillBridgeEnabled)
-                Text("Nutzt die lokale Neo Action Inbox. Daraus kann Neo mit `gog`, Jira-CLI oder Skills echte Gmail-, Kalender- und Jira-Aktionen ausführen.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            Section("Action-Inbox") {
+                Toggle("Aktionen an eine Action-Inbox senden", isOn: $inboxBridgeEnabled)
+                if inboxBridgeEnabled {
+                    TextField("Inbox-Endpoint", text: $inboxEndpoint, prompt: Text(NeonInboxClient.defaultEndpoint.absoluteString))
+                    Text("POSTet Meeting-Aktionen als JSON an einen lokalen oder selbst gehosteten Action-Inbox-Endpoint (z. B. eine eigene Automations-Pipeline). Standard ist der lokale Neon-Stack. Die zugehörigen Buttons erscheinen nur, wenn aktiviert.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Section("Neon Jira MCP") {
+            Section("Jira MCP") {
+                Toggle("Jira-MCP-Integration verwenden", isOn: $jiraMCPEnabled)
+                if jiraMCPEnabled {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         Circle()
@@ -346,6 +353,7 @@ private struct ActionConnectorsTab: View {
                 Text("Installiert `neon-jira-mcp` aus GitHub. Für echtes Ticket-Erstellen braucht der Nutzer lokal `jira login`; NeoQuill speichert keine Jira-Secrets.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                }
             }
 
             Section("Google Workspace / Mail") {
