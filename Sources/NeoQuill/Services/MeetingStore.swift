@@ -284,12 +284,12 @@ final class MeetingStore: ObservableObject {
                 highlight: line.highlight
             )
         }
-        let tldr = replacingSpeakerMentions(in: d.tldr, oldId: oldId, oldName: oldName, newName: name)
+        let tldr = SpeakerMentionRewriter.rewrite(in: d.tldr, oldId: oldId, oldName: oldName, newName: name)
         let highlights = d.highlights.map { highlight in
             Highlight(
                 id: highlight.id,
-                label: replacingSpeakerMentions(in: highlight.label, oldId: oldId, oldName: oldName, newName: name),
-                text: replacingSpeakerMentions(in: highlight.text, oldId: oldId, oldName: oldName, newName: name),
+                label: SpeakerMentionRewriter.rewrite(in: highlight.label, oldId: oldId, oldName: oldName, newName: name),
+                text: SpeakerMentionRewriter.rewrite(in: highlight.text, oldId: oldId, oldName: oldName, newName: name),
                 tone: highlight.tone
             )
         }
@@ -297,7 +297,7 @@ final class MeetingStore: ObservableObject {
             ActionItem(
                 id: item.id,
                 who: item.who == oldId ? newId : item.who,
-                task: replacingSpeakerMentions(in: item.task, oldId: oldId, oldName: oldName, newName: name),
+                task: SpeakerMentionRewriter.rewrite(in: item.task, oldId: oldId, oldName: oldName, newName: name),
                 due: item.due,
                 status: item.status
             )
@@ -306,7 +306,7 @@ final class MeetingStore: ObservableObject {
             Chapter(
                 id: chapter.id,
                 timestamp: chapter.timestamp,
-                label: replacingSpeakerMentions(in: chapter.label, oldId: oldId, oldName: oldName, newName: name),
+                label: SpeakerMentionRewriter.rewrite(in: chapter.label, oldId: oldId, oldName: oldName, newName: name),
                 duration: chapter.duration
             )
         }
@@ -330,41 +330,6 @@ final class MeetingStore: ObservableObject {
         )
         upsertDetail(updated)
         readBackToPublished()
-    }
-
-    private func replacingSpeakerMentions(in text: String, oldId: String, oldName: String?, newName: String) -> String {
-        speakerMentionCandidates(oldId: oldId, oldName: oldName).reduce(text) { partial, candidate in
-            replacingWholeMention(candidate, in: partial, with: newName)
-        }
-    }
-
-    private func speakerMentionCandidates(oldId: String, oldName: String?) -> [String] {
-        var candidates = [oldName, oldId, "Speaker \(oldId)"]
-        let upperId = oldId.uppercased()
-        if upperId.hasPrefix("S") {
-            let number = String(upperId.dropFirst())
-            if !number.isEmpty {
-                candidates.append("Speaker \(number)")
-            }
-        }
-
-        var seen: Set<String> = []
-        return candidates
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .sorted { $0.count > $1.count }
-            .filter { seen.insert($0).inserted }
-    }
-
-    private func replacingWholeMention(_ candidate: String, in text: String, with replacement: String) -> String {
-        let pattern = "(?<![\\p{L}\\p{N}_])\(NSRegularExpression.escapedPattern(for: candidate))(?![\\p{L}\\p{N}_])"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return regex.stringByReplacingMatches(
-            in: text,
-            range: range,
-            withTemplate: NSRegularExpression.escapedTemplate(for: replacement)
-        )
     }
 
     // MARK: - Writes (vorerst nur intern; später vom RecordingManager genutzt)
