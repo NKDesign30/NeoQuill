@@ -4,7 +4,7 @@ import XCTest
 final class RecordingControllerSpeakerIdentityTests: XCTestCase {
     @MainActor
     func testKnownSpeakerIdWinsOverGeneratedSlug() {
-        let id = RecordingController.canonicalSpeakerId(
+        let id = SpeakerIdentityCoordinator.canonicalId(
             name: "Thorsten Fischer",
             knownSpeakerId: "speaker-thorsten-2026"
         )
@@ -15,7 +15,7 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
     @MainActor
     func testExistingSpeakerNameReusesLegacyIdentity() {
         let existing = labeledSpeaker(id: "TF", name: "Thorsten Fischer")
-        let id = RecordingController.canonicalSpeakerId(
+        let id = SpeakerIdentityCoordinator.canonicalId(
             name: " thorsten   fischer ",
             knownSpeakerId: "   ",
             existingSpeakers: [existing]
@@ -26,7 +26,7 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
     @MainActor
     func testNewMultiWordSpeakerUsesStableNameSlug() {
-        let id = RecordingController.canonicalSpeakerId(
+        let id = SpeakerIdentityCoordinator.canonicalId(
             name: "Thorsten Fischer",
             knownSpeakerId: "   "
         )
@@ -36,8 +36,8 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
     @MainActor
     func testSingleNamesDoNotCollideByInitial() {
-        let nikoId = RecordingController.canonicalSpeakerId(name: "Niko")
-        let nadjaId = RecordingController.canonicalSpeakerId(name: "Nadja")
+        let nikoId = SpeakerIdentityCoordinator.canonicalId(name: "Niko")
+        let nadjaId = SpeakerIdentityCoordinator.canonicalId(name: "Nadja")
 
         XCTAssertEqual(nikoId, "speaker-niko")
         XCTAssertEqual(nadjaId, "speaker-nadja")
@@ -46,7 +46,7 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
     @MainActor
     func testGeneratedSpeakerIdNormalizesDiacritics() {
-        let id = RecordingController.canonicalSpeakerId(name: "Jörg Müller")
+        let id = SpeakerIdentityCoordinator.canonicalId(name: "Jörg Müller")
 
         XCTAssertEqual(id, "speaker-jorg-muller")
     }

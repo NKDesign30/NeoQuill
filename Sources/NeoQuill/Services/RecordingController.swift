@@ -993,7 +993,7 @@ final class RecordingController: ObservableObject {
         let embedding = lastEmbeddings[internalId]
             ?? meetingId.flatMap { speakerStore?.meetingEmbedding(meetingId: $0, internalId: internalId) }
             ?? []
-        let canonicalId = Self.canonicalSpeakerId(
+        let canonicalId = SpeakerIdentityCoordinator.canonicalId(
             name: name,
             knownSpeakerId: knownSpeakerId,
             existingSpeakers: speakerStore?.speakers ?? []
@@ -1013,8 +1013,8 @@ final class RecordingController: ObservableObject {
             )
             speakerStore?.renameMeetingInternalId(meetingId: meetingId, from: internalId, to: canonicalId)
         }
-        guard licenseAllowsCrossMeetingSpeakerID() else { return 0 }
-        return backfillCrossMeetings(
+        guard licenseAllowsCrossMeetingSpeakerID(), let speakerStore, let store else { return 0 }
+        return SpeakerIdentityCoordinator(speakerStore: speakerStore, store: store).backfillCrossMeetings(
             embedding: embedding,
             canonicalId: canonicalId,
             name: name,
@@ -1023,105 +1023,10 @@ final class RecordingController: ObservableObject {
         )
     }
 
-    /// Sucht Embedding-Treffer in anderen Meetings und migriert sie auf
-    /// den jetzt bekannten Speaker. Pro Meeting hoechstens ein Treffer
-    /// (der mit dem hoechsten Score), damit ein Speaker nicht zwei Slots
-    /// im selben Meeting belegt.
-    private func backfillCrossMeetings(
-        embedding: [Float],
-        canonicalId: String,
-        name: String,
-        colorHex: UInt32,
-        currentMeetingId: String?
-    ) -> Int {
-        guard !embedding.isEmpty, let speakerStore, let store else { return 0 }
-        let matches = speakerStore.meetingMatches(
-            for: embedding,
-            excluding: currentMeetingId
-        )
-        var seenMeetings: Set<String> = []
-        var migrated = 0
-        for match in matches {
-            guard !seenMeetings.contains(match.meetingId) else { continue }
-            guard match.internalId != canonicalId else {
-                seenMeetings.insert(match.meetingId)
-                continue
-            }
-            store.relabelSpeaker(
-                meetingId: match.meetingId,
-                from: match.internalId,
-                to: canonicalId,
-                name: name,
-                colorHex: colorHex
-            )
-            speakerStore.renameMeetingInternalId(
-                meetingId: match.meetingId,
-                from: match.internalId,
-                to: canonicalId
-            )
-            seenMeetings.insert(match.meetingId)
-            migrated += 1
-        }
-        return migrated
-    }
-
     private func persistMeetingEmbeddings(meetingId: String, embeddings: [String: [Float]]) {
-        guard let speakerStore, !embeddings.isEmpty else { return }
-        for (internalId, embedding) in embeddings where !embedding.isEmpty {
-            speakerStore.recordMeetingEmbedding(
-                meetingId: meetingId,
-                internalId: internalId,
-                embedding: embedding
-            )
-        }
-    }
-
-    static func canonicalSpeakerId(
-        name: String,
-        knownSpeakerId: String? = nil,
-        existingSpeakers: [LabeledSpeaker] = []
-    ) -> String {
-        if let knownSpeakerId = knownSpeakerId?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !knownSpeakerId.isEmpty {
-            return knownSpeakerId
-        }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedName = normalizedSpeakerName(trimmed)
-        if !normalizedName.isEmpty,
-           let existingSpeaker = existingSpeakers.first(where: { normalizedSpeakerName($0.name) == normalizedName }) {
-            return existingSpeaker.id
-        }
-        return generatedSpeakerId(for: trimmed)
-    }
-
-    private static func normalizedSpeakerName(_ name: String) -> String {
-        let folded = name
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-            .lowercased()
-        return folded.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    }
-
-    private static func generatedSpeakerId(for name: String) -> String {
-        let separator = UnicodeScalar("-")
-        let folded = name
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-            .lowercased()
-        var scalars: [UnicodeScalar] = []
-        var lastWasSeparator = true
-        for scalar in folded.unicodeScalars {
-            if CharacterSet.alphanumerics.contains(scalar) {
-                scalars.append(scalar)
-                lastWasSeparator = false
-            } else if !lastWasSeparator {
-                scalars.append(separator)
-                lastWasSeparator = true
-            }
-        }
-        if scalars.last == separator {
-            scalars.removeLast()
-        }
-        let slug = String(String.UnicodeScalarView(scalars))
-        return slug.isEmpty ? "speaker-unknown" : "speaker-\(slug)"
+        guard let speakerStore else { return }
+        SpeakerIdentityCoordinator(speakerStore: speakerStore)
+            .recordMeetingEmbeddings(meetingId: meetingId, embeddings: embeddings)
     }
 
     private func readStoredAudio(
@@ -1361,51 +1266,15 @@ final class RecordingController: ObservableObject {
     }
 
     private func persistCaptionIdentities(from lines: [TranscriptLine], platform: Platform) {
-        var seen: Set<String> = []
-        for line in lines where line.speakerSource == .caption {
-            guard !LocalSpeakerProfile.isLocalSpeakerId(line.who),
-                  let displayName = line.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !displayName.isEmpty,
-                  !seen.contains(line.who)
-            else { continue }
-            seen.insert(line.who)
-            speakerStore?.upsertIdentity(
-                id: line.who,
-                name: displayName,
-                colorHex: SpeakerPalette.color(for: line.who)
-            )
-            speakerStore?.upsertAlias(
-                speakerId: line.who,
-                alias: displayName,
-                source: "caption",
-                platform: platform,
-                externalId: nil
-            )
-        }
+        guard let speakerStore else { return }
+        SpeakerIdentityCoordinator(speakerStore: speakerStore)
+            .persistIdentities(from: lines, platform: platform, kind: .caption)
     }
 
     private func persistPlatformIdentities(from lines: [TranscriptLine], platform: Platform) {
-        var seen: Set<String> = []
-        for line in lines where line.speakerSource == .platformApi {
-            guard !LocalSpeakerProfile.isLocalSpeakerId(line.who),
-                  let displayName = line.displayName?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !displayName.isEmpty,
-                  !seen.contains(line.who)
-            else { continue }
-            seen.insert(line.who)
-            speakerStore?.upsertIdentity(
-                id: line.who,
-                name: displayName,
-                colorHex: SpeakerPalette.color(for: line.who)
-            )
-            speakerStore?.upsertAlias(
-                speakerId: line.who,
-                alias: displayName,
-                source: "platform",
-                platform: platform,
-                externalId: line.who
-            )
-        }
+        guard let speakerStore else { return }
+        SpeakerIdentityCoordinator(speakerStore: speakerStore)
+            .persistIdentities(from: lines, platform: platform, kind: .platform)
     }
 
     private func generateTitle(from lines: [TranscriptLine], started: Date) -> String {
