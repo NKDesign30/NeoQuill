@@ -258,7 +258,7 @@ final class RecordingController: ObservableObject {
         // sodass die RecordingView verlassen und die Detail-View mit
         // "Wird transkribiert…" angezeigt wird. Whisper + Claude laufen im
         // Hintergrund und updaten das Detail wenn fertig.
-        let meetingId = "rec-\(Int(started.timeIntervalSince1970))"
+        let meetingId = MeetingID.recording(at: started)
         insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started)
 
         state = .idle
@@ -358,7 +358,7 @@ final class RecordingController: ObservableObject {
 
         let started = Date()
         let runtime = TimeInterval(samples.count) / AudioImporter.targetSampleRate
-        let meetingId = "import-\(Int(started.timeIntervalSince1970))"
+        let meetingId = MeetingID.imported(at: started)
 
         // Mic- + Mix-Stem schreiben: Mic füttert die Transkription, Mix dient
         // dem späteren Playback im Detail-View.

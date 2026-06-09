@@ -115,13 +115,10 @@ enum TranscriptDownloadWatcher {
             .map { $0.id }
     }
 
-    /// Meeting-IDs sind im Format `rec-<unixTimestamp>` (siehe RecordingController).
-    /// Liefert das Recording-Start-Date oder nil wenn kein parseable Suffix.
+    /// Liefert den Recording-Start aus einer Meeting-ID (Format-Kontrakt in
+    /// `MeetingID`), oder nil wenn die ID keinen parsebaren Timestamp trägt.
     static func recordingTimestamp(from meetingId: String) -> TimeInterval? {
-        let trimmed = meetingId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let stripped = trimmed.hasPrefix("rec-") ? String(trimmed.dropFirst(4)) : trimmed
-        guard let value = TimeInterval(stripped) else { return nil }
-        return value
+        MeetingID.recordingStart(from: meetingId)
     }
 
     static func processedPaths() -> Set<String> {
