@@ -12,7 +12,8 @@ enum AppSettings {
     static let ownerDisplayName    = "owner_display_name"
     static let ownerRole           = "owner_role"
     static let profileOnboarded    = "profile_onboarded"
-    static let language            = "language"
+    static let language            = "language"          // Transkript-/Summary-Sprache
+    static let appLanguage         = "app_language"      // UI-Sprache (system | de | en)
     static let sidebarDensity      = "sidebar_density"
     static let detailLayout        = "detail_layout"
     static let voiceIdEnrolled     = "voice_id_enrolled"
@@ -50,6 +51,7 @@ enum AppSettings {
             profileOnboarded: false,
             whisperModel: "openai_whisper-small",
             language: "auto",
+            appLanguage: "system",
             sidebarDensity: "regular",
             detailLayout: "editorial",
             voiceIdEnrolled: false,
