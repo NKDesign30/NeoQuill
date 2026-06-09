@@ -57,7 +57,7 @@ struct HeaderHero: View {
     private func formatted(_ n: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.locale = Locale(identifier: "de_DE")
+        formatter.locale = Locale.current
         return formatter.string(from: NSNumber(value: n)) ?? "\(n)"
     }
 }

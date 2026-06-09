@@ -27,6 +27,7 @@ enum AppSettings {
     static let actionJiraBaseURL = "action_jira_base_url"
     static let actionWebhookURL = "action_webhook_url"
     static let actionNeoSkillBridgeEnabled = "action_neo_skill_bridge_enabled"
+    static let actionInboxEndpoint = NeonInboxClient.endpointDefaultsKey
     static let captureSourceTeams  = "capture_source_teams"
     static let captureSourceZoom   = "capture_source_zoom"
     static let captureSourceMeet   = "capture_source_meet"
@@ -59,6 +60,7 @@ enum AppSettings {
             actionJiraBaseURL: "",
             actionWebhookURL: "",
             actionNeoSkillBridgeEnabled: false,
+            actionInboxEndpoint: NeonInboxClient.defaultEndpoint.absoluteString,
             captureSourceTeams: true,
             captureSourceZoom: true,
             captureSourceMeet: true,

@@ -7,15 +7,21 @@ struct ReadyContent: View {
     @ObservedObject var state: OnboardingState
     let accent: Color
 
-    private var firstName: String {
-        let parts = state.name.split(separator: " ")
-        return parts.first.map(String.init) ?? "Niko"
+    private var firstName: String? {
+        state.name.split(separator: " ").first.map(String.init)
+    }
+
+    private var readyTitle: String {
+        if let firstName, !firstName.isEmpty {
+            return "Bereit, \(firstName)."
+        }
+        return "Startklar."
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
             OnboardingHeading(
-                title: "Bereit, \(firstName).",
+                title: readyTitle,
                 lead: "Eine letzte Sache: dein Aufnahme-Shortcut. Halte ihn aus jeder App heraus gedrückt und Quill startet — auch ohne Fokus.",
                 accent: accent
             )

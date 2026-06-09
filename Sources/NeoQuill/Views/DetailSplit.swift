@@ -8,6 +8,7 @@ struct DetailSplit: View {
 
     @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
     @State private var visibleTranscriptCount = TranscriptPaging.pageSize
     @State private var pagedTranscriptMeetingId: String?
 
@@ -166,9 +167,7 @@ struct DetailSplit: View {
                             let next: TaskStatus = t.status == .done ? .open : .done
                             state.store.updateTaskStatus(meetingId: meeting.id, taskId: t.id, status: next)
                         },
-                        onSendToInbox: {
-                            sendToInbox(t)
-                        }
+                        onSendToInbox: inboxBridgeEnabled ? { sendToInbox(t) } : nil
                     )
                 }
             }

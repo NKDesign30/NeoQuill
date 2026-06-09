@@ -6,6 +6,7 @@ struct SummaryPane: View {
     let meeting: MeetingDetail
     var accent: Color = Neon.brandPrimary
     @EnvironmentObject private var state: AppState
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {
@@ -62,9 +63,7 @@ struct SummaryPane: View {
                             let next: TaskStatus = t.status == .done ? .open : .done
                             state.store.updateTaskStatus(meetingId: meeting.id, taskId: t.id, status: next)
                         },
-                        onSendToInbox: {
-                            sendToInbox(t)
-                        }
+                        onSendToInbox: inboxBridgeEnabled ? { sendToInbox(t) } : nil
                     )
                 }
             }

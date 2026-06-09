@@ -160,7 +160,7 @@ struct VoiceVisual: View {
             HStack(spacing: 12) {
                 Avatar(initials: speakerInitials, color: accent, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(state.name.isEmpty ? "Niko Knez" : state.name)
+                    Text(state.name.isEmpty ? "Dein Name" : state.name)
                         .font(.neonBody(13, weight: .semibold))
                         .foregroundStyle(Neon.textPrimary)
                     Text("SPRECHER · DU")

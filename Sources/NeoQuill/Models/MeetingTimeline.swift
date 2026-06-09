@@ -41,21 +41,21 @@ struct MeetingTimeline {
 
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
+        f.locale = Locale.current
         f.dateFormat = "HH:mm"
         return f
     }()
 
     private static let dateShortFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
+        f.locale = Locale.current
         f.dateFormat = "dd. MMM."
         return f
     }()
 
     private static let dateLongFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
+        f.locale = Locale.current
         f.dateFormat = "EEEE, dd. MMMM"
         return f
     }()

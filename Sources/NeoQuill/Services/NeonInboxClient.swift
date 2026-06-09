@@ -57,6 +57,11 @@ public struct NeonInboxClient: Sendable {
         case transport(String)
     }
 
+    /// UserDefaults-Key, über den ein Nutzer einen eigenen Inbox-Endpoint setzt.
+    /// Self-contained gehalten, damit der Client als Drop-In ohne `AppSettings` bleibt.
+    public static let endpointDefaultsKey = "action_inbox_endpoint"
+
+    /// Fallback, wenn kein eigener Endpoint konfiguriert ist (lokaler Neon-Stack).
     public static let defaultEndpoint: URL = {
         guard let url = URL(string: "http://127.0.0.1:3850/api/action-inbox/tickets/ingest") else {
             preconditionFailure("NeonInboxClient.defaultEndpoint URL string is not parseable")
@@ -64,16 +69,28 @@ public struct NeonInboxClient: Sendable {
         return url
     }()
 
+    /// Liest den vom Nutzer konfigurierten Endpoint aus den Defaults, sonst Fallback.
+    public static func resolvedEndpoint(defaults: UserDefaults = .standard) -> URL {
+        guard let raw = defaults.string(forKey: endpointDefaultsKey)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let url = URL(string: raw)
+        else {
+            return defaultEndpoint
+        }
+        return url
+    }
+
     public let endpoint: URL
     public let timeout: TimeInterval
     private let session: URLSession
 
     public init(
-        endpoint: URL = NeonInboxClient.defaultEndpoint,
+        endpoint: URL? = nil,
         timeout: TimeInterval = 4.0,
         session: URLSession = .shared
     ) {
-        self.endpoint = endpoint
+        self.endpoint = endpoint ?? NeonInboxClient.resolvedEndpoint()
         self.timeout = timeout
         self.session = session
     }
