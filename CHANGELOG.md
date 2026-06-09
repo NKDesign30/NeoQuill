@@ -9,6 +9,20 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.11.0] - 2026-06-09
+
+- Fixed: Sprechanteil-Balken zeigten bei sehr kurzen Meetings (unter einer
+  Minute) für alle Teilnehmer 0 % an. Die Dauer-Labels laufen jetzt über eine
+  gemeinsame, getestete Umrechnung, die auch die Sekunden-Form ("45s") korrekt
+  zurückrechnet.
+- Changed: Das Onboarding fragt nicht mehr nach einer Organisation — das Feld
+  wurde gesammelt, aber nie verwendet.
+- Changed: Interne Architektur über mehrere Runden konsolidiert. Zeitstempel-
+  und Dauer-Formatierung, die Meeting-ID-Vergabe, die Erkennung wiederholter
+  Transkript-Zeilen und das Call-App-Routing laufen jetzt über jeweils eine
+  Quelle. Toter Code (alter Profil-Dialog, ungenutztes Audio-Persist im
+  Post-Processing) wurde entfernt. Keine Verhaltensänderung, voll getestet.
+
 ## [0.10.0] - 2026-05-30
 
 - Added: Audio-Soak- und Sample-Rate-Invariant-Tests sichern den getrennten
