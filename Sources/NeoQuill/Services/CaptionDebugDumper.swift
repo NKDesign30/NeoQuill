@@ -235,7 +235,6 @@ private extension JSONEncoder {
 
 extension CallApp {
     static var allKnownBundleIdentifiers: [String] {
-        let cases: [CallApp] = [.teams, .zoom, .browser, .facetime, .slack, .webex, .discord]
-        return cases.flatMap { $0.bundleIdentifiers }
+        allCases.flatMap(\.bundleIdentifiers)
     }
 }

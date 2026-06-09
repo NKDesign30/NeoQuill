@@ -14,7 +14,7 @@ struct AudioProcessActivity: Equatable {
 }
 
 /// Erkannte Call-App
-enum CallApp: String {
+enum CallApp: String, CaseIterable {
     case teams = "Microsoft Teams"
     case zoom = "Zoom"
     case facetime = "FaceTime"
@@ -39,6 +39,20 @@ enum CallApp: String {
         case .unknown: return []
         }
     }
+
+    /// Erkennungs-Reihenfolge: spezifische Apps vor dem generischen Browser.
+    /// Single Source der Priorität — genutzt von der aktiven Audio-Detection
+    /// (`detectRunningCallAudioProcess`) und dem Bundle-Match (`match`).
+    static let detectionPriority: [CallApp] = [.teams, .zoom, .facetime, .slack, .webex, .discord, .browser]
+
+    /// Erste Call-App (nach Priorität), deren Bundle-ID unter den laufenden
+    /// liegt. Eine Stelle für „welche Bundle-ID gehört zu welcher App" statt
+    /// hartkodierter if-Ketten.
+    static func match(runningBundleIds: Set<String>) -> CallApp? {
+        detectionPriority.first { app in
+            app.bundleIdentifiers.contains { runningBundleIds.contains($0) }
+        }
+    }
 }
 
 /// Erkennt aktive Calls in Teams, Zoom, FaceTime, Slack, Discord, Browser
@@ -61,18 +75,12 @@ final class MeetingDetector: ObservableObject {
             detectedApp = app
             detectorLogger.warning("detectOnce: \(app.rawValue, privacy: .public)")
         } else {
-            // Fallback: schaue welche Call-Apps offen sind (auch ohne aktives Mic)
-            let runningApps = NSWorkspace.shared.runningApplications
-            let bundleIDs = Set(runningApps.compactMap { $0.bundleIdentifier })
-
-            if bundleIDs.contains("com.microsoft.teams2") || bundleIDs.contains("com.microsoft.teams") {
-                detectedApp = .teams
-            } else if bundleIDs.contains("com.tinyspeck.slackmacgap") {
-                detectedApp = .slack
-            } else if bundleIDs.contains("us.zoom.xos") {
-                detectedApp = .zoom
-            } else if bundleIDs.contains("com.hnc.Discord") {
-                detectedApp = .discord
+            // Fallback: schaue welche Call-Apps offen sind (auch ohne aktives Mic).
+            // Browser bewusst ausgenommen — ein offener Browser ist kein Call-Signal
+            // (anders als in detectActiveCall, das durch aktives Mic gegated ist).
+            let bundleIDs = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
+            if let app = CallApp.match(runningBundleIds: bundleIDs), app != .browser {
+                detectedApp = app
             }
             if detectedApp != .unknown {
                 detectorLogger.warning("detectOnce Fallback: \(self.detectedApp.rawValue, privacy: .public)")
@@ -162,33 +170,8 @@ final class MeetingDetector: ObservableObject {
         let externalMicActive = Self.isMicrophoneInUseExcludingUSB()
         guard externalMicActive else { return nil }
 
-        let runningApps = NSWorkspace.shared.runningApplications
-        let bundleIDs = Set(runningApps.compactMap { $0.bundleIdentifier })
-
-        // Teams zuerst (hoehere Prioritaet als Slack etc.)
-        if bundleIDs.contains("com.microsoft.teams2") || bundleIDs.contains("com.microsoft.teams") {
-            return .teams
-        }
-        // Zoom
-        if bundleIDs.contains("us.zoom.xos") { return .zoom }
-        // FaceTime
-        if bundleIDs.contains("com.apple.FaceTime") { return .facetime }
-        // Slack
-        if bundleIDs.contains("com.tinyspeck.slackmacgap") { return .slack }
-        // Discord
-        if bundleIDs.contains("com.hnc.Discord") { return .discord }
-        // WebEx
-        if bundleIDs.contains("com.webex.meetingmanager") || bundleIDs.contains("Cisco-Systems.Spark") {
-            return .webex
-        }
-        // Browser (Google Meet, etc.)
-        let browserIDs = ["com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac",
-                          "org.mozilla.firefox", "company.thebrowser.Browser"]
-        if browserIDs.contains(where: { bundleIDs.contains($0) }) {
-            return .browser
-        }
-
-        return nil
+        let bundleIDs = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier })
+        return CallApp.match(runningBundleIds: bundleIDs)
     }
 
     nonisolated private static func detectRunningCallAudioProcess() -> CallApp? {
@@ -199,8 +182,7 @@ final class MeetingDetector: ObservableObject {
 
     nonisolated static func detectRunningCallAudioProcess(from activities: [AudioProcessActivity]) -> CallApp? {
         guard !activities.isEmpty else { return nil }
-        let priority: [CallApp] = [.teams, .zoom, .facetime, .slack, .webex, .discord, .browser]
-        return priority.first { app in
+        return CallApp.detectionPriority.first { app in
             activities.contains { activity in
                 guard app.bundleIdentifiers.contains(where: { bundleIdMatches(activity.bundleIdentifier, target: $0) }) else {
                     return false
