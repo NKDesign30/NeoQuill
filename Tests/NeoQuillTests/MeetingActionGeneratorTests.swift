@@ -24,7 +24,7 @@ final class MeetingActionGeneratorTests: XCTestCase {
     }
 
     func testSkipsActionsWhileMeetingIsProcessing() {
-        let actions = MeetingActionGenerator.suggest(for: makeMeeting(processing: true))
+        let actions = MeetingActionGenerator.suggest(for: makeMeeting(lifecycle: .transcribing))
 
         XCTAssertTrue(actions.isEmpty)
     }
@@ -32,7 +32,7 @@ final class MeetingActionGeneratorTests: XCTestCase {
     private func makeMeeting(
         tasks: [ActionItem] = [],
         highlights: [Highlight] = [],
-        processing: Bool = false
+        lifecycle: MeetingLifecycle = .done
     ) -> MeetingDetail {
         MeetingDetail(
             id: "meeting-1",
@@ -54,7 +54,7 @@ final class MeetingActionGeneratorTests: XCTestCase {
                 TranscriptLine(who: "ME", timestamp: "00:00", body: "Wir planen Launch und offene Punkte."),
             ],
             audioURL: nil,
-            processing: processing
+            lifecycle: lifecycle
         )
     }
 }

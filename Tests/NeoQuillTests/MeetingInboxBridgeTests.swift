@@ -64,7 +64,7 @@ final class MeetingInboxBridgeTests: XCTestCase {
             chapters: [],
             transcript: [],
             audioURL: nil,
-            processing: false
+            lifecycle: .done
         )
     }
 }

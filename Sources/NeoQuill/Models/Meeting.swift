@@ -183,7 +183,12 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
     let chapters: [Chapter]
     let transcript: [TranscriptLine]
     var audioURL: String? = nil    // Pfad zur WAV-Datei in Application Support
-    var processing: Bool = false   // KI-Summary läuft noch
+    var lifecycle: MeetingLifecycle = .done   // Single Source of Truth für den Verarbeitungsstand
+
+    /// Abgeleitete "läuft gerade etwas?"-Sicht für die UI. Früher ein eigenes
+    /// gespeichertes Feld; jetzt aus `lifecycle` abgeleitet, damit beide nie
+    /// auseinanderlaufen können.
+    var processing: Bool { lifecycle.isBusy }
 
     var participantCount: Int { participants.count }
     var openTasks: Int { tasks.filter { $0.status == .open }.count }

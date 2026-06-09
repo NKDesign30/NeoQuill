@@ -77,6 +77,11 @@ final class MeetingStore: ObservableObject {
         // wenn wir den Fehler schlucken — Spalte existiert dann schon.
         runRaw("ALTER TABLE meeting ADD COLUMN audio_url TEXT;")
         runRaw("ALTER TABLE meeting ADD COLUMN processing INTEGER NOT NULL DEFAULT 0;")
+        // `lifecycle` ist die typisierte Nachfolge von `processing` (siehe
+        // MeetingLifecycle). NULL bei Altzeilen → wird beim Lesen aus
+        // `processing` abgeleitet. `processing` bleibt parallel befüllt
+        // (computed aus lifecycle) für Rückwärtskompatibilität/Rollback.
+        runRaw("ALTER TABLE meeting ADD COLUMN lifecycle TEXT;")
     }
 
     @discardableResult
@@ -120,7 +125,7 @@ final class MeetingStore: ObservableObject {
         var summaries: [MeetingSummary] = []
         var detailMap: [String: MeetingDetail] = [:]
         var stmt: OpaquePointer?
-        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript,audio_url,processing FROM meeting ORDER BY created_at DESC"
+        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript,audio_url,processing,lifecycle FROM meeting ORDER BY created_at DESC"
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             let decoder = JSONDecoder()
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -143,6 +148,12 @@ final class MeetingStore: ObservableObject {
                 let transcript = decode([TranscriptLine].self, stmt: stmt, idx: 16, decoder: decoder) ?? []
                 let audioURL   = textOrNil(stmt, 17)
                 let processing = sqlite3_column_int(stmt, 18) == 1
+                // lifecycle bevorzugen; bei Altzeilen (NULL) aus processing ableiten:
+                // unterbrochene Jobs landen in .transcribing, damit recoverOrphaned
+                // sie aufgreift, fertige in .done.
+                let lifecycle  = textOrNil(stmt, 19)
+                    .flatMap(MeetingLifecycle.init(rawValue:))
+                    ?? (processing ? .transcribing : .done)
                 let platform   = Platform(rawValue: platStr) ?? .call
 
                 summaries.append(.init(
@@ -155,7 +166,7 @@ final class MeetingStore: ObservableObject {
                     duration: dur, platform: platform, wordCount: words,
                     participants: participants, tldr: tldr,
                     highlights: highlights, tasks: tasks, chapters: chapters,
-                    transcript: transcript, audioURL: audioURL, processing: processing
+                    transcript: transcript, audioURL: audioURL, lifecycle: lifecycle
                 )
             }
         }
@@ -198,7 +209,7 @@ final class MeetingStore: ObservableObject {
             duration: d.duration, platform: d.platform, wordCount: d.wordCount,
             participants: d.participants, tldr: d.tldr,
             highlights: d.highlights, tasks: tasks, chapters: d.chapters, transcript: d.transcript,
-            audioURL: d.audioURL, processing: d.processing
+            audioURL: d.audioURL, lifecycle: d.lifecycle
         )
         upsertDetail(upd)
         readBackToPublished()
@@ -277,7 +288,7 @@ final class MeetingStore: ObservableObject {
             chapters: chapters,
             transcript: transcript,
             audioURL: d.audioURL,
-            processing: d.processing
+            lifecycle: d.lifecycle
         )
         upsertDetail(updated)
         readBackToPublished()
@@ -357,7 +368,7 @@ final class MeetingStore: ObservableObject {
               title = ?, date_long = ?, time_range = ?, tldr = ?,
               word_count = ?,
               participants = ?, highlights = ?, tasks = ?, chapters = ?, transcript = ?,
-              audio_url = ?, processing = ?
+              audio_url = ?, processing = ?, lifecycle = ?
             WHERE id = ?
         """
         var stmt: OpaquePointer?
@@ -375,7 +386,8 @@ final class MeetingStore: ObservableObject {
         bind(stmt, 10, jsonString(d.transcript,   encoder))
         if let a = d.audioURL { bind(stmt, 11, a) } else { sqlite3_bind_null(stmt, 11) }
         sqlite3_bind_int(stmt, 12, d.processing ? 1 : 0)
-        bind(stmt, 13, d.id)
+        bind(stmt, 13, d.lifecycle.rawValue)
+        bind(stmt, 14, d.id)
         sqlite3_step(stmt)
     }
 

@@ -79,7 +79,7 @@ final class MeetingActionExecutorTests: XCTestCase {
             chapters: [],
             transcript: [],
             audioURL: nil,
-            processing: false
+            lifecycle: .done
         )
     }
 }

@@ -291,7 +291,7 @@ final class RecordingController: ObservableObject {
     func recoverOrphanedTranscripts() {
         guard let store else { return }
         let orphans = store.details.values
-            .filter { $0.processing && $0.transcript.isEmpty }
+            .filter { $0.lifecycle.isBusy && $0.transcript.isEmpty }
             .map(\.id)
         guard !orphans.isEmpty else { return }
         Task { [weak self] in
@@ -301,7 +301,7 @@ final class RecordingController: ObservableObject {
                 // bails out on `!detail.processing`, which is exactly the state an
                 // orphaned meeting is in. Without this the re-run is a no-op.
                 if var detail = store.detail(for: id) {
-                    detail.processing = false
+                    detail.lifecycle = .done
                     store.updateDetail(detail)
                 }
                 await self.reprocessMeetingAsync(id)
@@ -393,7 +393,7 @@ final class RecordingController: ObservableObject {
             participants: participants,
             tldr: "Wird transkribiert…",
             highlights: [], tasks: [], chapters: [],
-            transcript: [], audioURL: nil, processing: true
+            transcript: [], audioURL: nil, lifecycle: .transcribing
         )
         store.insert(summary: summary, detail: provisional)
     }
@@ -474,7 +474,7 @@ final class RecordingController: ObservableObject {
             chapters: [],
             transcript: allLines,
             audioURL: nil,
-            processing: true
+            lifecycle: .summarizing
         )
         store.updateDetail(transcribed, summaryTitle: provisionalTitle)
         statusText = "KI verarbeitet"
@@ -530,7 +530,7 @@ final class RecordingController: ObservableObject {
             chapters: chapters,
             transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : finalAudioPath,
-            processing: false
+            lifecycle: .done
         )
 
         store.updateDetail(
@@ -579,7 +579,7 @@ final class RecordingController: ObservableObject {
                 participants: [LocalSpeakerProfile.participant(spoke: durationShort)],
                 tldr: "Keine Sprach-Inhalte erkannt.",
                 highlights: [], tasks: [], chapters: [], transcript: [],
-                audioURL: shouldDeleteAudio ? nil : audioPath, processing: false
+                audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
             )
             store.updateDetail(empty, summaryTitle: empty.title)
             if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
@@ -596,7 +596,7 @@ final class RecordingController: ObservableObject {
             duration: durationShort, platform: .call, wordCount: wordCount,
             participants: participants, tldr: "KI-Zusammenfassung läuft…",
             highlights: [], tasks: [], chapters: [], transcript: lines,
-            audioURL: audioPath, processing: true
+            audioURL: audioPath, lifecycle: .summarizing
         )
         store.updateDetail(transcribed, summaryTitle: fileName)
         statusText = "KI verarbeitet"
@@ -627,7 +627,7 @@ final class RecordingController: ObservableObject {
             duration: durationShort, platform: .call, wordCount: wordCount,
             participants: participants, tldr: result.tldr,
             highlights: highlights, tasks: tasks, chapters: chapters, transcript: lines,
-            audioURL: shouldDeleteAudio ? nil : (result.audioURL?.path ?? audioPath), processing: false
+            audioURL: shouldDeleteAudio ? nil : (result.audioURL?.path ?? audioPath), lifecycle: .done
         )
         store.updateDetail(finalDetail, summaryTitle: finalTitle)
         if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
@@ -669,7 +669,7 @@ final class RecordingController: ObservableObject {
         _ = try? AudioWriter.persist(id: mergeStemId, stem: .mic, samples: samples)
 
         // UI in den Processing-Zustand setzen, Original-Inhalte bleiben sichtbar.
-        store.updateDetail(rebuiltDetail(from: detail, tldr: "Zusatz-Audio wird eingearbeitet…", processing: true))
+        store.updateDetail(rebuiltDetail(from: detail, tldr: "Zusatz-Audio wird eingearbeitet…", lifecycle: .transcribing))
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
@@ -695,7 +695,7 @@ final class RecordingController: ObservableObject {
         }
 
         guard !incoming.isEmpty else {
-            store.updateDetail(rebuiltDetail(from: detail, tldr: detail.tldr, processing: false))
+            store.updateDetail(rebuiltDetail(from: detail, tldr: detail.tldr, lifecycle: .done))
             statusText = "Bereit"
             return "In der Zusatzaufnahme wurde keine Sprache erkannt."
         }
@@ -722,7 +722,7 @@ final class RecordingController: ObservableObject {
             participants: participants,
             tldr: "KI-Zusammenfassung läuft…",
             transcript: mergedLines,
-            processing: true
+            lifecycle: .summarizing
         ))
         statusText = "KI verarbeitet"
 
@@ -756,7 +756,7 @@ final class RecordingController: ObservableObject {
             tasks: tasks,
             chapters: chapters,
             transcript: mergedLines,
-            processing: false
+            lifecycle: .done
         ), summaryTitle: result.title.isEmpty ? nil : result.title)
         statusText = "Bereit"
         return nil
@@ -846,7 +846,7 @@ final class RecordingController: ObservableObject {
             highlights: [],
             tasks: [],
             chapters: [],
-            processing: true
+            lifecycle: .transcribing
         )
         store.updateDetail(busy)
         statusText = "Final-STT läuft"
@@ -909,7 +909,7 @@ final class RecordingController: ObservableObject {
                 chapters: [],
                 transcript: [],
                 audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
-                processing: false
+                lifecycle: .done
             )
             store.updateDetail(empty, summaryTitle: empty.title)
             if shouldDeleteAudio {
@@ -929,7 +929,7 @@ final class RecordingController: ObservableObject {
             tasks: [],
             transcript: allLines,
             audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
-            processing: true
+            lifecycle: .summarizing
         )
         store.updateDetail(transcribed, summaryTitle: transcribed.title)
 
@@ -970,7 +970,7 @@ final class RecordingController: ObservableObject {
             chapters: chapters,
             transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
-            processing: false
+            lifecycle: .done
         )
         store.updateDetail(final, summaryTitle: result.title.isEmpty ? nil : result.title)
         if shouldDeleteAudio {
@@ -1291,7 +1291,7 @@ final class RecordingController: ObservableObject {
         chapters: [Chapter]? = nil,
         transcript: [TranscriptLine]? = nil,
         audioURL: String? = nil,
-        processing: Bool? = nil
+        lifecycle: MeetingLifecycle? = nil
     ) -> MeetingDetail {
         MeetingDetail(
             id: detail.id,
@@ -1308,7 +1308,7 @@ final class RecordingController: ObservableObject {
             chapters: chapters ?? detail.chapters,
             transcript: transcript ?? detail.transcript,
             audioURL: audioURL ?? detail.audioURL,
-            processing: processing ?? detail.processing
+            lifecycle: lifecycle ?? detail.lifecycle
         )
     }
 

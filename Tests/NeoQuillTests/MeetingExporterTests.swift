@@ -67,7 +67,7 @@ final class MeetingExporterTests: XCTestCase {
                 TranscriptLine(who: "ME", timestamp: "00:00", body: "Launch ist morgen.")
             ],
             audioURL: nil,
-            processing: false
+            lifecycle: .done
         )
     }
 }
