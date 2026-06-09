@@ -22,6 +22,23 @@ final class PrivacyDataServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("notes.txt").path))
     }
 
+    /// Regression: die `.hq`-Spur (48-kHz-Archiv, größte Datei) wurde früher beim
+    /// Löschen vergessen und überlebte ein "Audio löschen" — ein Datenschutz-Leck.
+    func testDeletesHighResArchiveToo() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try writeFile("meeting-1.wav", in: directory)
+        try writeFile("meeting-1.mic.wav", in: directory)
+        try writeFile("meeting-1.system.wav", in: directory)
+        try writeFile("meeting-1.hq.wav", in: directory)
+
+        let deleted = try PrivacyDataService.deleteAudioFiles(for: "meeting-1", directory: directory)
+
+        XCTAssertEqual(deleted, 4)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("meeting-1.hq.wav").path))
+    }
+
     func testDeletesAllAudioFilesButKeepsOtherLocalFiles() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

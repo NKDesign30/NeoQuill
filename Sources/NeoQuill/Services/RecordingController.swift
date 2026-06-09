@@ -1226,18 +1226,9 @@ final class RecordingController: ObservableObject {
         // already has a good .hq archive back to the mono mix.
         let bothStems = !mic.isEmpty && !system.isEmpty
         let playbackURL = bothStems
-            ? preferredPlaybackURL(meetingId: meetingId, mixFallback: mixURL)
+            ? RecordingArtifacts(meetingId: meetingId).preferredPlaybackURL(mixFallback: mixURL)
             : mixURL
         return (mic: mic, system: system, mixed: mixed, audioURL: playbackURL)
-    }
-
-    /// Returns the high-resolution stereo archive (`.hq`) if present on disk,
-    /// otherwise the provided mono-mix fallback. Used so re-transcription and
-    /// orphan recovery keep pointing playback at the good stereo file.
-    private func preferredPlaybackURL(meetingId: String, mixFallback: URL?) -> URL? {
-        let hqURL = AudioWriter.url(id: meetingId, stem: .hq)
-        if FileManager.default.fileExists(atPath: hqURL.path) { return hqURL }
-        return mixFallback
     }
 
     private func rebuiltDetail(

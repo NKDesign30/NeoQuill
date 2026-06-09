@@ -24,18 +24,9 @@ enum PrivacyDataService {
 
     @discardableResult
     static func deleteAudioFiles(for meetingId: String, directory: URL = AudioWriter.recordingsDirectory()) throws -> Int {
-        let fileManager = FileManager.default
-        let urls = [
-            directory.appendingPathComponent("\(meetingId).wav"),
-            directory.appendingPathComponent("\(meetingId).mic.wav"),
-            directory.appendingPathComponent("\(meetingId).system.wav"),
-        ]
-        var deleted = 0
-        for url in urls where fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
-            deleted += 1
-        }
-        return deleted
+        // RecordingArtifacts ist die Single Source of Truth über alle Spur-Dateien
+        // eines Meetings — inklusive der früher vergessenen `.hq`-Spur.
+        try RecordingArtifacts(meetingId: meetingId, directory: directory).deleteAll()
     }
 
     @discardableResult
