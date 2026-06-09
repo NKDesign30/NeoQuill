@@ -511,48 +511,28 @@ final class RecordingController: ObservableObject {
         }
 
         // 2. Async: WAV speichern + Claude-Summary holen, dann Detail updaten.
-        let result = await PostProcessor.process(
+        let summary = await MeetingSummarizer.summarize(
             meetingId: id,
-            mixedSamples: [],
             transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
 
-        let highlights = result.highlights.map { mapAIHighlight($0) }
-        let tasks = result.tasks.enumerated().map { idx, t in
-            ActionItem(
-                id: "\(id)-task-\(idx)",
-                who: t.who.isEmpty ? "??" : t.who,
-                task: t.task,
-                due: t.due,
-                status: t.status == "done" ? .done : .open
-            )
-        }
-        let chapters = result.chapters.enumerated().map { idx, c in
-            Chapter(
-                id: "\(id)-ch-\(idx)",
-                timestamp: c.timestamp,
-                label: c.label,
-                duration: c.duration
-            )
-        }
-
-        let finalAudioPath = result.audioURL?.path ?? audioURL?.path
+        let finalAudioPath = summary.audioURL?.path ?? audioURL?.path
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         let finalDetail = MeetingDetail(
             id: id,
-            title: result.title.isEmpty ? provisionalTitle : result.title,
+            title: summary.title.isEmpty ? provisionalTitle : summary.title,
             dateLong: dateLong,
             timeRange: timeRange,
             duration: durationShort,
             platform: detectedPlatform(),
             wordCount: wordCount,
             participants: participants,
-            tldr: result.tldr,
-            highlights: highlights,
-            tasks: tasks,
-            chapters: chapters,
+            tldr: summary.tldr,
+            highlights: summary.highlights,
+            tasks: summary.tasks,
+            chapters: summary.chapters,
             transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : finalAudioPath,
             lifecycle: .done
@@ -560,7 +540,7 @@ final class RecordingController: ObservableObject {
 
         store.updateDetail(
             finalDetail,
-            summaryTitle: result.title.isEmpty ? nil : result.title
+            summaryTitle: summary.title.isEmpty ? nil : summary.title
         )
         if shouldDeleteAudio {
             _ = try? PrivacyDataService.deleteAudioFiles(for: id)
@@ -626,33 +606,19 @@ final class RecordingController: ObservableObject {
         store.updateDetail(transcribed, summaryTitle: fileName)
         statusText = "KI verarbeitet"
 
-        let result = await PostProcessor.process(
+        let summary = await MeetingSummarizer.summarize(
             meetingId: meetingId,
-            mixedSamples: [],
             transcriptLines: summaryLines.isEmpty ? lines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
-        let highlights = result.highlights.map { mapAIHighlight($0) }
-        let tasks = result.tasks.enumerated().map { idx, t in
-            ActionItem(
-                id: "\(meetingId)-task-\(idx)",
-                who: t.who.isEmpty ? "??" : t.who,
-                task: t.task,
-                due: t.due,
-                status: t.status == "done" ? .done : .open
-            )
-        }
-        let chapters = result.chapters.enumerated().map { idx, c in
-            Chapter(id: "\(meetingId)-ch-\(idx)", timestamp: c.timestamp, label: c.label, duration: c.duration)
-        }
-        let finalTitle = result.title.isEmpty ? fileName : result.title
+        let finalTitle = summary.title.isEmpty ? fileName : summary.title
         let finalDetail = MeetingDetail(
             id: meetingId, title: finalTitle, dateLong: dateLong, timeRange: timeRange,
             duration: durationShort, platform: .call, wordCount: wordCount,
-            participants: participants, tldr: result.tldr,
-            highlights: highlights, tasks: tasks, chapters: chapters, transcript: lines,
-            audioURL: shouldDeleteAudio ? nil : (result.audioURL?.path ?? audioPath), lifecycle: .done
+            participants: participants, tldr: summary.tldr,
+            highlights: summary.highlights, tasks: summary.tasks, chapters: summary.chapters, transcript: lines,
+            audioURL: shouldDeleteAudio ? nil : (summary.audioURL?.path ?? audioPath), lifecycle: .done
         )
         store.updateDetail(finalDetail, summaryTitle: finalTitle)
         if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
@@ -751,38 +717,25 @@ final class RecordingController: ObservableObject {
         ))
         statusText = "KI verarbeitet"
 
-        let result = await PostProcessor.process(
+        let summary = await MeetingSummarizer.summarize(
             meetingId: meetingId,
-            mixedSamples: [],
+            idPrefix: "merge-",
             transcriptLines: summaryLines.isEmpty ? mergedLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
-        let highlights = result.highlights.map { mapAIHighlight($0) }
-        let tasks = result.tasks.enumerated().map { idx, t in
-            ActionItem(
-                id: "\(meetingId)-merge-task-\(idx)",
-                who: t.who.isEmpty ? "??" : t.who,
-                task: t.task,
-                due: t.due,
-                status: t.status == "done" ? .done : .open
-            )
-        }
-        let chapters = result.chapters.enumerated().map { idx, c in
-            Chapter(id: "\(meetingId)-merge-ch-\(idx)", timestamp: c.timestamp, label: c.label, duration: c.duration)
-        }
         store.updateDetail(rebuiltDetail(
             from: detail,
-            title: result.title.isEmpty ? detail.title : result.title,
+            title: summary.title.isEmpty ? detail.title : summary.title,
             wordCount: wordCount,
             participants: participants,
-            tldr: result.tldr.isEmpty ? detail.tldr : result.tldr,
-            highlights: highlights,
-            tasks: tasks,
-            chapters: chapters,
+            tldr: summary.tldr.isEmpty ? detail.tldr : summary.tldr,
+            highlights: summary.highlights,
+            tasks: summary.tasks,
+            chapters: summary.chapters,
             transcript: mergedLines,
             lifecycle: .done
-        ), summaryTitle: result.title.isEmpty ? nil : result.title)
+        ), summaryTitle: summary.title.isEmpty ? nil : summary.title)
         statusText = "Bereit"
         return nil
     }
@@ -959,59 +912,31 @@ final class RecordingController: ObservableObject {
         store.updateDetail(transcribed, summaryTitle: transcribed.title)
 
         statusText = "KI verarbeitet"
-        let result = await PostProcessor.process(
+        let summary = await MeetingSummarizer.summarize(
             meetingId: detail.id,
-            mixedSamples: [],
+            idPrefix: "reprocess-",
             transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
-        let highlights = result.highlights.map { mapAIHighlight($0) }
-        let tasks = result.tasks.enumerated().map { idx, t in
-            ActionItem(
-                id: "\(detail.id)-reprocess-task-\(idx)",
-                who: t.who.isEmpty ? "??" : t.who,
-                task: t.task,
-                due: t.due,
-                status: t.status == "done" ? .done : .open
-            )
-        }
-        let chapters = result.chapters.enumerated().map { idx, c in
-            Chapter(
-                id: "\(detail.id)-reprocess-ch-\(idx)",
-                timestamp: c.timestamp,
-                label: c.label,
-                duration: c.duration
-            )
-        }
         let final = rebuiltDetail(
             from: transcribed,
-            title: result.title.isEmpty ? transcribed.title : result.title,
+            title: summary.title.isEmpty ? transcribed.title : summary.title,
             wordCount: wordCount,
             participants: participants,
-            tldr: result.tldr,
-            highlights: highlights,
-            tasks: tasks,
-            chapters: chapters,
+            tldr: summary.tldr,
+            highlights: summary.highlights,
+            tasks: summary.tasks,
+            chapters: summary.chapters,
             transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
             lifecycle: .done
         )
-        store.updateDetail(final, summaryTitle: result.title.isEmpty ? nil : result.title)
+        store.updateDetail(final, summaryTitle: summary.title.isEmpty ? nil : summary.title)
         if shouldDeleteAudio {
             _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId)
         }
         statusText = "Bereit"
-    }
-
-    private func mapAIHighlight(_ ai: HighlightAI) -> Highlight {
-        let tone: HighlightTone
-        switch ai.tone.lowercased() {
-        case "warning":  tone = .warning
-        case "info":     tone = .info
-        default:         tone = .brand
-        }
-        return Highlight(label: ai.label, text: ai.text, tone: tone)
     }
 
     private func persistCapturedAudio(
