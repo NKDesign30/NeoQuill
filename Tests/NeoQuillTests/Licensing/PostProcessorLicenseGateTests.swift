@@ -28,7 +28,6 @@ final class PostProcessorLicenseGateTests: XCTestCase {
         var gateInvocations = 0
         let result = await PostProcessor.process(
             meetingId: "test-gate-\(UUID().uuidString)",
-            mixedSamples: [],
             transcriptLines: [line],
             locale: "de",
             licenseAllowsSummary: {
@@ -49,7 +48,6 @@ final class PostProcessorLicenseGateTests: XCTestCase {
         var gateInvocations = 0
         let result = await PostProcessor.process(
             meetingId: "test-empty-\(UUID().uuidString)",
-            mixedSamples: [],
             transcriptLines: [],
             locale: "de",
             licenseAllowsSummary: {

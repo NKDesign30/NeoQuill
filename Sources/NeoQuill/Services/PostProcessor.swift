@@ -1,8 +1,9 @@
 import Foundation
 
-// Post-Processing nach Stop: WAV speichern + optional Claude-Summary holen.
-// Orchestriert AudioWriter (Mix → ~/Library/Application Support/NeoQuill/recordings)
-// und ClaudeCLIClient (Haiku via Max-Plan, kein API-Key nötig).
+// Post-Processing nach Stop: aus dem Transkript eine Summary holen
+// (Titel, TLDR, Highlights, Tasks, Chapters). Das WAV schreibt der
+// RecordingController selbst via AudioWriter — hier läuft kein Audio mehr.
+// Provider: ClaudeCLIClient (Haiku via Max-Plan) oder OpenAI-kompatibel.
 
 struct PostProcessResult {
     let title: String
@@ -10,20 +11,16 @@ struct PostProcessResult {
     let highlights: [HighlightAI]
     let tasks: [TaskAI]
     let chapters: [ChapterAI]
-    let audioURL: URL?
 }
 
 enum PostProcessor {
 
     static func process(
         meetingId: String,
-        mixedSamples: [Float],
         transcriptLines: [TranscriptLine],
         locale: String = "de",
         licenseAllowsSummary: () -> Bool = { true }
     ) async -> PostProcessResult {
-        let audioURL = persistAudio(meetingId: meetingId, samples: mixedSamples)
-
         let transcript = Self.formatTranscriptForPrompt(transcriptLines)
 
         guard !transcript.isEmpty else {
@@ -32,8 +29,7 @@ enum PostProcessor {
                 tldr: "Keine Sprach-Inhalte erkannt.",
                 highlights: [],
                 tasks: [],
-                chapters: [],
-                audioURL: audioURL
+                chapters: []
             )
         }
 
@@ -49,22 +45,8 @@ enum PostProcessor {
             tldr: ai?.tldr ?? fallbackTldr(from: transcriptLines),
             highlights: ai?.highlights ?? [],
             tasks: ai?.tasks ?? [],
-            chapters: ai?.chapters ?? [],
-            audioURL: audioURL
+            chapters: ai?.chapters ?? []
         )
-    }
-
-    private static func persistAudio(meetingId: String, samples: [Float]) -> URL? {
-        guard !samples.isEmpty else { return nil }
-        let writer = AudioWriter()
-        do {
-            try writer.start(id: meetingId)
-            writer.write(samples: samples)
-            return writer.close()
-        } catch {
-            NSLog("[PostProcessor] AudioWriter failed: \(error)")
-            return nil
-        }
     }
 
     private static func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {

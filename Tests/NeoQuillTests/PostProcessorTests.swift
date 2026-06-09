@@ -19,7 +19,6 @@ final class PostProcessorTests: XCTestCase {
 
         let result = await PostProcessor.process(
             meetingId: "test-\(UUID().uuidString)",
-            mixedSamples: [],
             transcriptLines: [line],
             locale: "de"
         )
@@ -29,7 +28,6 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertTrue(result.highlights.isEmpty)
         XCTAssertTrue(result.tasks.isEmpty)
         XCTAssertTrue(result.chapters.isEmpty)
-        XCTAssertNil(result.audioURL)
     }
 
     func testSkipsProviderSummaryInLocalOnlyMode() async {
@@ -48,7 +46,6 @@ final class PostProcessorTests: XCTestCase {
 
         let result = await PostProcessor.process(
             meetingId: "test-\(UUID().uuidString)",
-            mixedSamples: [],
             transcriptLines: [line],
             locale: "de"
         )
@@ -58,7 +55,6 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertTrue(result.highlights.isEmpty)
         XCTAssertTrue(result.tasks.isEmpty)
         XCTAssertTrue(result.chapters.isEmpty)
-        XCTAssertNil(result.audioURL)
     }
 
     private func restore(_ value: Any?, key: String) {

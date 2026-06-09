@@ -338,10 +338,9 @@ final class AppState: ObservableObject {
     /// in den Default-View-Mode wechseln.
     func completeOnboardingFromWizard() {
         showProfileOnboarding = false
-        if viewMode == .empty {
-            viewMode = .empty // bleibt EmptyView, Recording startet User selbst
-        }
-        notify("Setup abgeschlossen — bereit fuer dein erstes Meeting.", dismissAfter: 6)
+        // viewMode bleibt unverändert (EmptyView), das Recording startet der
+        // User selbst — wir schließen hier nur das Onboarding-Sheet.
+        notify("Setup abgeschlossen — bereit für dein erstes Meeting.", dismissAfter: 6)
     }
 
     func showEmpty() {

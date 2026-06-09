@@ -7,7 +7,6 @@ struct MeetingSummaryResult {
     let highlights: [Highlight]
     let tasks: [ActionItem]
     let chapters: [Chapter]
-    let audioURL: URL?
 }
 
 /// Ruft den `PostProcessor` und übersetzt sein Roh-Ergebnis (`HighlightAI`,
@@ -36,7 +35,6 @@ enum MeetingSummarizer {
     ) async -> MeetingSummaryResult {
         let result = await PostProcessor.process(
             meetingId: meetingId,
-            mixedSamples: [],
             transcriptLines: transcriptLines,
             locale: locale,
             licenseAllowsSummary: licenseAllowsSummary
@@ -46,8 +44,7 @@ enum MeetingSummarizer {
             tldr: result.tldr,
             highlights: result.highlights.map(mapHighlight),
             tasks: mapTasks(result.tasks, meetingId: meetingId, idPrefix: idPrefix),
-            chapters: mapChapters(result.chapters, meetingId: meetingId, idPrefix: idPrefix),
-            audioURL: result.audioURL
+            chapters: mapChapters(result.chapters, meetingId: meetingId, idPrefix: idPrefix)
         )
     }
 

@@ -512,7 +512,7 @@ final class RecordingController: ObservableObject {
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
 
-        let finalAudioPath = summary.audioURL?.path ?? audioURL?.path
+        let finalAudioPath = audioURL?.path
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         let finalDetail = MeetingDetail(
             id: id,
@@ -611,7 +611,7 @@ final class RecordingController: ObservableObject {
             duration: durationShort, platform: .call, wordCount: wordCount,
             participants: participants, tldr: summary.tldr,
             highlights: summary.highlights, tasks: summary.tasks, chapters: summary.chapters, transcript: lines,
-            audioURL: shouldDeleteAudio ? nil : (summary.audioURL?.path ?? audioPath), lifecycle: .done
+            audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
         )
         store.updateDetail(finalDetail, summaryTitle: finalTitle)
         if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
