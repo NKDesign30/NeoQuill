@@ -35,6 +35,14 @@ enum TranscriptQualityPolicy {
     /// das Gating.
     static let maxConsecutiveRepeatedBodies = 2
 
+    /// Wie viele direkt aufeinanderfolgende identische Zeilen die kollabierte
+    /// Anzeige (`TranscriptPresentation`) zeigt, bevor sie den Rest zu einer
+    /// "collapsedRun"-Zeile faltet. Bewusst eine eigene Konstante neben
+    /// `maxConsecutiveRepeatedBodies`: Anzeigen-Falten und Summary-Verwerfen sind
+    /// zwei getrennte Entscheidungen, die heute denselben Wert teilen, aber
+    /// unabhängig bleiben sollen.
+    static let visibleRepeatedBodiesPerRun = 2
+
     /// Akzeptanz-Gate: Übernimmt das Verdikt des Scorers. Eigener Name, damit
     /// Aufrufer eine Entscheidung treffen statt ein Status-Feld zu lesen.
     static func accepts(_ report: TranscriptQualityReport) -> Bool {

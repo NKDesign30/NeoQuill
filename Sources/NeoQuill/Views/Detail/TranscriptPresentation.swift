@@ -32,7 +32,7 @@ struct TranscriptDisplayRow: Identifiable, Equatable {
 }
 
 enum TranscriptPresentation {
-    static let visibleRepeatedBodiesPerRun = 2
+    static var visibleRepeatedBodiesPerRun: Int { TranscriptQualityPolicy.visibleRepeatedBodiesPerRun }
 
     static func rows(
         from lines: [TranscriptLine],
@@ -94,7 +94,7 @@ enum TranscriptPresentation {
         }
 
         for line in lines {
-            let key = normalizedBody(line.body)
+            let key = TranscriptRepeatKey.normalized(line.body)
             guard !key.isEmpty else { continue }
 
             if key != previousKey {
@@ -106,11 +106,5 @@ enum TranscriptPresentation {
 
         flushRun()
         return rows
-    }
-
-    private static func normalizedBody(_ body: String) -> String {
-        body
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }

@@ -104,10 +104,12 @@ enum TranscriptQualityScorer {
         )
     }
 
+    /// Fürs Scoring strippt der Vergleich zusätzlich alle Satzzeichen — "danke!"
+    /// und "danke" sollen für die repeatRatio als derselbe Body zählen. Das ist
+    /// die bewusste Divergenz gegenüber `TranscriptRepeatKey.normalized`, auf dem
+    /// diese Funktion aufbaut.
     private static func normalizedBody(_ body: String) -> String {
-        let folded = body
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let folded = TranscriptRepeatKey.normalized(body)
         let scalars = folded.unicodeScalars.map { scalar in
             CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : " "
         }

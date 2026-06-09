@@ -11,7 +11,7 @@ enum TranscriptNoiseFilter {
         var repeatedBodyCount = 0
 
         for line in lines {
-            let bodyKey = normalizedBody(line.body)
+            let bodyKey = TranscriptRepeatKey.normalized(line.body)
             guard !bodyKey.isEmpty else { continue }
 
             if bodyKey == previousBodyKey {
@@ -33,11 +33,5 @@ enum TranscriptNoiseFilter {
         lines.reduce(0) { count, line in
             count + line.body.split(whereSeparator: \.isWhitespace).count
         }
-    }
-
-    private static func normalizedBody(_ body: String) -> String {
-        body
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 }
