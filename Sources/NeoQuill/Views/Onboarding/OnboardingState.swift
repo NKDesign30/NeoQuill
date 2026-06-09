@@ -69,7 +69,6 @@ final class OnboardingState: ObservableObject {
 
     // Profil
     @Published var name: String = ""
-    @Published var organization: String = ""
     @Published var language: String = "auto"
 
     // Mikrofon
@@ -105,7 +104,6 @@ final class OnboardingState: ObservableObject {
         let stored = defaults.string(forKey: AppSettings.ownerDisplayName) ?? ""
         let suggestion = NSFullUserName()
         self.name = stored.isEmpty ? suggestion : stored
-        self.organization = defaults.string(forKey: AppSettings.ownerOrganization) ?? ""
         self.language = defaults.string(forKey: AppSettings.language) ?? "auto"
         self.autoDetect = defaults.boolOr(AppSettings.autoDetectMeetings, default: true)
         self.liveCaptions = defaults.boolOr(AppSettings.liveCaptionCapture, default: true)
@@ -180,7 +178,6 @@ final class OnboardingState: ObservableObject {
     func persistAll() {
         let defaults = UserDefaults.standard
         defaults.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerDisplayName)
-        defaults.set(organization.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerOrganization)
         defaults.set(language, forKey: AppSettings.language)
         defaults.set(autoDetect, forKey: AppSettings.autoDetectMeetings)
         defaults.set(liveCaptions, forKey: AppSettings.liveCaptionCapture)

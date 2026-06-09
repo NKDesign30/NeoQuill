@@ -19,16 +19,9 @@ struct VoiceContent: View {
             )
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        OnboardingFormLabel(text: "DEIN NAME")
-                        OnboardingTextField(text: $state.name, placeholder: "Vor- und Nachname", accent: accent)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        OnboardingFormLabel(text: "ORGANISATION", hint: "· optional")
-                        OnboardingTextField(text: $state.organization, placeholder: "z. B. NK Design", accent: accent)
-                    }
-                    .frame(maxWidth: 180)
+                VStack(alignment: .leading, spacing: 8) {
+                    OnboardingFormLabel(text: "DEIN NAME")
+                    OnboardingTextField(text: $state.name, placeholder: "Vor- und Nachname", accent: accent)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {

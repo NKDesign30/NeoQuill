@@ -33,7 +33,6 @@ enum AppSettings {
     static let captureSourceSystem = "capture_source_system"
     static let captureSourceLocal  = "capture_source_local"
     static let recordHotkey        = "record_hotkey"
-    static let ownerOrganization   = "owner_organization"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
@@ -43,7 +42,6 @@ enum AppSettings {
             autoWatchDownloadsForTranscripts: false,
             ownerDisplayName: "",
             ownerRole: "Eigene Stimme",
-            ownerOrganization: "",
             profileOnboarded: false,
             whisperModel: "openai_whisper-small",
             language: "auto",

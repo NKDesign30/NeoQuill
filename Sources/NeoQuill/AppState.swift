@@ -322,17 +322,6 @@ final class AppState: ObservableObject {
         return outcome
     }
 
-    func completeProfileOnboarding(name: String, role: String) {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedName.isEmpty {
-            UserDefaults.standard.set(trimmedName, forKey: AppSettings.ownerDisplayName)
-        }
-        UserDefaults.standard.set(trimmedRole.isEmpty ? "Eigene Stimme" : trimmedRole, forKey: AppSettings.ownerRole)
-        UserDefaults.standard.set(true, forKey: AppSettings.profileOnboarded)
-        showProfileOnboarding = false
-    }
-
     /// Wird vom OnboardingWizard aufgerufen — der State persistiert dort
     /// bereits selbst, wir muessen nur das Sheet schliessen + freundlich
     /// in den Default-View-Mode wechseln.
