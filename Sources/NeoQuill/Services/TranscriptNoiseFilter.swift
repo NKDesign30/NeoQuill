@@ -1,7 +1,9 @@
 import Foundation
 
 enum TranscriptNoiseFilter {
-    static let maxConsecutiveRepeatedBodies = 2
+    /// Liegt in `TranscriptQualityPolicy`, damit alle Wiederholungs-Schwellen an
+    /// einem Ort stehen.
+    static var maxConsecutiveRepeatedBodies: Int { TranscriptQualityPolicy.maxConsecutiveRepeatedBodies }
 
     static func filtered(_ lines: [TranscriptLine]) -> [TranscriptLine] {
         var result: [TranscriptLine] = []

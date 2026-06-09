@@ -58,22 +58,13 @@ struct MeetingTranscriber {
         return lines
     }
 
-    /// Entscheidet, ob der gemischte Stem als Fallback transkribiert werden
-    /// muss: leeres/zu dünnes Ergebnis, Qualitäts-Fail oder zu viele
-    /// Wiederholungen. Internal für Tests.
+    /// Entscheidet, ob der gemischte Stem als Fallback transkribiert werden muss.
+    /// Der Scorer misst (Wörter, Wiederholung, Status), `TranscriptQualityPolicy`
+    /// entscheidet — keine eigene Schwelle mehr. Internal für Tests.
     func needsMixedFallback(lines: [TranscriptLine], totalSamples: Int) -> Bool {
-        let words = wordCount(lines)
-        if lines.isEmpty { return true }
-        let seconds = totalSamples / 16_000
-        if seconds >= 12 && words < max(4, seconds / 3) { return true }
-        let quality = TranscriptQualityScorer.evaluate(
-            lines: lines,
-            audioDurationSeconds: TimeInterval(totalSamples) / AudioImporter.targetSampleRate
-        )
-        if quality.status == .failed { return true }
-        let uniqueTexts = Set(lines.map { $0.body.lowercased() })
-        if lines.count >= 4 && uniqueTexts.count <= lines.count / 2 { return true }
-        return false
+        let audioSeconds = TimeInterval(totalSamples) / AudioImporter.targetSampleRate
+        let report = TranscriptQualityScorer.evaluate(lines: lines, audioDurationSeconds: audioSeconds)
+        return TranscriptQualityPolicy.needsFallback(report, audioSeconds: Int(audioSeconds))
     }
 
     func wordCount(_ lines: [TranscriptLine]) -> Int {
