@@ -197,10 +197,6 @@ private struct AudioSettingsTab: View {
 }
 
 private struct AIIntelligenceTab: View {
-    @AppStorage(AppSettings.claudeAnalysisEnabled) private var claudeAnalysisEnabled: Bool = true
-    @AppStorage(AppSettings.aiSummaryProvider) private var summaryProviderRaw: String = AIProviderSettings.defaultProvider
-    @AppStorage(AppSettings.aiSummaryBaseURL) private var aiSummaryBaseURL: String = AIProviderSettings.defaultOpenAIBaseURL
-    @AppStorage(AppSettings.aiSummaryModel) private var aiSummaryModel: String = AIProviderSettings.defaultOpenAIModel
     @AppStorage(AppSettings.speakerDiarization) private var diarize: Bool = true
     @AppStorage(AppSettings.liveCaptionCapture) private var liveCaptionCapture: Bool = false
     @AppStorage(AppSettings.autoWatchDownloadsForTranscripts) private var watchDownloads: Bool = false
@@ -208,9 +204,6 @@ private struct AIIntelligenceTab: View {
     @AppStorage(AppSettings.calendarParticipantPool) private var calendarPool: Bool = true
     @EnvironmentObject private var state: AppState
     @State private var showVoiceIdSheet = false
-    @State private var apiKeyInput = ""
-    @State private var hasStoredAPIKey = false
-    @State private var apiKeyStatus: String?
 
     var body: some View {
         Form {
@@ -257,42 +250,7 @@ private struct AIIntelligenceTab: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            Section("Zusammenfassung") {
-                Toggle("KI-Zusammenfassung aktivieren", isOn: $claudeAnalysisEnabled)
-                Picker("Provider", selection: $summaryProviderRaw) {
-                    ForEach(AISummaryProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider.rawValue)
-                    }
-                }
-                if selectedSummaryProvider == .claudeCLI {
-                    LabeledContent("Account", value: claudeAnalysisEnabled ? "lokaler Claude-Login" : "Aus")
-                    Text("Nutzt den lokal eingeloggten Claude-Account über die Claude CLI. Kein API-Key wird in NeoQuill gespeichert.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    TextField("Base URL", text: $aiSummaryBaseURL)
-                    TextField("Modell", text: $aiSummaryModel)
-                    LabeledContent("API-Key", value: hasStoredAPIKey ? "In Keychain gespeichert" : "Fehlt")
-                    SecureField("Neuen API-Key eintragen", text: $apiKeyInput)
-                    HStack {
-                        Button("API-Key speichern") { saveOpenAIAPIKey() }
-                            .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Button("API-Key löschen") { clearOpenAIAPIKey() }
-                            .disabled(!hasStoredAPIKey)
-                    }
-                    if let apiKeyStatus {
-                        Text(apiKeyStatus)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("OpenAI, OpenRouter, lokale Server oder andere Chat-Completions-kompatible Endpunkte. Secrets bleiben in der macOS Keychain.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .onAppear {
-            refreshAISecretState()
+            SummaryProviderSettingsSection()
         }
         .formStyle(.grouped)
         .padding(.horizontal, 16)
@@ -302,32 +260,6 @@ private struct AIIntelligenceTab: View {
                 onDismiss: { showVoiceIdSheet = false }
             )
         }
-    }
-
-    private var selectedSummaryProvider: AISummaryProvider {
-        AISummaryProvider(rawValue: summaryProviderRaw) ?? .claudeCLI
-    }
-
-    private func refreshAISecretState() {
-        hasStoredAPIKey = AIProviderSecretStore().loadOpenAICompatibleAPIKey() != nil
-    }
-
-    private func saveOpenAIAPIKey() {
-        do {
-            try AIProviderSecretStore().saveOpenAICompatibleAPIKey(apiKeyInput)
-            apiKeyInput = ""
-            apiKeyStatus = "API-Key gespeichert."
-            refreshAISecretState()
-        } catch {
-            apiKeyStatus = "API-Key konnte nicht gespeichert werden."
-        }
-    }
-
-    private func clearOpenAIAPIKey() {
-        AIProviderSecretStore().clearOpenAICompatibleAPIKey()
-        apiKeyInput = ""
-        apiKeyStatus = "API-Key gelöscht."
-        refreshAISecretState()
     }
 }
 

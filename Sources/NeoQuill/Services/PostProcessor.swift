@@ -3,7 +3,8 @@ import Foundation
 // Post-Processing nach Stop: aus dem Transkript eine Summary holen
 // (Titel, TLDR, Highlights, Tasks, Chapters). Das WAV schreibt der
 // RecordingController selbst via AudioWriter — hier läuft kein Audio mehr.
-// Provider: ClaudeCLIClient (Haiku via Max-Plan) oder OpenAI-kompatibel.
+// Provider wird über AIProviderSettings.makeProvider aufgelöst (Claude CLI,
+// OpenAI-kompatibel, Anthropic, Ollama). Der PostProcessor kennt nur SummaryProvider.
 
 struct PostProcessResult {
     let title: String
@@ -53,20 +54,11 @@ enum PostProcessor {
         guard !UserDefaults.standard.boolOr(AppSettings.localOnlyMode, default: false) else { return nil }
         guard UserDefaults.standard.boolOr(AppSettings.claudeAnalysisEnabled, default: true) else { return nil }
 
-        switch AIProviderSettings.selectedProvider() {
-        case .claudeCLI:
-            return await ClaudeCLIClient.summarize(transcript: transcript, locale: locale)
-        case .openAICompatible:
-            guard let config = AIProviderSettings.openAICompatibleConfig() else {
-                NSLog("[PostProcessor] OpenAI-compatible provider missing config or API key")
-                return nil
-            }
-            return await OpenAICompatibleSummaryClient.summarize(
-                transcript: transcript,
-                locale: locale,
-                config: config
-            )
+        guard let provider = AIProviderSettings.makeProvider() else {
+            NSLog("[PostProcessor] no summary provider configured (missing config or API key)")
+            return nil
         }
+        return await provider.summarize(transcript: transcript, locale: locale)
     }
 
     /// Formatiert die TranscriptLines fuer den Claude-Prompt und kuerzt

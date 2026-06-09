@@ -1,11 +1,12 @@
 import Foundation
 
-enum OpenAICompatibleSummaryClient {
-    static func summarize(
-        transcript: String,
-        locale: String,
-        config: OpenAICompatibleSummaryConfig
-    ) async -> MeetingSummaryAI? {
+/// OpenAI-kompatibles Backend: OpenAI selbst, OpenRouter, Groq, Together,
+/// lokale Server und alles andere, das `chat/completions` spricht. Ollama
+/// nutzt denselben Transport über seinen OpenAI-kompatiblen Endpoint.
+struct OpenAICompatibleSummaryProvider: SummaryProvider {
+    let config: OpenAICompatibleSummaryConfig
+
+    func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {
         let prompt = MeetingSummaryPrompt.build(transcript: transcript, locale: locale)
         var request = URLRequest(url: config.chatCompletionsURL, timeoutInterval: 60)
         request.httpMethod = "POST"
@@ -37,13 +38,42 @@ enum OpenAICompatibleSummaryClient {
             return nil
         }
     }
+
+    func probe() async -> ProviderProbeResult {
+        var request = URLRequest(url: config.chatCompletionsURL, timeoutInterval: 15)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+
+        let body = OpenAIChatCompletionRequest(
+            model: config.model,
+            messages: [OpenAIChatMessage(role: "user", content: "Antworte nur mit OK.")],
+            temperature: 0,
+            responseFormat: nil
+        )
+
+        do {
+            request.httpBody = try JSONEncoder().encode(body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                return .failed("Keine HTTP-Antwort vom Endpoint.")
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let snippet = String(data: data, encoding: .utf8)?.prefix(160) ?? ""
+                return .failed("HTTP \(http.statusCode): \(snippet)")
+            }
+            return .ok("Verbindung steht (Modell \(config.model)).")
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
 }
 
 private struct OpenAIChatCompletionRequest: Encodable {
     let model: String
     let messages: [OpenAIChatMessage]
     let temperature: Double
-    let responseFormat: OpenAIResponseFormat
+    let responseFormat: OpenAIResponseFormat?
 
     enum CodingKeys: String, CodingKey {
         case model

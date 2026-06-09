@@ -23,6 +23,10 @@ enum AppSettings {
     static let aiSummaryProvider = "ai_summary_provider"
     static let aiSummaryBaseURL = "ai_summary_base_url"
     static let aiSummaryModel = "ai_summary_model"
+    static let aiAnthropicBaseURL = "ai_anthropic_base_url"
+    static let aiAnthropicModel = "ai_anthropic_model"
+    static let aiOllamaBaseURL = "ai_ollama_base_url"
+    static let aiOllamaModel = "ai_ollama_model"
     static let actionDefaultRecipient = "action_default_recipient"
     static let actionJiraBaseURL = "action_jira_base_url"
     static let actionWebhookURL = "action_webhook_url"
@@ -56,6 +60,10 @@ enum AppSettings {
             aiSummaryProvider: AIProviderSettings.defaultProvider,
             aiSummaryBaseURL: AIProviderSettings.defaultOpenAIBaseURL,
             aiSummaryModel: AIProviderSettings.defaultOpenAIModel,
+            aiAnthropicBaseURL: AIProviderSettings.defaultAnthropicBaseURL,
+            aiAnthropicModel: AIProviderSettings.defaultAnthropicModel,
+            aiOllamaBaseURL: AIProviderSettings.defaultOllamaBaseURL,
+            aiOllamaModel: AIProviderSettings.defaultOllamaModel,
             actionDefaultRecipient: "",
             actionJiraBaseURL: "",
             actionWebhookURL: "",
