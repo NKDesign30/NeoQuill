@@ -343,17 +343,12 @@ final class RecordingController: ObservableObject {
     func importAudioFile(url: URL) async -> String? {
         guard store != nil else { return "Kein Meeting-Speicher verfügbar." }
 
-        let needsAccess = url.startAccessingSecurityScopedResource()
-        defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
-
         let fileName = url.deletingPathExtension().lastPathComponent
         statusText = "Audio wird gelesen"
 
         let samples: [Float]
         do {
-            samples = try await Task.detached(priority: .userInitiated) {
-                try AudioImporter.decodeToWhisperSamples(url: url)
-            }.value
+            samples = try await AudioIngestService.decode(url: url)
         } catch {
             statusText = "Bereit"
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -639,15 +634,10 @@ final class RecordingController: ObservableObject {
             return "Meeting nicht verfügbar oder wird gerade verarbeitet."
         }
 
-        let needsAccess = url.startAccessingSecurityScopedResource()
-        defer { if needsAccess { url.stopAccessingSecurityScopedResource() } }
-
         statusText = "Zusatz-Audio wird gelesen"
         let samples: [Float]
         do {
-            samples = try await Task.detached(priority: .userInitiated) {
-                try AudioImporter.decodeToWhisperSamples(url: url)
-            }.value
+            samples = try await AudioIngestService.decode(url: url)
         } catch {
             statusText = "Bereit"
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
