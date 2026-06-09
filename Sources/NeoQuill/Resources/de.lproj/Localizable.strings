@@ -1,3 +1,11 @@
 /* NeoQuill — Deutsch (Basis-Sprache) */
 
 "test.probe" = "Lokalisierung funktioniert";
+
+/* Settings — App-Sprache */
+"settings.appLanguage.title" = "Sprache der Oberfläche";
+"settings.appLanguage.picker" = "App-Sprache";
+"settings.appLanguage.hint" = "Legt die Sprache der NeoQuill-Oberfläche fest. \"System\" folgt deiner macOS-Sprache.";
+"settings.language.system" = "System";
+"settings.language.german" = "Deutsch";
+"settings.language.english" = "Englisch";

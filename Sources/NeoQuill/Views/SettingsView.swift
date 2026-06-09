@@ -132,6 +132,7 @@ private struct CloudIntegrationsTab: View {
 }
 
 private struct AudioSettingsTab: View {
+    @AppStorage(AppSettings.appLanguage)  private var appLanguage: String = "system"
     @AppStorage(AppSettings.whisperModel) private var whisperModel: String = "openai_whisper-small"
     @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String = ""
     @AppStorage(AppSettings.language)     private var language: String = "auto"
@@ -149,6 +150,17 @@ private struct AudioSettingsTab: View {
 
     var body: some View {
         Form {
+            Section(Loc.t("settings.appLanguage.title")) {
+                Picker(Loc.t("settings.appLanguage.picker"), selection: $appLanguage) {
+                    ForEach(Loc.selectableLanguages, id: \.code) { lang in
+                        Text(Loc.t(lang.labelKey)).tag(lang.code)
+                    }
+                }
+                Text(Loc.t("settings.appLanguage.hint"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Mikrofon") {
                 Picker("Eingabegerät", selection: $micDeviceId) {
                     Text("Standard").tag("")

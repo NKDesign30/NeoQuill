@@ -5,6 +5,7 @@ struct NeoQuillApp: App {
 
     @StateObject private var state: AppState
     @StateObject private var updater = AppUpdater()
+    @AppStorage(AppSettings.appLanguage) private var appLanguage = "system"
 
     init() {
         FontRegistrar.registerAll()
@@ -19,6 +20,8 @@ struct NeoQuillApp: App {
                 .frame(minWidth: 1080, idealWidth: 1280, minHeight: 700, idealHeight: 820)
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
+                .environment(\.locale, Loc.locale)
+                .id(appLanguage)
                 .sheet(isPresented: $state.showProfileOnboarding) {
                     OnboardingWizard(onFinish: {
                         state.completeOnboardingFromWizard()

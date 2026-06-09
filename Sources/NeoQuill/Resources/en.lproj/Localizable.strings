@@ -1,3 +1,11 @@
 /* NeoQuill — English */
 
 "test.probe" = "Localization works";
+
+/* Settings — App language */
+"settings.appLanguage.title" = "Interface Language";
+"settings.appLanguage.picker" = "App Language";
+"settings.appLanguage.hint" = "Sets the language of the NeoQuill interface. \"System\" follows your macOS language.";
+"settings.language.system" = "System";
+"settings.language.german" = "German";
+"settings.language.english" = "English";

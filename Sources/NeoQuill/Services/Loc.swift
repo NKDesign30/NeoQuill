@@ -25,6 +25,23 @@ enum Loc {
         UserDefaults.standard.string(forKey: AppSettings.appLanguage) ?? "system"
     }
 
+    /// Locale für SwiftUI-eigene Formatierung (Datum, Zahlen) passend zur
+    /// gewählten App-Sprache. "system" folgt dem Gerät.
+    static var locale: Locale {
+        switch currentLanguage {
+        case "de": return Locale(identifier: "de")
+        case "en": return Locale(identifier: "en")
+        default:   return .current
+        }
+    }
+
+    /// Sprachen, die der Nutzer in den Settings wählen kann.
+    static let selectableLanguages: [(code: String, labelKey: String)] = [
+        ("system", "settings.language.system"),
+        ("de", "settings.language.german"),
+        ("en", "settings.language.english"),
+    ]
+
     private static func resolveBundle(for lang: String) -> Bundle {
         guard lang != "system",
               let path = Bundle.module.path(forResource: lang, ofType: "lproj"),
