@@ -702,7 +702,7 @@ final class RecordingController: ObservableObject {
                 id: Self.mergedExternalSpeakerId,
                 name: "Zusatzaufnahme",
                 role: "Ergänzt",
-                colorHex: colorHex(forSpeakerId: Self.mergedExternalSpeakerId),
+                colorHex: SpeakerPalette.color(for: Self.mergedExternalSpeakerId),
                 spoke: ""
             ))
         }
@@ -1288,10 +1288,7 @@ final class RecordingController: ObservableObject {
             if LocalSpeakerProfile.isLocalSpeakerId(rhs) { return false }
             return lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
-        let palette: [(String, UInt32)] = [
-            (LocalSpeakerProfile.id, LocalSpeakerProfile.colorHex), ("S1", 0x7C8AFF), ("S2", 0xFFB340),
-            ("S3", 0x409CFF), ("S4", 0xD4845A)
-        ]
+        let fixedSpeakerIds = [LocalSpeakerProfile.id] + SpeakerPalette.fixedSpeakerIds
         let spokeBySpeaker = Self.spokenDurations(
             speakerIds: speakerIds,
             lines: lines,
@@ -1306,16 +1303,16 @@ final class RecordingController: ObservableObject {
             }
             if let displayName = displayNames[id] {
                 return Participant(id: id, name: displayName, role: "Caption",
-                                   colorHex: colorHex(forSpeakerId: id), spoke: spoke)
+                                   colorHex: SpeakerPalette.color(for: id), spoke: spoke)
             }
-            guard let entry = palette.first(where: { $0.0 == id }) else {
+            guard fixedSpeakerIds.contains(id) else {
                 return Participant(id: id, name: "Speaker \(id)", role: "Erkannt",
-                                   colorHex: colorHex(forSpeakerId: id), spoke: spoke)
+                                   colorHex: SpeakerPalette.color(for: id), spoke: spoke)
             }
             let name = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.displayName : "Speaker \(id)"
             let role = LocalSpeakerProfile.isLocalSpeakerId(id) ? LocalSpeakerProfile.role : "Erkannt"
             return Participant(id: id, name: name, role: role,
-                               colorHex: entry.1, spoke: spoke)
+                               colorHex: SpeakerPalette.color(for: id), spoke: spoke)
         }
     }
 
@@ -1375,7 +1372,7 @@ final class RecordingController: ObservableObject {
             speakerStore?.upsertIdentity(
                 id: line.who,
                 name: displayName,
-                colorHex: colorHex(forSpeakerId: line.who)
+                colorHex: SpeakerPalette.color(for: line.who)
             )
             speakerStore?.upsertAlias(
                 speakerId: line.who,
@@ -1399,7 +1396,7 @@ final class RecordingController: ObservableObject {
             speakerStore?.upsertIdentity(
                 id: line.who,
                 name: displayName,
-                colorHex: colorHex(forSpeakerId: line.who)
+                colorHex: SpeakerPalette.color(for: line.who)
             )
             speakerStore?.upsertAlias(
                 speakerId: line.who,
@@ -1409,22 +1406,6 @@ final class RecordingController: ObservableObject {
                 externalId: line.who
             )
         }
-    }
-
-    private func colorHex(forSpeakerId id: String) -> UInt32 {
-        if LocalSpeakerProfile.isLocalSpeakerId(id) { return LocalSpeakerProfile.colorHex }
-        let fixed: [String: UInt32] = [
-            "S1": 0x7C8AFF,
-            "S2": 0xFFB340,
-            "S3": 0x409CFF,
-            "S4": 0xD4845A,
-        ]
-        if let color = fixed[id] { return color }
-        let colors: [UInt32] = [0x7C8AFF, 0xFFB340, 0x409CFF, 0xD4845A, 0xFF6259, 0x2EAB73]
-        let checksum = id.unicodeScalars.reduce(UInt32(0)) { partial, scalar in
-            partial &+ scalar.value
-        }
-        return colors[Int(checksum % UInt32(colors.count))]
     }
 
     private func generateTitle(from lines: [TranscriptLine], started: Date) -> String {
