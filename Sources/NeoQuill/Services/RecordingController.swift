@@ -34,6 +34,9 @@ final class RecordingController: ObservableObject {
     /// Single Whisper-Instance fuer Post-Recording. Mic- und Sys-Stem laufen
     /// sequenziell durch. Ein Modell = halbe RAM-Last + kein ANE-Konflikt.
     private let transcriber = LiveTranscriber()
+    /// Multi-Stem-STT-Orchestrierung (Stems rein, Zeilen raus) — ausgelagert
+    /// aus diesem Controller in ein eigenes Modul mit klarem Interface.
+    private lazy var meetingTranscriber = MeetingTranscriber(whisperKitFallback: transcriber)
     private let permissions = PermissionGate()
     let diarizer = SpeakerDiarizer()
     let detector = MeetingDetector()
@@ -441,7 +444,7 @@ final class RecordingController: ObservableObject {
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
-        var allLines = await transcribeFinalAudio(
+        var allLines = await meetingTranscriber.transcribe(
             meetingId: id,
             mic: captured.mic,
             system: captured.sys,
@@ -586,7 +589,7 @@ final class RecordingController: ObservableObject {
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
 
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
-        let lines = await transcribeFinalAudio(
+        let lines = await meetingTranscriber.transcribe(
             meetingId: meetingId,
             mic: samples,
             system: [],
@@ -695,7 +698,7 @@ final class RecordingController: ObservableObject {
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
-        let incoming = await transcribeFinalAudio(
+        let incoming = await meetingTranscriber.transcribe(
             meetingId: meetingId,
             mic: samples,
             system: [],
@@ -875,7 +878,7 @@ final class RecordingController: ObservableObject {
 
         let storedAudio = readStoredAudio(meetingId: meetingId, detail: detail)
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
-        var allLines = await transcribeFinalAudio(
+        var allLines = await meetingTranscriber.transcribe(
             meetingId: meetingId,
             mic: storedAudio.mic,
             system: storedAudio.system,
@@ -1237,71 +1240,6 @@ final class RecordingController: ObservableObject {
         return mixFallback
     }
 
-    private func transcribeFinalAudio(
-        meetingId: String,
-        mic: [Float],
-        system: [Float],
-        mixed: [Float],
-        language: String
-    ) async -> [TranscriptLine] {
-        let micLines = await transcribeFinalStem(
-            audioData: mic,
-            speaker: LocalSpeakerProfile.id,
-            language: language,
-            meetingId: meetingId,
-            stem: "mic"
-        )
-        let systemLines = await transcribeFinalStem(
-            audioData: system,
-            speaker: "S1",
-            language: language,
-            meetingId: meetingId,
-            stem: "system"
-        )
-        var lines = sortedTranscript(micLines + systemLines)
-
-        if transcriptNeedsMixedFallback(lines: lines, totalSamples: max(mic.count, system.count)),
-           !mixed.isEmpty {
-            let mixedLines = await transcribeFinalStem(
-                audioData: mixed,
-                speaker: "S1",
-                language: language,
-                meetingId: meetingId,
-                stem: "mixed"
-            )
-            if transcriptWordCount(mixedLines) > transcriptWordCount(lines) {
-                lines = sortedTranscript(mixedLines)
-            }
-        }
-
-        return lines
-    }
-
-    private func sortedTranscript(_ lines: [TranscriptLine]) -> [TranscriptLine] {
-        lines.sorted { lhs, rhs in
-            parseTimestampSeconds(lhs.timestamp) < parseTimestampSeconds(rhs.timestamp)
-        }
-    }
-
-    private func transcriptNeedsMixedFallback(lines: [TranscriptLine], totalSamples: Int) -> Bool {
-        let words = transcriptWordCount(lines)
-        if lines.isEmpty { return true }
-        let seconds = totalSamples / 16_000
-        if seconds >= 12 && words < max(4, seconds / 3) { return true }
-        let quality = TranscriptQualityScorer.evaluate(
-            lines: lines,
-            audioDurationSeconds: TimeInterval(totalSamples) / AudioImporter.targetSampleRate
-        )
-        if quality.status == .failed { return true }
-        let uniqueTexts = Set(lines.map { $0.body.lowercased() })
-        if lines.count >= 4 && uniqueTexts.count <= lines.count / 2 { return true }
-        return false
-    }
-
-    private func transcriptWordCount(_ lines: [TranscriptLine]) -> Int {
-        lines.reduce(0) { $0 + $1.body.split(separator: " ").count }
-    }
-
     private func rebuiltDetail(
         from detail: MeetingDetail,
         title: String? = nil,
@@ -1334,71 +1272,6 @@ final class RecordingController: ObservableObject {
         )
     }
 
-    private func transcribeFinalStem(
-        audioData: [Float],
-        speaker: String,
-        language: String,
-        meetingId: String,
-        stem: String
-    ) async -> [TranscriptLine] {
-        guard !audioData.isEmpty else { return [] }
-        if FinalSTTTranscriber.isAvailable {
-            do {
-                let result = try await FinalSTTTranscriber.transcribe(
-                    audioData: audioData,
-                    speaker: speaker,
-                    language: language,
-                    meetingId: meetingId,
-                    stem: stem
-                )
-                persistTranscriptRun(result.run)
-                return result.lines
-            } catch FinalSTTError.qualityRejected(let run) {
-                persistTranscriptRun(run)
-                NSLog("[NeoQuill] Final-STT Quality rejected (\(speaker)/\(stem)): \(run.quality.warnings.map(\.rawValue).joined(separator: ","))")
-                return []
-            } catch {
-                NSLog("[NeoQuill] Final-STT Fallback auf WhisperKit (\(speaker)/\(stem)): \(error)")
-            }
-        }
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: language)
-        _ = await transcriber.loadModel(model: model, language: lang)
-        let lines = await transcriber.transcribeFull(audioData: audioData, speaker: speaker)
-        let duration = TimeInterval(audioData.count) / AudioImporter.targetSampleRate
-        let settings = TranscriptRunSettings(
-            language: lang,
-            maxContextTokens: 0,
-            vadEnabled: false,
-            fullJSON: false,
-            chunkDurationSeconds: duration,
-            overlapSeconds: 0
-        )
-        let run = TranscriptRun.fromLines(
-            meetingId: meetingId,
-            stem: stem,
-            audioSampleRate: AudioImporter.targetSampleRate,
-            audioDurationSeconds: duration,
-            engine: TranscriptEngineInfo(name: "WhisperKit", model: model, version: nil),
-            settings: settings,
-            lines: lines,
-            audioSha256: AudioFingerprint.sha256(samples: audioData)
-        )
-        persistTranscriptRun(run)
-        if run.quality.status == .failed {
-            NSLog("[NeoQuill] WhisperKit Quality rejected (\(speaker)/\(stem)): \(run.quality.warnings.map(\.rawValue).joined(separator: ","))")
-            return []
-        }
-        return lines
-    }
-
-    private func persistTranscriptRun(_ run: TranscriptRun) {
-        do {
-            _ = try TranscriptRunStore.write(run)
-        } catch {
-            NSLog("[NeoQuill] Transcript-Run konnte nicht gespeichert werden: \(error)")
-        }
-    }
 
     private func detectedPlatform() -> Platform {
         switch detector.detectedApp {
@@ -1478,13 +1351,6 @@ final class RecordingController: ObservableObject {
         let trailingDigits = String(trimmed.reversed().prefix { $0.isNumber }.reversed())
         if let numeric = Int(trailingDigits) { return "S\(numeric + 1)" }
         return upper.count <= 3 ? upper : "S1"
-    }
-
-    private func parseTimestampSeconds(_ ts: String) -> TimeInterval {
-        let parts = ts.split(separator: ":")
-        guard parts.count == 2,
-              let m = Int(parts[0]), let s = Int(parts[1]) else { return 0 }
-        return TimeInterval(m * 60 + s)
     }
 
     private func collectParticipants(
