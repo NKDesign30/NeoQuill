@@ -15,7 +15,7 @@ import CoreMedia
 /// - Braucht minimalen Video-Stream (2x2px, ~0fps) — ScreenCaptureKit erzwingt das
 /// - "Screen Recording" Permission noetig (lila Punkt in Menueleiste)
 @available(macOS 13.0, *)
-final class SCKAudioCapture: NSObject, @unchecked Sendable {
+final class SCKAudioCapture: NSObject, SystemAudioSource, @unchecked Sendable {
 
     /// Called with 16kHz mono Float32 samples
     var onSamples: (([Float]) -> Void)?

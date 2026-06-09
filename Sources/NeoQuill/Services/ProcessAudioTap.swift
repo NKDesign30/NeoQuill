@@ -26,7 +26,7 @@ private func tapDiagLog(_ msg: String) {
 /// - Kein BlackHole, kein Multi-Output Device, kein Default-Device-Wechsel
 /// - App merkt nichts davon (Tap ist unsichtbar)
 /// - Funktioniert unabhaengig vom Output-Device der App
-final class ProcessAudioTap: @unchecked Sendable {
+final class ProcessAudioTap: SystemAudioSource, @unchecked Sendable {
 
     /// Called with 16kHz mono Float32 samples
     var onSamples: (([Float]) -> Void)?

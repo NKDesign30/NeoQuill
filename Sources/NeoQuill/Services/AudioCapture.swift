@@ -224,16 +224,7 @@ final class AudioCapture: NSObject, ObservableObject {
 
             // SCK starten
             let sck = SCKAudioCapture()
-            sck.onSamples = { [weak self] samples in
-                Task { @MainActor in
-                    self?.appendAudio(samples, source: "Tap")
-                }
-            }
-            sck.onSamplesHQ = { [weak self] hq in
-                Task { @MainActor in
-                    self?.appendAudioHQ(hq, source: "Tap")
-                }
-            }
+            wireSystemAudio(sck)
             sckCapture = sck
             Task {
                 do {
@@ -331,20 +322,27 @@ final class AudioCapture: NSObject, ObservableObject {
 
     private func startProcessTap() throws {
         let tap = ProcessAudioTap()
-        tap.onSamples = { [weak self] samples in
+        wireSystemAudio(tap)
+        try tap.start(bundleIdentifiers: targetBundleIds)
+        processTap = tap
+        hasSystemAudio = true
+    }
+
+    /// Verdrahtet die Sample-Callbacks einer System-Audio-Quelle auf die
+    /// Misch-Puffer. Beide Quellen (`ProcessAudioTap`, `SCKAudioCapture`) routen
+    /// identisch — die Verdrahtung lag vorher zweimal wortgleich in
+    /// `startProcessTap` und `checkTapFallback`.
+    private func wireSystemAudio(_ source: SystemAudioSource) {
+        source.onSamples = { [weak self] samples in
             Task { @MainActor in
                 self?.appendAudio(samples, source: "Tap")
             }
         }
-        tap.onSamplesHQ = { [weak self] hq in
+        source.onSamplesHQ = { [weak self] hq in
             Task { @MainActor in
                 self?.appendAudioHQ(hq, source: "Tap")
             }
         }
-
-        try tap.start(bundleIdentifiers: targetBundleIds)
-        processTap = tap
-        hasSystemAudio = true
     }
 
     // MARK: - Mikrofon (AVFoundation)
