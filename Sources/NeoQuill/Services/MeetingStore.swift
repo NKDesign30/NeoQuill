@@ -82,6 +82,10 @@ final class MeetingStore: ObservableObject {
         // `processing` abgeleitet. `processing` bleibt parallel befüllt
         // (computed aus lifecycle) für Rückwärtskompatibilität/Rollback.
         runRaw("ALTER TABLE meeting ADD COLUMN lifecycle TEXT;")
+        // Zähler für unterbrochene Transkriptions-Versuche. Begrenzt das
+        // Auto-Recovery (siehe RecordingController.recoverOrphanedTranscripts),
+        // damit ein dauerhaft scheiternder Lauf nicht endlos neu startet.
+        runRaw("ALTER TABLE meeting ADD COLUMN transcribe_attempts INTEGER NOT NULL DEFAULT 0;")
     }
 
     @discardableResult
@@ -111,6 +115,40 @@ final class MeetingStore: ObservableObject {
     func clearAudioURLs() {
         runRaw("UPDATE meeting SET audio_url = NULL;")
         readBackToPublished()
+    }
+
+    // MARK: - Transkriptions-Versuche (Recovery-Bound)
+
+    /// Aktueller Zähler unterbrochener Transkriptions-Versuche eines Meetings.
+    func transcribeAttempts(for id: String) -> Int {
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "SELECT transcribe_attempts FROM meeting WHERE id = ?", -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        bind(stmt, 1, id)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return Int(sqlite3_column_int(stmt, 0))
+    }
+
+    /// Erhöht den Versuchszähler um 1 und gibt den neuen Wert zurück.
+    @discardableResult
+    func bumpTranscribeAttempts(for id: String) -> Int {
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, "UPDATE meeting SET transcribe_attempts = transcribe_attempts + 1 WHERE id = ?", -1, &stmt, nil) == SQLITE_OK {
+            bind(stmt, 1, id)
+            sqlite3_step(stmt)
+        }
+        sqlite3_finalize(stmt)
+        return transcribeAttempts(for: id)
+    }
+
+    /// Setzt den Versuchszähler nach erfolgreicher Transkription zurück.
+    func resetTranscribeAttempts(for id: String) {
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, "UPDATE meeting SET transcribe_attempts = 0 WHERE id = ?", -1, &stmt, nil) == SQLITE_OK {
+            bind(stmt, 1, id)
+            sqlite3_step(stmt)
+        }
+        sqlite3_finalize(stmt)
     }
 
     // MARK: - Seed / Load
@@ -152,7 +190,7 @@ final class MeetingStore: ObservableObject {
                 // unterbrochene Jobs landen in .transcribing, damit recoverOrphaned
                 // sie aufgreift, fertige in .done.
                 let lifecycle  = textOrNil(stmt, 19)
-                    .flatMap(MeetingLifecycle.init(rawValue:))
+                    .map { MeetingLifecycle(serialized: $0) }
                     ?? (processing ? .transcribing : .done)
                 let platform   = Platform(rawValue: platStr) ?? .call
 
@@ -386,7 +424,7 @@ final class MeetingStore: ObservableObject {
         bind(stmt, 10, jsonString(d.transcript,   encoder))
         if let a = d.audioURL { bind(stmt, 11, a) } else { sqlite3_bind_null(stmt, 11) }
         sqlite3_bind_int(stmt, 12, d.processing ? 1 : 0)
-        bind(stmt, 13, d.lifecycle.rawValue)
+        bind(stmt, 13, d.lifecycle.serialized)
         bind(stmt, 14, d.id)
         sqlite3_step(stmt)
     }

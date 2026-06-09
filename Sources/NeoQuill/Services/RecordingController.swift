@@ -297,17 +297,39 @@ final class RecordingController: ObservableObject {
         Task { [weak self] in
             guard let self, let store = self.store else { return }
             for id in orphans {
-                // Clear the stuck `processing` flag first — reprocessMeetingAsync
-                // bails out on `!detail.processing`, which is exactly the state an
-                // orphaned meeting is in. Without this the re-run is a no-op.
+                let attempts = store.bumpTranscribeAttempts(for: id)
+                guard attempts <= Self.maxRecoveryAttempts else {
+                    // Zu oft unterbrochen → als gescheitert markieren statt
+                    // endlos neu zu starten. `.failed` ist nicht busy, also greift
+                    // recoverOrphaned es beim nächsten Start nicht mehr auf.
+                    if var detail = store.detail(for: id) {
+                        detail.lifecycle = .failed(
+                            reason: "Transkription mehrfach unterbrochen",
+                            attempts: attempts - 1
+                        )
+                        store.updateDetail(detail)
+                    }
+                    continue
+                }
+                // Clear the stuck busy state first — reprocessMeetingAsync bails out
+                // on `!detail.processing`, which is exactly the state an orphaned
+                // meeting is in. Without this the re-run is a no-op.
                 if var detail = store.detail(for: id) {
                     detail.lifecycle = .done
                     store.updateDetail(detail)
                 }
                 await self.reprocessMeetingAsync(id)
+                // Erfolg (Transkript vorhanden) → Versuchszähler zurücksetzen.
+                if let finished = store.detail(for: id), !finished.transcript.isEmpty {
+                    store.resetTranscribeAttempts(for: id)
+                }
             }
         }
     }
+
+    /// Maximale automatische Wiederanläufe für unterbrochene Transkriptionen,
+    /// bevor ein Meeting als `.failed` markiert wird.
+    private static let maxRecoveryAttempts = 3
 
     /// Importiert eine externe Audiodatei (iPhone-Sprachmemo, Diktiergerät,
     /// beliebige .m4a/.mp3/.wav/.caf) als eigenständige Aufnahme: dekodieren,

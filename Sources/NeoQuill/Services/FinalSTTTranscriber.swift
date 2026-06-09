@@ -137,35 +137,29 @@ enum FinalSTTTranscriber {
             try? FileManager.default.removeItem(at: jsonURL)
         }
 
-        let process = Process()
-        process.executableURL = executable
-        var arguments = [
-            "--no-gpu",
-            "-t", "6",
-            "-mc", "0",
-            "-m", model.path,
-            "-l", language == "auto" ? "auto" : language,
-            "-f", inputURL.path,
-            "-oj",
-            "-ojf",
-            "-of", outputBaseURL.path,
-            "-sns",
-            "--print-confidence",
-        ]
-        if let vadModel = vadModelURL() {
-            arguments.append(contentsOf: ["--vad", "-vm", vadModel.path])
-        }
-        process.arguments = arguments
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw FinalSTTError.processFailed(process.terminationStatus)
-        }
-        guard FileManager.default.fileExists(atPath: jsonURL.path) else {
-            throw FinalSTTError.outputMissing
+        // Subprozess-Ausführung (GPU-zuerst + CPU-Fallback + hartes Timeout)
+        // liegt in TranscriptionJob. Timeout großzügig an die Chunk-Länge
+        // gekoppelt: GPU braucht Sekunden, CPU-Fallback wenige Minuten — die
+        // Deadline fängt nur echte Hänger, nicht legitime Läufe.
+        let audioDuration = TimeInterval(chunk.samples.count) / sampleRate
+        let spec = TranscriptionJob.Spec(
+            executable: executable,
+            model: model,
+            vadModel: vadModelURL(),
+            language: language,
+            inputURL: inputURL,
+            outputBaseURL: outputBaseURL,
+            threads: 6,
+            timeout: max(300, audioDuration * 3)
+        )
+        do {
+            _ = try TranscriptionJob.decode(spec)
+        } catch let failure as TranscriptionJob.Failure {
+            switch failure {
+            case .timedOut:                 throw FinalSTTError.processFailed(124)
+            case .processFailed(let code):  throw FinalSTTError.processFailed(code)
+            case .outputMissing:            throw FinalSTTError.outputMissing
+            }
         }
 
         let data = try Data(contentsOf: jsonURL)
