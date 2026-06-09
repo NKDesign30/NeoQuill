@@ -1301,11 +1301,6 @@ final class RecordingController: ObservableObject {
         elapsedTimer = nil
     }
 
-    static func formatTimestamp(_ seconds: TimeInterval) -> String {
-        let s = max(0, Int(seconds))
-        return String(format: "%02d:%02d", s / 60, s % 60)
-    }
-
     private func friendlyModelLabel(_ raw: String) -> String {
         switch raw {
         case "openai_whisper-tiny":   return "Whisper Tiny"

@@ -43,9 +43,6 @@ final class DockBadgeService {
     }
 
     private func formatBadge(elapsed: TimeInterval) -> String {
-        let total = Int(max(0, elapsed))
-        let m = total / 60
-        let s = total % 60
-        return String(format: "%d:%02d", m, s)
+        DurationFormat.short(elapsed)
     }
 }

@@ -133,9 +133,7 @@ final class LiveTranscriber: @unchecked Sendable {
                     if cleaned.isEmpty { continue }
                     if cleaned.caseInsensitiveCompare(lastText) == .orderedSame { continue }
                     lastText = cleaned
-                    let mins = Int(segment.start) / 60
-                    let secs = Int(segment.start) % 60
-                    let ts = String(format: "%02d:%02d", mins, secs)
+                    let ts = TranscriptTimecode.stamp(TimeInterval(segment.start))
                     let isLocalSpeaker = LocalSpeakerProfile.isLocalSpeakerId(speaker)
                     lines.append(TranscriptLine(
                         who: speaker,

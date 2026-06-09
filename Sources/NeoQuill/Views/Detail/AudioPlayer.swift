@@ -249,9 +249,7 @@ struct AudioPlayer: View {
     }
 
     static func formatted(seconds: Int) -> String {
-        let m = max(0, seconds) / 60
-        let s = max(0, seconds) % 60
-        return String(format: "%02d:%02d", m, s)
+        TranscriptTimecode.stamp(TimeInterval(seconds))
     }
 
     private static func formatted(rate: Float) -> String {

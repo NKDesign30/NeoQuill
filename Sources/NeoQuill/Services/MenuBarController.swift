@@ -145,8 +145,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private func format(_ s: TimeInterval) -> String {
-        let total = Int(max(0, s))
-        return String(format: "%d:%02d", total / 60, total % 60)
+        DurationFormat.short(s)
     }
 
     // MARK: - Actions

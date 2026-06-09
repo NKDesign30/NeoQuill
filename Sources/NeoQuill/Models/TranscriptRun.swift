@@ -178,7 +178,6 @@ struct TranscriptRun: Identifiable, Codable, Hashable {
     }
 
     private static func timestamp(milliseconds: Int) -> String {
-        let totalSeconds = max(0, milliseconds / 1_000)
-        return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+        TranscriptTimecode.stamp(TimeInterval(milliseconds) / 1_000)
     }
 }

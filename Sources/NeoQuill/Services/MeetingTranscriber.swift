@@ -131,7 +131,7 @@ struct MeetingTranscriber {
 
     private func sortedTranscript(_ lines: [TranscriptLine]) -> [TranscriptLine] {
         lines.sorted { lhs, rhs in
-            parseTimestampSeconds(lhs.timestamp) < parseTimestampSeconds(rhs.timestamp)
+            (TranscriptTimecode.parse(lhs.timestamp) ?? 0) < (TranscriptTimecode.parse(rhs.timestamp) ?? 0)
         }
     }
 
@@ -143,10 +143,4 @@ struct MeetingTranscriber {
         }
     }
 
-    private func parseTimestampSeconds(_ ts: String) -> TimeInterval {
-        let parts = ts.split(separator: ":")
-        guard parts.count == 2,
-              let m = Int(parts[0]), let s = Int(parts[1]) else { return 0 }
-        return TimeInterval(m * 60 + s)
-    }
 }

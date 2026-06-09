@@ -85,7 +85,7 @@ struct TranscriptLine: Identifiable, Codable, Hashable {
         confidence: Double = 1.0,
         highlight: Bool = false
     ) {
-        let resolvedStart = startSeconds ?? Self.seconds(from: timestamp)
+        let resolvedStart = startSeconds ?? (TranscriptTimecode.parse(timestamp) ?? 0)
         self.id = id
         self.who = who
         self.displayName = displayName
@@ -102,7 +102,7 @@ struct TranscriptLine: Identifiable, Codable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let timestamp = try c.decode(String.self, forKey: .timestamp)
-        let start = try c.decodeIfPresent(TimeInterval.self, forKey: .startSeconds) ?? Self.seconds(from: timestamp)
+        let start = try c.decodeIfPresent(TimeInterval.self, forKey: .startSeconds) ?? (TranscriptTimecode.parse(timestamp) ?? 0)
         let source = try c.decodeIfPresent(TranscriptSource.self, forKey: .source) ?? .merged
         let who = try c.decode(String.self, forKey: .who)
         self.id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -117,12 +117,6 @@ struct TranscriptLine: Identifiable, Codable, Hashable {
             ?? (LocalSpeakerProfile.isLocalSpeakerId(who) ? .microphoneOwner : .unknown)
         self.confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 1.0
         self.highlight = try c.decodeIfPresent(Bool.self, forKey: .highlight) ?? false
-    }
-
-    private static func seconds(from timestamp: String) -> TimeInterval {
-        let parts = timestamp.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2 else { return 0 }
-        return TimeInterval(parts[0] * 60 + parts[1])
     }
 }
 

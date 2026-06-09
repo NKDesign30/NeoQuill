@@ -20,22 +20,3 @@ final class AudioPlaybackController: ObservableObject {
         seekTo = nil
     }
 }
-
-// Parser fuer Chapter-Timestamps wie "02:14", "2:14" oder "1:23:45".
-// Robust gegenueber fehlender fuehrender Null (Whisper liefert "2:14" bei
-// einstelligen Minuten).
-enum TimestampParser {
-    static func seconds(from text: String) -> TimeInterval? {
-        let parts = text.split(separator: ":")
-        switch parts.count {
-        case 2:
-            guard let m = Int(parts[0]), let s = Int(parts[1]) else { return nil }
-            return TimeInterval(m * 60 + s)
-        case 3:
-            guard let h = Int(parts[0]), let m = Int(parts[1]), let s = Int(parts[2]) else { return nil }
-            return TimeInterval(h * 3600 + m * 60 + s)
-        default:
-            return nil
-        }
-    }
-}

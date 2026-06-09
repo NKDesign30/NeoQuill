@@ -55,7 +55,7 @@ struct ChaptersPane: View {
     }
 
     private func jumpTo(chapter: Chapter) {
-        guard let seconds = TimestampParser.seconds(from: chapter.timestamp) else { return }
+        guard let seconds = TranscriptTimecode.parse(chapter.timestamp) else { return }
         playback.seekTo = seconds
     }
 }
