@@ -192,6 +192,49 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
 
     var participantCount: Int { participants.count }
     var openTasks: Int { tasks.filter { $0.status == .open }.count }
+
+    /// Kopiert das Detail und ersetzt nur die übergebenen Felder; alles andere
+    /// bleibt unverändert. Identität und Zeitfelder (`id`, `dateLong`,
+    /// `timeRange`, `duration`, `platform`) sind bewusst nicht änderbar — sie
+    /// gehören zur Aufnahme, nicht zum Verarbeitungsstand.
+    ///
+    /// Single Source der „ein Feld ändern"-Kopie: vorher hatte `RecordingController`
+    /// dafür einen privaten Helfer, während `MeetingStore` denselben 15-Felder-Copy
+    /// von Hand nachbaute — beim Hinzufügen von `audioURL`/`lifecycle` musste jede
+    /// Hand-Kopie separat nachgezogen werden.
+    ///
+    /// `audioURL` folgt der bestehenden Semantik (`nil` = unverändert lassen); ein
+    /// Detail mit gelöschtem Audio wird weiterhin über den vollen Initializer gebaut.
+    func with(
+        title: String? = nil,
+        wordCount: Int? = nil,
+        participants: [Participant]? = nil,
+        tldr: String? = nil,
+        highlights: [Highlight]? = nil,
+        tasks: [ActionItem]? = nil,
+        chapters: [Chapter]? = nil,
+        transcript: [TranscriptLine]? = nil,
+        audioURL: String? = nil,
+        lifecycle: MeetingLifecycle? = nil
+    ) -> MeetingDetail {
+        MeetingDetail(
+            id: id,
+            title: title ?? self.title,
+            dateLong: dateLong,
+            timeRange: timeRange,
+            duration: duration,
+            platform: platform,
+            wordCount: wordCount ?? self.wordCount,
+            participants: participants ?? self.participants,
+            tldr: tldr ?? self.tldr,
+            highlights: highlights ?? self.highlights,
+            tasks: tasks ?? self.tasks,
+            chapters: chapters ?? self.chapters,
+            transcript: transcript ?? self.transcript,
+            audioURL: audioURL ?? self.audioURL,
+            lifecycle: lifecycle ?? self.lifecycle
+        )
+    }
 }
 
 struct LiveSession: Codable, Hashable {

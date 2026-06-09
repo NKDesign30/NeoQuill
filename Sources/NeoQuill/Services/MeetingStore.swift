@@ -242,14 +242,7 @@ final class MeetingStore: ObservableObject {
         var tasks = d.tasks
         guard let idx = tasks.firstIndex(where: { $0.id == taskId }) else { return }
         tasks[idx].status = status
-        let upd = MeetingDetail(
-            id: d.id, title: d.title, dateLong: d.dateLong, timeRange: d.timeRange,
-            duration: d.duration, platform: d.platform, wordCount: d.wordCount,
-            participants: d.participants, tldr: d.tldr,
-            highlights: d.highlights, tasks: tasks, chapters: d.chapters, transcript: d.transcript,
-            audioURL: d.audioURL, lifecycle: d.lifecycle
-        )
-        upsertDetail(upd)
+        upsertDetail(d.with(tasks: tasks))
         readBackToPublished()
     }
 
@@ -311,22 +304,13 @@ final class MeetingStore: ObservableObject {
             )
         }
 
-        let updated = MeetingDetail(
-            id: d.id,
-            title: d.title,
-            dateLong: d.dateLong,
-            timeRange: d.timeRange,
-            duration: d.duration,
-            platform: d.platform,
-            wordCount: d.wordCount,
+        let updated = d.with(
             participants: participants,
             tldr: tldr,
             highlights: highlights,
             tasks: tasks,
             chapters: chapters,
-            transcript: transcript,
-            audioURL: d.audioURL,
-            lifecycle: d.lifecycle
+            transcript: transcript
         )
         upsertDetail(updated)
         readBackToPublished()

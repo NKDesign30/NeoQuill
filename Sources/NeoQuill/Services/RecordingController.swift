@@ -648,7 +648,7 @@ final class RecordingController: ObservableObject {
         _ = try? AudioWriter.persist(id: mergeStemId, stem: .mic, samples: samples)
 
         // UI in den Processing-Zustand setzen, Original-Inhalte bleiben sichtbar.
-        store.updateDetail(rebuiltDetail(from: detail, tldr: "Zusatz-Audio wird eingearbeitet…", lifecycle: .transcribing))
+        store.updateDetail(detail.with(tldr: "Zusatz-Audio wird eingearbeitet…", lifecycle: .transcribing))
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
@@ -674,7 +674,7 @@ final class RecordingController: ObservableObject {
         }
 
         guard !incoming.isEmpty else {
-            store.updateDetail(rebuiltDetail(from: detail, tldr: detail.tldr, lifecycle: .done))
+            store.updateDetail(detail.with(tldr: detail.tldr, lifecycle: .done))
             statusText = "Bereit"
             return "In der Zusatzaufnahme wurde keine Sprache erkannt."
         }
@@ -695,8 +695,7 @@ final class RecordingController: ObservableObject {
             ))
         }
 
-        store.updateDetail(rebuiltDetail(
-            from: detail,
+        store.updateDetail(detail.with(
             wordCount: wordCount,
             participants: participants,
             tldr: "KI-Zusammenfassung läuft…",
@@ -712,8 +711,7 @@ final class RecordingController: ObservableObject {
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
-        store.updateDetail(rebuiltDetail(
-            from: detail,
+        store.updateDetail(detail.with(
             title: summary.title.isEmpty ? detail.title : summary.title,
             wordCount: wordCount,
             participants: participants,
@@ -806,8 +804,7 @@ final class RecordingController: ObservableObject {
 
     private func reprocessMeetingAsync(_ meetingId: String, platformEvents: [PlatformTranscriptEvent]) async {
         guard let store, let detail = store.detail(for: meetingId), !detail.processing else { return }
-        let busy = rebuiltDetail(
-            from: detail,
+        let busy = detail.with(
             tldr: "Final-STT läuft…",
             highlights: [],
             tasks: [],
@@ -864,8 +861,7 @@ final class RecordingController: ObservableObject {
         let wordCount = TranscriptNoiseFilter.wordCount(allLines)
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
         guard !allLines.isEmpty else {
-            let empty = rebuiltDetail(
-                from: detail,
+            let empty = detail.with(
                 title: "Aufnahme ohne Sprache",
                 wordCount: 0,
                 participants: participants,
@@ -885,8 +881,7 @@ final class RecordingController: ObservableObject {
             return
         }
 
-        let transcribed = rebuiltDetail(
-            from: detail,
+        let transcribed = detail.with(
             title: generateTitle(from: summaryLines.isEmpty ? allLines : summaryLines, started: Date()),
             wordCount: wordCount,
             participants: participants,
@@ -907,8 +902,7 @@ final class RecordingController: ObservableObject {
             locale: lang,
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
-        let final = rebuiltDetail(
-            from: transcribed,
+        let final = transcribed.with(
             title: summary.title.isEmpty ? transcribed.title : summary.title,
             wordCount: wordCount,
             participants: participants,
@@ -1049,37 +1043,6 @@ final class RecordingController: ObservableObject {
         return (mic: mic, system: system, mixed: mixed, audioURL: playbackURL)
     }
 
-    private func rebuiltDetail(
-        from detail: MeetingDetail,
-        title: String? = nil,
-        wordCount: Int? = nil,
-        participants: [Participant]? = nil,
-        tldr: String? = nil,
-        highlights: [Highlight]? = nil,
-        tasks: [ActionItem]? = nil,
-        chapters: [Chapter]? = nil,
-        transcript: [TranscriptLine]? = nil,
-        audioURL: String? = nil,
-        lifecycle: MeetingLifecycle? = nil
-    ) -> MeetingDetail {
-        MeetingDetail(
-            id: detail.id,
-            title: title ?? detail.title,
-            dateLong: detail.dateLong,
-            timeRange: detail.timeRange,
-            duration: detail.duration,
-            platform: detail.platform,
-            wordCount: wordCount ?? detail.wordCount,
-            participants: participants ?? detail.participants,
-            tldr: tldr ?? detail.tldr,
-            highlights: highlights ?? detail.highlights,
-            tasks: tasks ?? detail.tasks,
-            chapters: chapters ?? detail.chapters,
-            transcript: transcript ?? detail.transcript,
-            audioURL: audioURL ?? detail.audioURL,
-            lifecycle: lifecycle ?? detail.lifecycle
-        )
-    }
 
 
     private func detectedPlatform() -> Platform {
