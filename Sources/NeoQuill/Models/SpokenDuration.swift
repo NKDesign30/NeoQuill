@@ -30,25 +30,32 @@ enum SpokenDuration {
         return "\(minutes)m \(remainder)s"
     }
 
-    /// "{m}m {s}s", "{s}s" oder null-gepaddete Varianten → Sekunden.
+    /// "{m}m {s}s", "{s}s", "{m}m" oder null-gepaddete Varianten → Sekunden.
     /// `nil` bei nicht parsebarer Eingabe.
     static func seconds(from label: String) -> Int? {
         let trimmed = label.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
 
         var minutes = 0
+        var hasMinutes = false
         var secondsPart = Substring(trimmed)
         if let mRange = trimmed.range(of: "m") {
             let minutesText = trimmed[trimmed.startIndex..<mRange.lowerBound]
                 .trimmingCharacters(in: .whitespaces)
             guard let m = Int(minutesText) else { return nil }
             minutes = m
+            hasMinutes = true
             secondsPart = trimmed[mRange.upperBound...]
         }
 
         let secondsText = secondsPart
             .replacingOccurrences(of: "s", with: "")
             .trimmingCharacters(in: .whitespaces)
+        if secondsText.isEmpty {
+            // "12m" ohne Sekunden-Teil zählt als reine Minuten; ohne Minuten
+            // (z.B. "" nach Strip) wäre die Eingabe Junk.
+            return hasMinutes ? minutes * 60 : nil
+        }
         guard let s = Int(secondsText) else { return nil }
         return minutes * 60 + s
     }

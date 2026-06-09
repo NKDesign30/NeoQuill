@@ -28,6 +28,9 @@ final class SpokenDurationTests: XCTestCase {
         XCTAssertEqual(SpokenDuration.seconds(from: "45s"), 45)
         // Null-gepaddete Variante (MockData).
         XCTAssertEqual(SpokenDuration.seconds(from: "14m 02s"), 842)
+        // Minuten ohne Sekunden-Teil (war der einzige Mehrwert des alten
+        // parseDuration für m/s-Formen).
+        XCTAssertEqual(SpokenDuration.seconds(from: "12m"), 720)
     }
 
     func testSecondsReturnsNilForJunk() {

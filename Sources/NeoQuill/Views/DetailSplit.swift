@@ -21,7 +21,7 @@ struct DetailSplit: View {
                     .frame(width: 360)
             }
             AudioPlayer(
-                totalSeconds: parseDuration(meeting.duration),
+                totalSeconds: SpokenDuration.seconds(from: meeting.duration) ?? 0,
                 audioURL: meeting.audioURL,
                 accent: accent,
                 waveformSeed: abs(meeting.id.hashValue) % 9999,
