@@ -392,12 +392,12 @@ final class RecordingController: ObservableObject {
         platform: Platform? = nil
     ) {
         guard let store else { return }
-        let durationShort = formatDurationShort(runtime)
-        let timeShort = Self.timeFormatter.string(from: started)
-        let dateShort = Self.dateShortFormatter.string(from: started)
-        let dateLong = Self.dateLongFormatter.string(from: started)
-        let endDate = started.addingTimeInterval(runtime)
-        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
+        let timeline = MeetingTimeline(started: started, runtime: runtime)
+        let durationShort = timeline.durationShort
+        let timeShort = timeline.timeShort
+        let dateShort = timeline.dateShort
+        let dateLong = timeline.dateLong
+        let timeRange = timeline.timeRange
         let provisionalTitle = title ?? "Aufnahme \(timeShort)"
         let resolvedPlatform = platform ?? detectedPlatform()
         let participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
@@ -426,11 +426,10 @@ final class RecordingController: ObservableObject {
     ) async {
         guard let store else { return }
         let id = meetingId
-        let durationShort = formatDurationShort(runtime)
-        let timeShort = Self.timeFormatter.string(from: started)
-        let dateLong = Self.dateLongFormatter.string(from: started)
-        let endDate = started.addingTimeInterval(runtime)
-        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
+        let timeline = MeetingTimeline(started: started, runtime: runtime)
+        let durationShort = timeline.durationShort
+        let dateLong = timeline.dateLong
+        let timeRange = timeline.timeRange
 
         let captured = audioCapture.collectFinalAudio()
         let capturedHQ = audioCapture.collectFinalAudioHQ()
@@ -554,11 +553,10 @@ final class RecordingController: ObservableObject {
         fileName: String
     ) async {
         guard let store else { return }
-        let durationShort = formatDurationShort(runtime)
-        let timeShort = Self.timeFormatter.string(from: started)
-        let dateLong = Self.dateLongFormatter.string(from: started)
-        let endDate = started.addingTimeInterval(runtime)
-        let timeRange = "\(timeShort) – \(Self.timeFormatter.string(from: endDate))"
+        let timeline = MeetingTimeline(started: started, runtime: runtime)
+        let durationShort = timeline.durationShort
+        let dateLong = timeline.dateLong
+        let timeRange = timeline.timeRange
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         let audioPath = AudioWriter.url(id: meetingId, stem: .mix).path
         let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
@@ -1272,36 +1270,8 @@ final class RecordingController: ObservableObject {
             let prefix = first.split(separator: " ").prefix(7).joined(separator: " ")
             return prefix
         }
-        return "Aufnahme \(Self.timeFormatter.string(from: started))"
+        return "Aufnahme \(MeetingTimeline.timeString(from: started))"
     }
-
-    private func formatDurationShort(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let remainder = Int(seconds) % 60
-        if minutes == 0 { return "\(remainder)s" }
-        return "\(minutes)m \(remainder)s"
-    }
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
-    private static let dateShortFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
-        f.dateFormat = "dd. MMM."
-        return f
-    }()
-
-    private static let dateLongFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "de_DE")
-        f.dateFormat = "EEEE, dd. MMMM"
-        return f
-    }()
 
     // MARK: - Internal wiring
 
