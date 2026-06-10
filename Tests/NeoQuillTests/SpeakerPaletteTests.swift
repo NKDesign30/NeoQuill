@@ -28,4 +28,26 @@ final class SpeakerPaletteTests: XCTestCase {
     func testFixedSpeakerIdsAreS1ToS4() {
         XCTAssertEqual(SpeakerPalette.fixedSpeakerIds, ["S1", "S2", "S3", "S4"])
     }
+
+    // MARK: - isAnonymousSpeaker (die EINE Definition)
+
+    func testDiarizationSlotsAreAnonymousAlsoBeyondTheFixedFour() {
+        XCTAssertTrue(SpeakerPalette.isAnonymousSpeaker(id: "S1", name: "Sven"))
+        XCTAssertTrue(SpeakerPalette.isAnonymousSpeaker(id: "S4", name: "Speaker S4"))
+        XCTAssertTrue(SpeakerPalette.isAnonymousSpeaker(id: "S5", name: "Sonstwer"))
+        XCTAssertTrue(SpeakerPalette.isAnonymousSpeaker(id: "S12", name: "X"))
+    }
+
+    func testGeneratedSpeakerNamesAreAnonymousRegardlessOfId() {
+        XCTAssertTrue(SpeakerPalette.isAnonymousSpeaker(id: "EXT", name: "Speaker EXT"))
+    }
+
+    func testLabeledAndCaptionSpeakersAreNotAnonymous() {
+        // Kanonische Slug-IDs und Caption-Namen, die zufällig mit S beginnen,
+        // sind KEINE anonymen Slots — der alte Prefix-Check traf sie fälschlich.
+        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "speaker-thorsten", name: "Thorsten"))
+        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "Sarah", name: "Sarah"))
+        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "S", name: "S"))
+        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "EXT", name: "Zusatzaufnahme"))
+    }
 }

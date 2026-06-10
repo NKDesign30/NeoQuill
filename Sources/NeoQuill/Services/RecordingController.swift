@@ -208,6 +208,10 @@ final class RecordingController: ObservableObject {
 
         do {
             audioCapture.clearRecording()
+            // Embedding-Cache der VORHERIGEN Aufnahme leeren — er ist nur ein
+            // Fallback fürs Labeling-Sheet und darf nie in eine neue Aufnahme
+            // hineinleben (meeting-bezogene Embeddings liegen im SpeakerStore).
+            lastEmbeddings.removeAll()
             // Bei Auto-Detect liefert der Detector bereits die App, sonst
             // probieren wir einmal `detectOnce`. Die App wird HIER eingefroren
             // (BundleIds für den Tap + Plattform für die Persistierung) — der
@@ -951,9 +955,11 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    /// User labelt "S1 → Thorsten" → SpeakerStore + bekannte Aufnahme rueckwirkend.
-    /// Gibt zurueck wieviele weitere Meetings ueber Embedding-Match auf den
-    /// gleichen Speaker migriert wurden (fuer UI-Feedback).
+    /// User labelt "S1 → Thorsten". Der komplette Flow (Embedding-Auflösung,
+    /// kanonische ID, Relabel, Cross-Meeting-Backfill) lebt im
+    /// `SpeakerIdentityCoordinator` — der Controller liefert nur seinen
+    /// Embedding-Cache der letzten Aufnahme als Fallback plus das Lizenz-Gate.
+    /// Gibt zurück, wie viele weitere Meetings migriert wurden (UI-Feedback).
     @discardableResult
     func labelSpeaker(
         internalId: String,
@@ -962,36 +968,15 @@ final class RecordingController: ObservableObject {
         meetingId: String?,
         knownSpeakerId: String? = nil
     ) -> Int {
-        let embedding = lastEmbeddings[internalId]
-            ?? meetingId.flatMap { speakerStore?.meetingEmbedding(meetingId: $0, internalId: internalId) }
-            ?? []
-        let canonicalId = SpeakerIdentityCoordinator.canonicalId(
-            name: name,
-            knownSpeakerId: knownSpeakerId,
-            existingSpeakers: speakerStore?.speakers ?? []
-        )
-        if !embedding.isEmpty {
-            speakerStore?.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
-        } else {
-            speakerStore?.upsertIdentity(id: canonicalId, name: name, colorHex: colorHex)
-        }
-        if let meetingId {
-            store?.relabelSpeaker(
-                meetingId: meetingId,
-                from: internalId,
-                to: canonicalId,
-                name: name,
-                colorHex: colorHex
-            )
-            speakerStore?.renameMeetingInternalId(meetingId: meetingId, from: internalId, to: canonicalId)
-        }
-        guard licenseAllowsCrossMeetingSpeakerID(), let speakerStore, let store else { return 0 }
-        return SpeakerIdentityCoordinator(speakerStore: speakerStore, store: store).backfillCrossMeetings(
-            embedding: embedding,
-            canonicalId: canonicalId,
+        guard let speakerStore else { return 0 }
+        return SpeakerIdentityCoordinator(speakerStore: speakerStore, store: store).label(
+            meetingId: meetingId,
+            internalId: internalId,
             name: name,
             colorHex: colorHex,
-            currentMeetingId: meetingId
+            knownSpeakerId: knownSpeakerId,
+            cachedEmbedding: lastEmbeddings[internalId],
+            allowCrossMeetingBackfill: licenseAllowsCrossMeetingSpeakerID()
         )
     }
 

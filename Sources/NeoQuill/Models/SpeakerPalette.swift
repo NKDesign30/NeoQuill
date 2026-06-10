@@ -21,6 +21,17 @@ enum SpeakerPalette {
     /// Die festen Slots S1–S4.
     static let fixedSpeakerIds: [String] = ["S1", "S2", "S3", "S4"]
 
+    /// Die EINE Definition von "anonymer Sprecher": ein Diarization-Slot
+    /// (S1, S2, … — auch jenseits der vier fixen Slots) oder ein generierter
+    /// "Speaker X"-Anzeigename. Vorher beantworteten drei Stellen die Frage
+    /// unterschiedlich (DetailEditorial: hartes S1–S4-Set, ParticipantBar:
+    /// loser Prefix-Check, der z. B. auch eine Caption-"Sarah" getroffen hätte).
+    static func isAnonymousSpeaker(id: String, name: String) -> Bool {
+        if name.hasPrefix("Speaker ") { return true }
+        guard id.count >= 2, id.first == "S" else { return false }
+        return id.dropFirst().allSatisfy(\.isNumber)
+    }
+
     private static let fixedColors: [String: UInt32] = [
         "S1": 0x7C8AFF,
         "S2": 0xFFB340,

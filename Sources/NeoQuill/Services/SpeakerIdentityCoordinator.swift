@@ -8,8 +8,8 @@ import Foundation
 /// Vorher lag all das verstreut im `RecordingController` (God-Object), nur über
 /// `lastEmbeddings`-State zusammengehalten — und die Caption-/Platform-Persister
 /// waren bis auf `source`/`externalId` selbst dupliziert. Der Controller behält
-/// `labelSpeaker` als Einstieg (er liest `lastEmbeddings` + Lizenz) und delegiert
-/// den Kern hierher.
+/// `labelSpeaker` als Ein-Zeilen-Forward (er liefert seinen Embedding-Cache als
+/// Fallback plus das Lizenz-Gate); der komplette Use-Case lebt in `label(...)`.
 ///
 /// Speaker-Identity-Korrektheit ist ein harter Produkt-Invariant — dieses Modul
 /// macht den Kern ohne den `@MainActor`-Controller testbar.
@@ -101,6 +101,77 @@ struct SpeakerIdentityCoordinator {
         return slug.isEmpty ? "speaker-unknown" : "speaker-\(slug)"
     }
 
+    // MARK: - Label-Use-Case
+
+    /// Der komplette "User labelt S1 → Thorsten"-Flow: Embedding auflösen,
+    /// kanonische ID bestimmen, Profil upserten, das aktuelle Meeting migrieren
+    /// und — wenn erlaubt — bekannte Stimmen in andere Meetings zurückschreiben.
+    ///
+    /// Embedding-Vorrang ist Teil des Kontrakts: das meeting-bezogen
+    /// persistierte Embedding gewinnt IMMER vor `cachedEmbedding` (dem
+    /// In-Memory-Cache der letzten Aufnahme). Andersherum würde das Labeln
+    /// eines älteren Meetings das Embedding der neuesten Aufnahme ins Profil
+    /// schreiben und cross-meeting backfillen — der historische Bug.
+    ///
+    /// Gibt zurück, wie viele weitere Meetings migriert wurden (UI-Feedback).
+    @discardableResult
+    func label(
+        meetingId: String?,
+        internalId: String,
+        name: String,
+        colorHex: UInt32,
+        knownSpeakerId: String? = nil,
+        cachedEmbedding: [Float]? = nil,
+        allowCrossMeetingBackfill: Bool
+    ) -> Int {
+        let embedding = meetingId.flatMap { speakerStore.meetingEmbedding(meetingId: $0, internalId: internalId) }
+            ?? cachedEmbedding
+            ?? []
+        let canonicalId = Self.canonicalId(
+            name: name,
+            knownSpeakerId: knownSpeakerId,
+            existingSpeakers: speakerStore.speakers
+        )
+        if !embedding.isEmpty {
+            speakerStore.upsert(id: canonicalId, name: name, embedding: embedding, colorHex: colorHex)
+        } else {
+            speakerStore.upsertIdentity(id: canonicalId, name: name, colorHex: colorHex)
+        }
+        if let meetingId {
+            migrate(meetingId: meetingId, from: internalId, to: canonicalId, name: name, colorHex: colorHex)
+        }
+        guard allowCrossMeetingBackfill else { return 0 }
+        return backfillCrossMeetings(
+            embedding: embedding,
+            canonicalId: canonicalId,
+            name: name,
+            colorHex: colorHex,
+            currentMeetingId: meetingId
+        )
+    }
+
+    /// Das Relabel+Rename-Paar — die EINE Stelle, die ein Meeting auf eine
+    /// kanonische Speaker-ID migriert: Transcript-/Summary-Felder im
+    /// MeetingStore plus die Embedding-Zeile im SpeakerStore. Vorher lag das
+    /// Paar zweimal im Code (inline im Controller für das aktuelle Meeting,
+    /// hier für den Backfill) — ein Fix musste zweimal gemacht werden.
+    private func migrate(
+        meetingId: String,
+        from internalId: String,
+        to canonicalId: String,
+        name: String,
+        colorHex: UInt32
+    ) {
+        store?.relabelSpeaker(
+            meetingId: meetingId,
+            from: internalId,
+            to: canonicalId,
+            name: name,
+            colorHex: colorHex
+        )
+        speakerStore.renameMeetingInternalId(meetingId: meetingId, from: internalId, to: canonicalId)
+    }
+
     // MARK: - Persistenz
 
     /// Schreibt Caption- bzw. Platform-Identitäten + Aliase fest. Pro `who`-ID
@@ -151,7 +222,7 @@ struct SpeakerIdentityCoordinator {
         colorHex: UInt32,
         currentMeetingId: String?
     ) -> Int {
-        guard !embedding.isEmpty, let store else { return 0 }
+        guard !embedding.isEmpty, store != nil else { return 0 }
         let matches = speakerStore.meetingMatches(for: embedding, excluding: currentMeetingId)
         var seenMeetings: Set<String> = []
         var migrated = 0
@@ -161,17 +232,12 @@ struct SpeakerIdentityCoordinator {
                 seenMeetings.insert(match.meetingId)
                 continue
             }
-            store.relabelSpeaker(
+            migrate(
                 meetingId: match.meetingId,
                 from: match.internalId,
                 to: canonicalId,
                 name: name,
                 colorHex: colorHex
-            )
-            speakerStore.renameMeetingInternalId(
-                meetingId: match.meetingId,
-                from: match.internalId,
-                to: canonicalId
             )
             seenMeetings.insert(match.meetingId)
             migrated += 1

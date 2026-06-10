@@ -108,10 +108,9 @@ struct DetailEditorial: View {
     }
 
     private var hasOnlyAnonymousSpeakers: Bool {
-        let anonymousIds: Set<String> = ["S1", "S2", "S3", "S4"]
         let nonLocal = meeting.participants.filter { !LocalSpeakerProfile.isLocalSpeakerId($0.id) }
         guard !nonLocal.isEmpty else { return false }
-        return nonLocal.allSatisfy { anonymousIds.contains($0.id) }
+        return nonLocal.allSatisfy { SpeakerPalette.isAnonymousSpeaker(id: $0.id, name: $0.name) }
     }
 
     @ViewBuilder

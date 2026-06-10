@@ -17,7 +17,7 @@ struct ParticipantBar: View {
     }
 
     private var isAnonymous: Bool {
-        participant.name.hasPrefix("Speaker") || participant.id.first == "S"
+        SpeakerPalette.isAnonymousSpeaker(id: participant.id, name: participant.name)
     }
 
     var body: some View {
