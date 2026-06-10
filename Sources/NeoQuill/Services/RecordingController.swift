@@ -297,26 +297,21 @@ final class RecordingController: ObservableObject {
     /// unstuck rather than hanging again.
     func recoverOrphanedTranscripts() {
         guard let store else { return }
-        let orphans = store.details.values
-            .filter { $0.lifecycle.isBusy && $0.transcript.isEmpty }
-            .map(\.id)
+        let orphans = store.meetingsNeedingRecovery()
         guard !orphans.isEmpty else { return }
         Task { [weak self] in
             guard let self, let store = self.store else { return }
             for id in orphans {
                 let attempts = store.bumpTranscribeAttempts(for: id)
-                guard attempts <= Self.maxRecoveryAttempts else {
-                    // Zu oft unterbrochen → als gescheitert markieren statt
-                    // endlos neu zu starten. `.failed` ist nicht busy, also greift
-                    // recoverOrphaned es beim nächsten Start nicht mehr auf.
+                switch TranscriptionRecoveryPolicy.decision(forAttempt: attempts) {
+                case .markFailed(let lifecycle):
                     if var detail = store.detail(for: id) {
-                        detail.lifecycle = .failed(
-                            reason: "Transkription mehrfach unterbrochen",
-                            attempts: attempts - 1
-                        )
+                        detail.lifecycle = lifecycle
                         store.updateDetail(detail)
                     }
                     continue
+                case .retry:
+                    break
                 }
                 // Clear the stuck busy state first — reprocessMeetingAsync bails out
                 // on `!detail.processing`, which is exactly the state an orphaned
@@ -333,10 +328,6 @@ final class RecordingController: ObservableObject {
             }
         }
     }
-
-    /// Maximale automatische Wiederanläufe für unterbrochene Transkriptionen,
-    /// bevor ein Meeting als `.failed` markiert wird.
-    private static let maxRecoveryAttempts = 3
 
     /// Importiert eine externe Audiodatei (iPhone-Sprachmemo, Diktiergerät,
     /// beliebige .m4a/.mp3/.wav/.caf) als eigenständige Aufnahme: dekodieren,
@@ -493,7 +484,7 @@ final class RecordingController: ObservableObject {
             audioURL: nil,
             lifecycle: .summarizing
         )
-        store.updateDetail(transcribed, summaryTitle: provisionalTitle)
+        store.updateDetail(transcribed)
         statusText = "KI verarbeitet"
 
         // Embeddings frisch entdeckter Speaker für später vorhalten — UI-Labeling-Sheet
@@ -530,10 +521,7 @@ final class RecordingController: ObservableObject {
             lifecycle: .done
         )
 
-        store.updateDetail(
-            finalDetail,
-            summaryTitle: summary.title.isEmpty ? nil : summary.title
-        )
+        store.updateDetail(finalDetail)
         if shouldDeleteAudio {
             _ = try? PrivacyDataService.deleteAudioFiles(for: id)
         }
@@ -577,7 +565,7 @@ final class RecordingController: ObservableObject {
                 highlights: [], tasks: [], chapters: [], transcript: [],
                 audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
             )
-            store.updateDetail(empty, summaryTitle: empty.title)
+            store.updateDetail(empty)
             if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
             statusText = "Bereit"
             return
@@ -594,7 +582,7 @@ final class RecordingController: ObservableObject {
             highlights: [], tasks: [], chapters: [], transcript: lines,
             audioURL: audioPath, lifecycle: .summarizing
         )
-        store.updateDetail(transcribed, summaryTitle: fileName)
+        store.updateDetail(transcribed)
         statusText = "KI verarbeitet"
 
         let summary = await MeetingSummarizer.summarize(
@@ -611,7 +599,7 @@ final class RecordingController: ObservableObject {
             highlights: summary.highlights, tasks: summary.tasks, chapters: summary.chapters, transcript: lines,
             audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
         )
-        store.updateDetail(finalDetail, summaryTitle: finalTitle)
+        store.updateDetail(finalDetail)
         if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
         statusText = "Bereit"
     }
@@ -719,7 +707,7 @@ final class RecordingController: ObservableObject {
             chapters: summary.chapters,
             transcript: mergedLines,
             lifecycle: .done
-        ), summaryTitle: summary.title.isEmpty ? nil : summary.title)
+        ))
         statusText = "Bereit"
         return nil
     }
@@ -871,7 +859,7 @@ final class RecordingController: ObservableObject {
                 audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
                 lifecycle: .done
             )
-            store.updateDetail(empty, summaryTitle: empty.title)
+            store.updateDetail(empty)
             if shouldDeleteAudio {
                 _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId)
             }
@@ -890,7 +878,7 @@ final class RecordingController: ObservableObject {
             audioURL: storedAudio.audioURL?.path ?? detail.audioURL,
             lifecycle: .summarizing
         )
-        store.updateDetail(transcribed, summaryTitle: transcribed.title)
+        store.updateDetail(transcribed)
 
         statusText = "KI verarbeitet"
         let summary = await MeetingSummarizer.summarize(
@@ -912,7 +900,7 @@ final class RecordingController: ObservableObject {
             audioURL: shouldDeleteAudio ? nil : (storedAudio.audioURL?.path ?? detail.audioURL),
             lifecycle: .done
         )
-        store.updateDetail(final, summaryTitle: summary.title.isEmpty ? nil : summary.title)
+        store.updateDetail(final)
         if shouldDeleteAudio {
             _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId)
         }

@@ -316,9 +316,12 @@ final class MeetingStore: ObservableObject {
         readBackToPublished()
     }
 
-    // MARK: - Writes (vorerst nur intern; später vom RecordingManager genutzt)
+    // MARK: - Writes
 
-    /// Public Insert: schreibt Summary + Detail und published meetings neu.
+    /// Public Insert — NUR für neue Meetings: `insertSummary` nutzt
+    /// `INSERT OR REPLACE`, ein Aufruf mit bestehender ID ersetzt die Zeile
+    /// (und verliert Detail-Spalten, die das Summary nicht trägt). Bestehende
+    /// Meetings aktualisiert `updateDetail`.
     func insert(summary: MeetingSummary, detail: MeetingDetail) {
         insertSummary(summary)
         upsertDetail(detail)
@@ -380,19 +383,24 @@ final class MeetingStore: ObservableObject {
 
     /// Public Update — RecordingController nutzt das nach PostProcessing,
     /// um Title/TLDR/Highlights/Tasks/AudioURL nachzureichen.
-    func updateDetail(_ detail: MeetingDetail, summaryTitle: String? = nil) {
+    ///
+    /// Sidebar- und Detail-Titel sind EINE Spalte und kommen immer aus
+    /// `detail.title` — der frühere `summaryTitle:`-Parameter überschrieb
+    /// dieselbe Spalte nochmal mit einem an allen Call-Sites identischen Wert
+    /// und zwang jeden Aufrufer, das Dual-Title-Wissen mitzuschleppen.
+    func updateDetail(_ detail: MeetingDetail) {
         upsertDetail(detail)
-        if let newTitle = summaryTitle {
-            let sql = "UPDATE meeting SET title = ? WHERE id = ?"
-            var stmt: OpaquePointer?
-            if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
-                bind(stmt, 1, newTitle)
-                bind(stmt, 2, detail.id)
-                sqlite3_step(stmt)
-            }
-            sqlite3_finalize(stmt)
-        }
         readBackToPublished()
+    }
+
+    /// IDs aller Meetings, die beim App-Start eine Transkriptions-Recovery
+    /// brauchen: busy-Lifecycle ohne Transcript — die App wurde mitten in der
+    /// STT beendet. Eigene Query-Methode, damit Caller nicht über das rohe
+    /// `details`-Dictionary iterieren müssen.
+    func meetingsNeedingRecovery() -> [String] {
+        details.values
+            .filter { $0.lifecycle.isBusy && $0.transcript.isEmpty }
+            .map(\.id)
     }
 
     private func jsonString<T: Codable>(_ value: T, _ encoder: JSONEncoder) -> String {
