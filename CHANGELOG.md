@@ -9,19 +9,36 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
-## [0.11.0] - 2026-06-09
+## [0.11.0] - 2026-06-10
 
+- Added: Freie Wahl des KI-Anbieters für Zusammenfassungen — neben
+  OpenAI-kompatiblen Endpoints werden jetzt Anthropic und lokales Ollama
+  unterstützt, inklusive Verbindungstest in den Einstellungen.
+- Added: Die App-Sprache ist umschaltbar (Deutsch/Englisch) und wechselt live
+  ohne Neustart.
+- Changed: Integrationen (Action-Inbox, Jira) sind jetzt ein bewusstes Opt-in
+  mit neutralen Labels und frei konfigurierbarem Inbox-Endpoint — frische
+  Installationen starten ohne vorbelegte Anbindung.
+- Fixed: Automatisch gestoppte Teams-/Zoom-Meetings wurden als allgemeiner
+  "Call" gespeichert. Die erkannte Plattform wird jetzt beim Aufnahme-Start
+  eingefroren und übersteht den Auto-Stop.
+- Fixed: Beim Benennen von Sprechern direkt nach einer Aufnahme konnte in
+  seltenen Fällen ein Stimm-Abdruck der vorherigen Aufnahme verwendet werden.
+  Meeting-eigene Stimm-Abdrücke haben jetzt immer Vorrang.
 - Fixed: Sprechanteil-Balken zeigten bei sehr kurzen Meetings (unter einer
   Minute) für alle Teilnehmer 0 % an. Die Dauer-Labels laufen jetzt über eine
   gemeinsame, getestete Umrechnung, die auch die Sekunden-Form ("45s") korrekt
   zurückrechnet.
+- Fixed: Die "Auto ×"-Anzeige im Player zeigt bei korrigierter Wiedergabe die
+  echte Korrektur-Rate statt des technischen Mindestwerts.
 - Changed: Das Onboarding fragt nicht mehr nach einer Organisation — das Feld
   wurde gesammelt, aber nie verwendet.
-- Changed: Interne Architektur über mehrere Runden konsolidiert. Zeitstempel-
-  und Dauer-Formatierung, die Meeting-ID-Vergabe, die Erkennung wiederholter
-  Transkript-Zeilen und das Call-App-Routing laufen jetzt über jeweils eine
-  Quelle. Toter Code (alter Profil-Dialog, ungenutztes Audio-Persist im
-  Post-Processing) wurde entfernt. Keine Verhaltensänderung, voll getestet.
+- Changed: Interne Architektur über mehrere Runden konsolidiert und vertieft.
+  Zeitstempel- und Dauer-Formatierung, Meeting-ID-Vergabe, Erkennung
+  wiederholter Transkript-Zeilen, Call-App-Routing, Aufnahme-Session,
+  Speaker-Identität, Summary-Pipeline, Diarisierungs-Auflösung,
+  Transcript-Heuristiken und Playback-Korrektur laufen jetzt über jeweils eine
+  getestete Quelle. Toter Code wurde entfernt. 422 Tests.
 
 ## [0.10.0] - 2026-05-30
 
