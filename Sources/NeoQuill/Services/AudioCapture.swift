@@ -91,8 +91,10 @@ final class AudioCapture: NSObject, ObservableObject {
     private let levelGuardWarmupSamples = 3 * 16000  // 3 Sekunden bei 16kHz
     private let quietThreshold: Float = 0.001
 
-    /// Bundle IDs der aktiven Call-App
-    var targetBundleIds: [String] = []
+    /// Bundle IDs der aktiven Call-App — gesetzt von `start(bundleIds:)`, gelesen
+    /// vom SCK-Fallback. Privat, damit kein Caller mehr ein implizites
+    /// "Property vor start() setzen"-Protokoll einhalten muss.
+    private var targetBundleIds: [String] = []
 
     // MARK: - Permission
 
@@ -115,9 +117,14 @@ final class AudioCapture: NSObject, ObservableObject {
 
     // MARK: - Start / Stop
 
-    func start() async throws {
+    /// Startet die Dual-Stream-Aufnahme. `bundleIds` sind die Bundle-IDs der
+    /// aktiven Call-App — als Parameter statt Property, damit der ProcessTap
+    /// nie versehentlich einen generischen Stereo-Mix tappt, weil ein Caller
+    /// das Setzen vergessen hat.
+    func start(bundleIds: [String]) async throws {
         guard !isCapturing else { return }
 
+        targetBundleIds = bundleIds
         micRecording = []
         sysRecording = []
         micRecordingHQ = []

@@ -51,6 +51,10 @@ final class RecordingController: ObservableObject {
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
+    /// Plattform der laufenden Aufnahme — beim `start()` eingefroren, damit die
+    /// Persist-Pipeline nie den Detector zur Persist-Zeit liest (der beim
+    /// Call-Ende bereits auf `.unknown` resettet ist).
+    private var sessionPlatform: Platform = .call
 
     // MARK: - Lifecycle
 
@@ -204,14 +208,15 @@ final class RecordingController: ObservableObject {
 
         do {
             audioCapture.clearRecording()
-            // BundleIds vor `start()` setzen — sonst tappt der ProcessTap einen
-            // generischen Stereo-Mix statt gezielt Teams/Zoom. Bei Auto-Detect liefert
-            // der Detector bereits die App, sonst probieren wir einmal `detectOnce`.
+            // Bei Auto-Detect liefert der Detector bereits die App, sonst
+            // probieren wir einmal `detectOnce`. Die App wird HIER eingefroren
+            // (BundleIds für den Tap + Plattform für die Persistierung) — der
+            // Detector resettet sie beim Call-Ende, bevor der Auto-Stop läuft.
             if detector.detectedApp == .unknown {
                 detector.detectOnce()
             }
-            audioCapture.targetBundleIds = detector.detectedApp.bundleIdentifiers
-            try await audioCapture.start()
+            sessionPlatform = Self.mappedPlatform(from: detector.detectedApp)
+            try await audioCapture.start(bundleIds: detector.detectedApp.bundleIdentifiers)
             startedAt = Date()
             state = .recording(startedAt: startedAt!)
             statusText = "Aufnahme läuft"
@@ -233,30 +238,43 @@ final class RecordingController: ObservableObject {
         stopElapsedTimer()
         await audioCapture.stop()
 
-        let runtime = elapsed
-        let started = startedAt ?? Date()
-        let captionEvents = captionCapture.stop()
+        // Die Aufnahme als WERT einsammeln — die Pipeline greift danach nie
+        // wieder in audioCapture/captionCapture/detector zurück. Ein nächstes
+        // `start()` kann die Buffer gefahrlos leeren.
+        let audio = audioCapture.collectFinalAudio()
+        let audioHQ = audioCapture.collectFinalAudioHQ()
+        let session = CapturedSession(
+            mic: audio.mic,
+            sys: audio.sys,
+            mixed: audio.mixed,
+            micHQ: audioHQ.micHQ,
+            sysHQ: audioHQ.sysHQ,
+            captionEvents: captionCapture.stop(),
+            startedAt: startedAt ?? Date(),
+            runtime: elapsed,
+            platform: sessionPlatform
+        )
 
         // UI sofort entlasten: Provisional-Detail einsetzen + State auf idle,
         // sodass die Detail-View mit "Wird transkribiert…" angezeigt wird.
         // Whisper + Claude laufen im Hintergrund und updaten das Detail wenn fertig.
-        let meetingId = MeetingID.recording(at: started)
-        insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started)
+        let meetingId = MeetingID.recording(at: session.startedAt)
+        insertProvisionalMeeting(
+            id: meetingId,
+            runtime: session.runtime,
+            started: session.startedAt,
+            platform: session.platform
+        )
 
         state = .idle
         statusText = "Bereit"
-        // Detector wurde nicht pausiert — kein Resume noetig. Self-Trigger
+        // Detector wurde nicht pausiert — kein Resume nötig. Self-Trigger
         // verhindert via State-Check in `handleDetectorChange`.
 
         // Heavy Lifting im Hintergrund — Whisper auf Stems, FluidAudio-Diarize,
-        // Claude-Summary. Updated das Provisional-Detail Schritt fuer Schritt.
+        // Claude-Summary. Updated das Provisional-Detail Schritt für Schritt.
         Task { [weak self] in
-            await self?.persistMeeting(
-                meetingId: meetingId,
-                runtime: runtime,
-                started: started,
-                captionEvents: captionEvents
-            )
+            await self?.persistMeeting(meetingId: meetingId, session: session)
         }
     }
 
@@ -371,7 +389,7 @@ final class RecordingController: ObservableObject {
         runtime: TimeInterval,
         started: Date,
         title: String? = nil,
-        platform: Platform? = nil
+        platform: Platform
     ) {
         guard let store else { return }
         let timeline = MeetingTimeline(started: started, runtime: runtime)
@@ -381,17 +399,17 @@ final class RecordingController: ObservableObject {
         let dateLong = timeline.dateLong
         let timeRange = timeline.timeRange
         let provisionalTitle = title ?? "Aufnahme \(timeShort)"
-        let resolvedPlatform = platform ?? detectedPlatform()
         let participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
+
 
         let summary = MeetingSummary(
             id: id, title: provisionalTitle, date: dateShort, time: timeShort,
-            duration: durationShort, platform: resolvedPlatform, wordCount: 0,
+            duration: durationShort, platform: platform, wordCount: 0,
             group: "Diesen Monat", participantIds: [LocalSpeakerProfile.id], unread: true
         )
         let provisional = MeetingDetail(
             id: id, title: provisionalTitle, dateLong: dateLong, timeRange: timeRange,
-            duration: durationShort, platform: resolvedPlatform, wordCount: 0,
+            duration: durationShort, platform: platform, wordCount: 0,
             participants: participants,
             tldr: "Wird transkribiert…",
             highlights: [], tasks: [], chapters: [],
@@ -400,31 +418,25 @@ final class RecordingController: ObservableObject {
         store.insert(summary: summary, detail: provisional)
     }
 
-    private func persistMeeting(
-        meetingId: String,
-        runtime: TimeInterval,
-        started: Date,
-        captionEvents: [CaptionEvent]
-    ) async {
+    private func persistMeeting(meetingId: String, session: CapturedSession) async {
         guard let store else { return }
         let id = meetingId
-        let timeline = MeetingTimeline(started: started, runtime: runtime)
+        let timeline = MeetingTimeline(started: session.startedAt, runtime: session.runtime)
         let durationShort = timeline.durationShort
         let dateLong = timeline.dateLong
         let timeRange = timeline.timeRange
+        let captionEvents = session.captionEvents
 
-        let captured = audioCapture.collectFinalAudio()
-        let capturedHQ = audioCapture.collectFinalAudioHQ()
-        let audioURL = persistCapturedAudio(meetingId: id, captured: captured, capturedHQ: capturedHQ)
+        let audioURL = persistCapturedAudio(meetingId: id, session: session)
 
         let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         var allLines = await meetingTranscriber.transcribe(
             meetingId: id,
-            mic: captured.mic,
-            system: captured.sys,
-            mixed: captured.mixed,
+            mic: session.mic,
+            system: session.sys,
+            mixed: session.mixed,
             language: lang
         )
         var participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
@@ -434,9 +446,9 @@ final class RecordingController: ObservableObject {
         // FluidAudio-Diarize auf System-Audio (>= 5s) — labelt S1 ggf. um in S2/S3
         // bzw. matcht gegen bekannte Speaker (Re-ID via SpeakerStore).
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
-            if captured.sys.count > 16_000 * 5 {
+            if session.sys.count > 16_000 * 5 {
                 statusText = "Erkenne Sprecher"
-                diarizationSegments = await runDiarization(samples: captured.sys)
+                diarizationSegments = await runDiarization(samples: session.sys)
                 for entry in diarizationSegments {
                     if pendingEmbeddings[entry.speakerId] == nil {
                         pendingEmbeddings[entry.speakerId] = entry.embedding
@@ -447,7 +459,7 @@ final class RecordingController: ObservableObject {
         }
         if !captionEvents.isEmpty || !diarizationSegments.isEmpty {
             allLines = mergeSpeakers(lines: allLines, captionEvents: captionEvents, diarization: diarizationSegments)
-            persistCaptionIdentities(from: allLines, platform: detectedPlatform())
+            persistCaptionIdentities(from: allLines, platform: session.platform)
             participants = collectParticipants(
                 lines: allLines,
                 baseDuration: durationShort,
@@ -457,7 +469,7 @@ final class RecordingController: ObservableObject {
 
         let summaryLines = TranscriptNoiseFilter.filtered(allLines)
         let wordCount = TranscriptNoiseFilter.wordCount(allLines)
-        let provisionalTitle = generateTitle(from: summaryLines.isEmpty ? allLines : summaryLines, started: started)
+        let provisionalTitle = generateTitle(from: summaryLines.isEmpty ? allLines : summaryLines, started: session.startedAt)
 
         // Detail mit echten Lines updaten (Provisional ist schon eingefuegt).
         let transcribed = MeetingDetail(
@@ -466,7 +478,7 @@ final class RecordingController: ObservableObject {
             dateLong: dateLong,
             timeRange: timeRange,
             duration: durationShort,
-            platform: detectedPlatform(),
+            platform: session.platform,
             wordCount: wordCount,
             participants: participants,
             tldr: "KI-Zusammenfassung läuft…",
@@ -502,7 +514,7 @@ final class RecordingController: ObservableObject {
             dateLong: dateLong,
             timeRange: timeRange,
             duration: durationShort,
-            platform: detectedPlatform(),
+            platform: session.platform,
             wordCount: wordCount,
             participants: participants,
             tldr: summary.tldr,
@@ -903,27 +915,23 @@ final class RecordingController: ObservableObject {
         statusText = "Bereit"
     }
 
-    private func persistCapturedAudio(
-        meetingId: String,
-        captured: (mic: [Float], sys: [Float], mixed: [Float]),
-        capturedHQ: (micHQ: [Float], sysHQ: [Float])
-    ) -> URL? {
+    private func persistCapturedAudio(meetingId: String, session: CapturedSession) -> URL? {
         do {
-            let mixURL = try AudioWriter.persist(id: meetingId, stem: .mix, samples: captured.mixed)
-            _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: captured.mic)
-            _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: captured.sys)
+            let mixURL = try AudioWriter.persist(id: meetingId, stem: .mix, samples: session.mixed)
+            _ = try AudioWriter.persist(id: meetingId, stem: .mic, samples: session.mic)
+            _ = try AudioWriter.persist(id: meetingId, stem: .system, samples: session.sys)
 
             // High-resolution stereo archive (mic = left, system = right) is the
             // user-facing playback/export file — but only when BOTH sources carry
             // audio. A hard-panned stereo file with one empty channel would play
             // in one ear only, so mic-only / system-only captures keep the 16 kHz
             // mono mix as the playback file.
-            let bothStems = !capturedHQ.micHQ.isEmpty && !capturedHQ.sysHQ.isEmpty
+            let bothStems = !session.micHQ.isEmpty && !session.sysHQ.isEmpty
             let hqURL = bothStems ? try AudioWriter.persistStereo(
                 id: meetingId,
                 stem: .hq,
-                left: capturedHQ.micHQ,
-                right: capturedHQ.sysHQ
+                left: session.micHQ,
+                right: session.sysHQ
             ) : nil
             return hqURL ?? mixURL
         } catch {
@@ -1027,8 +1035,12 @@ final class RecordingController: ObservableObject {
 
 
 
-    private func detectedPlatform() -> Platform {
-        switch detector.detectedApp {
+    /// Mappt die erkannte Call-App auf die persistierte Plattform. Pure und
+    /// nonisolated — wird beim `start()` in `sessionPlatform` eingefroren und
+    /// reist danach als Teil der `CapturedSession`; zur Persist-Zeit wird der
+    /// Detector nie mehr gelesen.
+    nonisolated static func mappedPlatform(from app: CallApp) -> Platform {
+        switch app {
         case .teams:    return .teams
         case .zoom:     return .zoom
         case .browser:  return .meet
