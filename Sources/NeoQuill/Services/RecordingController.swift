@@ -209,8 +209,11 @@ final class RecordingController: ObservableObject {
         do {
             audioCapture.clearRecording()
             // Embedding-Cache der VORHERIGEN Aufnahme leeren — er ist nur ein
-            // Fallback fürs Labeling-Sheet und darf nie in eine neue Aufnahme
-            // hineinleben (meeting-bezogene Embeddings liegen im SpeakerStore).
+            // Fallback fürs Labeling-Sheet. Eine noch laufende Pipeline von
+            // Aufnahme #1 darf ihn danach wieder füllen: zu dem Zeitpunkt sind
+            // ihre Embeddings bereits meeting-bezogen im SpeakerStore
+            // persistiert, und der Coordinator löst meeting-bezogen ZUERST auf
+            // — der Cache kann ein älteres Meeting nie mehr übersteuern.
             lastEmbeddings.removeAll()
             // Bei Auto-Detect liefert der Detector bereits die App, sonst
             // probieren wir einmal `detectOnce`. Die App wird HIER eingefroren
@@ -395,7 +398,6 @@ final class RecordingController: ObservableObject {
         let timeRange = timeline.timeRange
         let provisionalTitle = title ?? "Aufnahme \(timeShort)"
         let participants: [Participant] = [LocalSpeakerProfile.participant(spoke: durationShort)]
-
 
         let summary = MeetingSummary(
             id: id, title: provisionalTitle, date: dateShort, time: timeShort,

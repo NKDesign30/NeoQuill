@@ -31,7 +31,9 @@ struct VTTCue: Hashable {
         let text = payload[payload.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         // VTT-Profil: 1-Zeichen-Speaker erlaubt (anonymisierte "A:"-Cues),
-        // bis zu 6 Wörter (lange Roster-Display-Namen).
+        // bis zu 6 Wörter (lange Roster-Display-Namen). Die geteilte Heuristik
+        // kappt zusätzlich bei 64 Zeichen — Präfixe darüber (Konzern-Roster
+        // mit Firmenzusatz) gelten als Fließtext, nicht als Sprechername.
         guard TranscriptEventHeuristics.isProbableSpeakerName(speaker, minLength: 1, maxWords: 6) else {
             return nil
         }
