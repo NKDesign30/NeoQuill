@@ -20,7 +20,9 @@ enum PostProcessor {
         meetingId: String,
         transcriptLines: [TranscriptLine],
         locale: String = "de",
-        licenseAllowsSummary: () -> Bool = { true }
+        licenseAllowsSummary: () -> Bool = { true },
+        defaults: UserDefaults = .standard,
+        providerFactory: () -> SummaryProvider? = { AIProviderSettings.makeProvider() }
     ) async -> PostProcessResult {
         let transcript = Self.formatTranscriptForPrompt(transcriptLines)
 
@@ -38,7 +40,7 @@ enum PostProcessor {
         // AI-Summary-Stufe ist Pro. Bei block: Fallback-Title/TLDR aus
         // erstem Transkript-Satz, keine Highlights/Tasks/Chapters.
         let ai: MeetingSummaryAI? = licenseAllowsSummary()
-            ? await summarize(transcript: transcript, locale: locale)
+            ? await summarize(transcript: transcript, locale: locale, defaults: defaults, providerFactory: providerFactory)
             : nil
 
         return PostProcessResult(
@@ -50,11 +52,17 @@ enum PostProcessor {
         )
     }
 
-    private static func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {
-        guard !UserDefaults.standard.boolOr(AppSettings.localOnlyMode, default: false) else { return nil }
-        guard UserDefaults.standard.boolOr(AppSettings.claudeAnalysisEnabled, default: true) else { return nil }
-
-        guard let provider = AIProviderSettings.makeProvider() else {
+    private static func summarize(
+        transcript: String,
+        locale: String,
+        defaults: UserDefaults,
+        providerFactory: () -> SummaryProvider?
+    ) async -> MeetingSummaryAI? {
+        if let reason = SummaryGate.skipReason(defaults: defaults) {
+            NSLog("[PostProcessor] summary skipped: \(reason)")
+            return nil
+        }
+        guard let provider = providerFactory() else {
             NSLog("[PostProcessor] no summary provider configured (missing config or API key)")
             return nil
         }

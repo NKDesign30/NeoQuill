@@ -6,6 +6,14 @@ import Foundation
 /// ersten Text-Block und geben ihn an den gemeinsamen Summary-Parser.
 struct AnthropicSummaryProvider: SummaryProvider {
     let config: AnthropicSummaryConfig
+    /// Injizierbar (Pattern wie `NeonInboxClient`) — Tests fahren `summarize`
+    /// und `probe` über eine URLProtocol-gemockte Session statt live.
+    let session: URLSession
+
+    init(config: AnthropicSummaryConfig, session: URLSession = .shared) {
+        self.config = config
+        self.session = session
+    }
 
     func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {
         let prompt = MeetingSummaryPrompt.build(transcript: transcript, locale: locale)
@@ -23,7 +31,7 @@ struct AnthropicSummaryProvider: SummaryProvider {
 
         do {
             request.httpBody = try JSONEncoder().encode(body)
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             if let http = response as? HTTPURLResponse,
                !(200..<300).contains(http.statusCode) {
                 NSLog("[Anthropic] request failed with status \(http.statusCode)")
@@ -53,7 +61,7 @@ struct AnthropicSummaryProvider: SummaryProvider {
 
         do {
             request.httpBody = try JSONEncoder().encode(body)
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return .failed("Keine HTTP-Antwort vom Endpoint.")
             }

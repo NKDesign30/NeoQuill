@@ -140,64 +140,30 @@ enum AIProviderSettings {
 
     static func selectedProvider(defaults: UserDefaults = .standard) -> AISummaryProvider {
         let raw = defaults.stringOr(AppSettings.aiSummaryProvider, default: defaultProvider)
-        return AISummaryProvider(rawValue: raw) ?? .claudeCLI
+        // Unbekannter rawValue fällt auf denselben Default wie "nicht gesetzt" —
+        // vorher zwei verschiedene Fallbacks (.openAICompatible vs .claudeCLI)
+        // für zwei Spielarten von "nicht gesetzt".
+        return AISummaryProvider(rawValue: raw) ?? .openAICompatible
     }
 
     static func openAICompatibleConfig(
         defaults: UserDefaults = .standard,
         secretStore: AIProviderSecretPersisting = AIProviderSecretStore()
     ) -> OpenAICompatibleSummaryConfig? {
-        let rawBaseURL = defaults.stringOr(AppSettings.aiSummaryBaseURL, default: defaultOpenAIBaseURL)
-        let rawModel = defaults.stringOr(AppSettings.aiSummaryModel, default: defaultOpenAIModel)
-        let normalizedBaseURL = normalizeBaseURL(rawBaseURL)
-        guard let baseURL = URL(string: normalizedBaseURL),
-              !rawModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let apiKey = secretStore.apiKey(for: .openAICompatible),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return OpenAICompatibleSummaryConfig(
-            baseURL: baseURL,
-            model: rawModel.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: apiKey
-        )
+        try? openAICompatibleConfigResult(defaults: defaults, secretStore: secretStore).get()
     }
 
     static func anthropicConfig(
         defaults: UserDefaults = .standard,
         secretStore: AIProviderSecretPersisting = AIProviderSecretStore()
     ) -> AnthropicSummaryConfig? {
-        let rawBaseURL = defaults.stringOr(AppSettings.aiAnthropicBaseURL, default: defaultAnthropicBaseURL)
-        let rawModel = defaults.stringOr(AppSettings.aiAnthropicModel, default: defaultAnthropicModel)
-        let normalizedBaseURL = normalizeBaseURL(rawBaseURL)
-        guard let baseURL = URL(string: normalizedBaseURL),
-              !rawModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let apiKey = secretStore.apiKey(for: .anthropic),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return AnthropicSummaryConfig(
-            baseURL: baseURL,
-            model: rawModel.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: apiKey
-        )
+        try? anthropicConfigResult(defaults: defaults, secretStore: secretStore).get()
     }
 
     /// Ollama spricht den OpenAI-kompatiblen Endpoint, braucht aber keinen Key.
     /// Der Platzhalter-Key füllt nur den Bearer-Header, den Ollama ignoriert.
     static func ollamaConfig(defaults: UserDefaults = .standard) -> OpenAICompatibleSummaryConfig? {
-        let rawBaseURL = defaults.stringOr(AppSettings.aiOllamaBaseURL, default: defaultOllamaBaseURL)
-        let rawModel = defaults.stringOr(AppSettings.aiOllamaModel, default: defaultOllamaModel)
-        let normalizedBaseURL = normalizeBaseURL(rawBaseURL)
-        guard let baseURL = URL(string: normalizedBaseURL),
-              !rawModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return OpenAICompatibleSummaryConfig(
-            baseURL: baseURL,
-            model: rawModel.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: "ollama"
-        )
+        try? ollamaConfigResult(defaults: defaults).get()
     }
 
     static func normalizeBaseURL(_ value: String) -> String {
@@ -205,31 +171,118 @@ enum AIProviderSettings {
         return trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
     }
 
-    /// Baut den aktuell ausgewählten Provider inklusive Config. `nil` heißt:
-    /// der gewählte Provider ist nicht einsatzbereit (z. B. fehlender API-Key).
-    /// Der `PostProcessor` kennt nur dieses Ergebnis, nicht die einzelnen Anbieter.
-    static func makeProvider(
+    // MARK: - Result-Varianten (Fehlergrund statt stummem nil)
+
+    private static func openAICompatibleConfigResult(
+        defaults: UserDefaults,
+        secretStore: AIProviderSecretPersisting
+    ) -> Result<OpenAICompatibleSummaryConfig, ProviderConfigError> {
+        openAIStyleConfig(
+            provider: .openAICompatible,
+            rawBaseURL: defaults.stringOr(AppSettings.aiSummaryBaseURL, default: defaultOpenAIBaseURL),
+            rawModel: defaults.stringOr(AppSettings.aiSummaryModel, default: defaultOpenAIModel),
+            apiKey: secretStore.apiKey(for: .openAICompatible)
+        )
+    }
+
+    private static func ollamaConfigResult(
+        defaults: UserDefaults
+    ) -> Result<OpenAICompatibleSummaryConfig, ProviderConfigError> {
+        openAIStyleConfig(
+            provider: .ollama,
+            rawBaseURL: defaults.stringOr(AppSettings.aiOllamaBaseURL, default: defaultOllamaBaseURL),
+            rawModel: defaults.stringOr(AppSettings.aiOllamaModel, default: defaultOllamaModel),
+            apiKey: "ollama"
+        )
+    }
+
+    private static func anthropicConfigResult(
+        defaults: UserDefaults,
+        secretStore: AIProviderSecretPersisting
+    ) -> Result<AnthropicSummaryConfig, ProviderConfigError> {
+        let rawBaseURL = defaults.stringOr(AppSettings.aiAnthropicBaseURL, default: defaultAnthropicBaseURL)
+        let rawModel = defaults.stringOr(AppSettings.aiAnthropicModel, default: defaultAnthropicModel)
+        guard let baseURL = URL(string: normalizeBaseURL(rawBaseURL)) else {
+            return .failure(.invalidBaseURL(.anthropicAPI))
+        }
+        let model = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { return .failure(.missingModel(.anthropicAPI)) }
+        guard let apiKey = secretStore.apiKey(for: .anthropic),
+              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .failure(.missingAPIKey(.anthropicAPI))
+        }
+        return .success(AnthropicSummaryConfig(baseURL: baseURL, model: model, apiKey: apiKey))
+    }
+
+    private static func openAIStyleConfig(
+        provider: AISummaryProvider,
+        rawBaseURL: String,
+        rawModel: String,
+        apiKey: String?
+    ) -> Result<OpenAICompatibleSummaryConfig, ProviderConfigError> {
+        guard let baseURL = URL(string: normalizeBaseURL(rawBaseURL)) else {
+            return .failure(.invalidBaseURL(provider))
+        }
+        let model = rawModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { return .failure(.missingModel(provider)) }
+        guard let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .failure(.missingAPIKey(provider))
+        }
+        return .success(OpenAICompatibleSummaryConfig(baseURL: baseURL, model: model, apiKey: apiKey))
+    }
+
+    // MARK: - Provider-Factory
+
+    /// Baut den aktuell ausgewählten Provider inklusive Config — oder den
+    /// konkreten Grund, warum nicht. Die Probe-UI zeigt damit "API-Key fehlt"
+    /// statt eines generischen "ging nicht"; vorher kollabierten kaputte URL,
+    /// fehlendes Modell und fehlender Key zu einem stummen `nil`, eine Ebene
+    /// bevor `ProviderProbeResult` überhaupt greifen konnte.
+    static func makeProviderResult(
         defaults: UserDefaults = .standard,
-        secretStore: AIProviderSecretPersisting = AIProviderSecretStore()
-    ) -> SummaryProvider? {
+        secretStore: AIProviderSecretPersisting = AIProviderSecretStore(),
+        session: URLSession = .shared
+    ) -> Result<SummaryProvider, ProviderConfigError> {
         switch selectedProvider(defaults: defaults) {
         case .claudeCLI:
-            return ClaudeCLISummaryProvider()
+            return .success(ClaudeCLISummaryProvider())
         case .openAICompatible:
-            guard let config = openAICompatibleConfig(defaults: defaults, secretStore: secretStore) else {
-                return nil
-            }
-            return OpenAICompatibleSummaryProvider(config: config)
+            return openAICompatibleConfigResult(defaults: defaults, secretStore: secretStore)
+                .map { OpenAICompatibleSummaryProvider(config: $0, session: session) as SummaryProvider }
         case .anthropicAPI:
-            guard let config = anthropicConfig(defaults: defaults, secretStore: secretStore) else {
-                return nil
-            }
-            return AnthropicSummaryProvider(config: config)
+            return anthropicConfigResult(defaults: defaults, secretStore: secretStore)
+                .map { AnthropicSummaryProvider(config: $0, session: session) as SummaryProvider }
         case .ollama:
-            guard let config = ollamaConfig(defaults: defaults) else {
-                return nil
-            }
-            return OpenAICompatibleSummaryProvider(config: config)
+            return ollamaConfigResult(defaults: defaults)
+                .map { OpenAICompatibleSummaryProvider(config: $0, session: session) as SummaryProvider }
+        }
+    }
+
+    /// Bequeme nil-Variante für Caller, die den Fehlergrund nicht brauchen.
+    static func makeProvider(
+        defaults: UserDefaults = .standard,
+        secretStore: AIProviderSecretPersisting = AIProviderSecretStore(),
+        session: URLSession = .shared
+    ) -> SummaryProvider? {
+        try? makeProviderResult(defaults: defaults, secretStore: secretStore, session: session).get()
+    }
+}
+
+/// Warum kein Provider gebaut werden konnte. Trägt den Provider mit, damit
+/// die Meldung benennt, WESSEN Config unvollständig ist.
+enum ProviderConfigError: Error, Equatable {
+    case invalidBaseURL(AISummaryProvider)
+    case missingModel(AISummaryProvider)
+    case missingAPIKey(AISummaryProvider)
+
+    var userMessage: String {
+        switch self {
+        case .invalidBaseURL(let provider):
+            return "\(provider.displayName): Endpoint-URL ist ungültig."
+        case .missingModel(let provider):
+            return "\(provider.displayName): Kein Modell angegeben."
+        case .missingAPIKey(let provider):
+            return "\(provider.displayName): API-Key fehlt — in den Einstellungen hinterlegen."
         }
     }
 }

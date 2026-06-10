@@ -166,10 +166,13 @@ struct SummaryProviderSettingsSection: View {
         probeStatus = "Teste Verbindung ..."
         Task {
             let result: ProviderProbeResult
-            if let provider = AIProviderSettings.makeProvider() {
+            switch AIProviderSettings.makeProviderResult() {
+            case .success(let provider):
                 result = await provider.probe()
-            } else {
-                result = .failed("Kein Provider einsatzbereit — Key oder Endpoint fehlt.")
+            case .failure(let configError):
+                // Config-Fehler VOR dem Netz-Call konkret benennen (fehlender
+                // Key, kaputte URL, leeres Modell) statt generisch zu raten.
+                result = .failed(configError.userMessage)
             }
             await MainActor.run {
                 switch result {
