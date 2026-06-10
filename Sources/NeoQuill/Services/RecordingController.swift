@@ -1034,44 +1034,15 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    /// Diarisiert den System-Audio-Stream und gibt Speaker-Timeline zurück.
-    /// Match gegen bekannte Sprecher (SpeakerStore) → labelt mit dem persistenten Namen
-    /// statt anonymem `S1`/`S2`. Neue Embeddings werden im Store automatisch erfasst,
-    /// sobald der User sie über das "Wer ist das?"-Sheet labelt.
+    /// Diarisiert den System-Audio-Stream und gibt die aufgelöste
+    /// Speaker-Timeline zurück. Die Resolution-Regeln (Kurz-Segment-Filter,
+    /// Known-Voice-Match, ID-Normalisierung) leben im `SpeakerDiarizer` —
+    /// hier wird nur der SpeakerStore als Matcher eingehängt.
     private func runDiarization(samples: [Float]) async -> [DiarizedSpeakerSegment] {
-        do {
-            let result = try await diarizer.diarize(samples)
-            return result.segments.compactMap { seg in
-                let duration = TimeInterval(seg.endTimeSeconds - seg.startTimeSeconds)
-                guard duration >= Self.minDiarizationSegmentDuration else { return nil }
-                let resolvedId: String
-                let source: SpeakerIdentitySource
-                let confidence: Double
-                if let match = speakerStore?.bestMatch(for: seg.embedding) {
-                    resolvedId = match.id
-                    source = .knownVoice
-                    confidence = Double(match.score)
-                } else {
-                    resolvedId = displaySpeakerId(for: seg.speakerId)
-                    source = .diarization
-                    confidence = 0.72
-                }
-                return DiarizedSpeakerSegment(
-                    start: TimeInterval(seg.startTimeSeconds),
-                    end: TimeInterval(seg.endTimeSeconds),
-                    speakerId: resolvedId,
-                    embedding: seg.embedding,
-                    speakerSource: source,
-                    confidence: confidence
-                )
-            }
-        } catch {
-            NSLog("[Recorder] Diarize failed: \(error)")
-            return []
+        await diarizer.resolveSegments(samples) { [weak speakerStore] embedding in
+            speakerStore?.bestMatch(for: embedding)
         }
     }
-
-    static let minDiarizationSegmentDuration: TimeInterval = 1.2
 
     /// Match TranscriptLines (mit Mono-Timestamps) auf Diarize-Segments.
     /// Source-Aware: Mic-Lines bleiben die lokale Person, weil sie
@@ -1091,17 +1062,6 @@ final class RecordingController: ObservableObject {
             platformTranscriptEvents: platformEvents,
             diarization: diarization
         )
-    }
-
-    private func displaySpeakerId(for rawId: String) -> String {
-        let trimmed = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "S1" }
-        let upper = trimmed.uppercased()
-        if upper.hasPrefix("S"), upper.dropFirst().allSatisfy(\.isNumber) { return upper }
-        if let numeric = Int(trimmed) { return "S\(numeric + 1)" }
-        let trailingDigits = String(trimmed.reversed().prefix { $0.isNumber }.reversed())
-        if let numeric = Int(trailingDigits) { return "S\(numeric + 1)" }
-        return upper.count <= 3 ? upper : "S1"
     }
 
     private func collectParticipants(

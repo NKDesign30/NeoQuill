@@ -49,4 +49,85 @@ final class SpeakerDiarizer: ObservableObject {
     func embedding(for samples: [Float]) throws -> [Float] {
         try manager.extractSpeakerEmbedding(from: samples)
     }
+
+    // MARK: - Resolution (das eigentliche Pipeline-Interface)
+
+    /// Diarisiert und LÖST die Segmente auf: Schnipsel unter
+    /// `minSegmentDuration` fliegen raus, bekannte Stimmen werden über den
+    /// injizierten `matcher` benannt (Re-ID), anonyme FluidAudio-IDs auf das
+    /// S1/S2-Schema der UI normalisiert. Fehler werden geloggt und als leere
+    /// Liste gemeldet — Diarization ist Best-Effort, nie Pipeline-Blocker.
+    ///
+    /// Die Regeln selbst sind pure `static`s — testbar ohne Modelle/Hardware.
+    /// Vorher lagen sie als private Methoden im RecordingController und waren
+    /// nur mit echten FluidAudio-Modellen erreichbar.
+    func resolveSegments(
+        _ samples: [Float],
+        matcher: ([Float]) -> (id: String, score: Float)?
+    ) async -> [DiarizedSpeakerSegment] {
+        do {
+            let result = try await diarize(samples)
+            return result.segments.compactMap { seg in
+                Self.resolveSegment(
+                    start: TimeInterval(seg.startTimeSeconds),
+                    end: TimeInterval(seg.endTimeSeconds),
+                    rawSpeakerId: seg.speakerId,
+                    embedding: seg.embedding,
+                    matcher: matcher
+                )
+            }
+        } catch {
+            NSLog("[SpeakerDiarizer] diarize failed: \(error)")
+            return []
+        }
+    }
+
+    /// Minimale Segmentdauer — kürzere Schnipsel sind fast immer Atem,
+    /// Übersprechen oder Raumklang und würden Speaker-Wechsel vortäuschen.
+    nonisolated static let minSegmentDuration: TimeInterval = 1.2
+
+    /// Konfidenz für anonym aufgelöste Segmente (keine bekannte Stimme).
+    nonisolated static let anonymousConfidence: Double = 0.72
+
+    /// Löst EIN Diarization-Segment auf. `nil` = verworfen (zu kurz).
+    nonisolated static func resolveSegment(
+        start: TimeInterval,
+        end: TimeInterval,
+        rawSpeakerId: String,
+        embedding: [Float],
+        matcher: ([Float]) -> (id: String, score: Float)?
+    ) -> DiarizedSpeakerSegment? {
+        guard end - start >= minSegmentDuration else { return nil }
+        if let match = matcher(embedding) {
+            return DiarizedSpeakerSegment(
+                start: start,
+                end: end,
+                speakerId: match.id,
+                embedding: embedding,
+                speakerSource: .knownVoice,
+                confidence: Double(match.score)
+            )
+        }
+        return DiarizedSpeakerSegment(
+            start: start,
+            end: end,
+            speakerId: displaySpeakerId(for: rawSpeakerId),
+            embedding: embedding,
+            speakerSource: .diarization,
+            confidence: anonymousConfidence
+        )
+    }
+
+    /// Normalisiert FluidAudio-Speaker-IDs ("0", "Speaker 1", "spk2") auf das
+    /// S1/S2-Schema, das UI und SpeakerPalette sprechen.
+    nonisolated static func displaySpeakerId(for rawId: String) -> String {
+        let trimmed = rawId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "S1" }
+        let upper = trimmed.uppercased()
+        if upper.hasPrefix("S"), upper.dropFirst().allSatisfy(\.isNumber) { return upper }
+        if let numeric = Int(trimmed) { return "S\(numeric + 1)" }
+        let trailingDigits = String(trimmed.reversed().prefix { $0.isNumber }.reversed())
+        if let numeric = Int(trailingDigits) { return "S\(numeric + 1)" }
+        return upper.count <= 3 ? upper : "S1"
+    }
 }
