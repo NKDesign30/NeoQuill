@@ -99,34 +99,53 @@ final class CaptionCaptureService: ObservableObject {
         noCaptionPollCount = 0
         state = .listening(fixture.platform)
         CaptionFixtureReplayer.replay(fixture) { [weak self] offset, candidates in
-            self?.consumeReplayedCandidates(candidates, offsetSeconds: offset, platform: fixture.platform)
+            guard let self, let startedAt = self.startedAt else { return }
+            self.consume(
+                candidates,
+                startSeconds: offset,
+                observedAt: startedAt.addingTimeInterval(offset),
+                platform: fixture.platform
+            )
         }
         return events
     }
 
-    private func consumeReplayedCandidates(
+    /// Konfidenz für Captions ohne erkannten Sprecher bzw. mit Namen.
+    static let anonymousCaptionConfidence: Double = 0.45
+    static let namedCaptionConfidence: Double = 0.88
+
+    /// Der EINE Weg von Kandidaten zu CaptionEvents — geteilt von Live-`poll()`
+    /// und Fixture-Replay. Vorher duplizierte der Replay-Pfad die komplette
+    /// Event-Konstruktion (gleicher CaptionEvent-Block, gleiche Konfidenzen);
+    /// die versprochene "genau dieselbe Pipeline" teilte real nur die Dedupe.
+    @discardableResult
+    private func consume(
         _ candidates: [CaptionCandidate],
-        offsetSeconds: TimeInterval,
+        startSeconds: TimeInterval,
+        observedAt: Date,
         platform: Platform
-    ) {
-        guard let startedAt else { return }
+    ) -> Int {
+        var appended = 0
         for candidate in candidates {
             let fingerprint = CaptionTextParser.fingerprint(candidate: candidate, platform: platform)
             guard !seenFingerprints.contains(fingerprint) else { continue }
             seenFingerprints.insert(fingerprint)
-            let observed = startedAt.addingTimeInterval(offsetSeconds)
             events.append(CaptionEvent(
                 platform: platform,
                 appBundleIdentifier: candidate.bundleIdentifier,
                 speakerName: candidate.speakerName,
                 text: candidate.text,
-                startSeconds: offsetSeconds,
-                endSeconds: offsetSeconds + candidate.estimatedDuration,
-                observedAt: observed,
-                confidence: candidate.speakerName == nil ? 0.45 : 0.88,
+                startSeconds: startSeconds,
+                endSeconds: startSeconds + candidate.estimatedDuration,
+                observedAt: observedAt,
+                confidence: candidate.speakerName == nil
+                    ? Self.anonymousCaptionConfidence
+                    : Self.namedCaptionConfidence,
                 rawPayload: candidate.rawText
             ))
+            appended += 1
         }
+        return appended
     }
 
     private func poll() {
@@ -145,26 +164,13 @@ final class CaptionCaptureService: ObservableObject {
         }
 
         let candidates = running.flatMap { extractCaptionCandidates(from: $0) }
-        var appended = 0
-        for candidate in candidates {
-            let fingerprint = CaptionTextParser.fingerprint(candidate: candidate, platform: platform)
-            guard !seenFingerprints.contains(fingerprint) else { continue }
-            seenFingerprints.insert(fingerprint)
-            let now = Date()
-            let startSeconds = now.timeIntervalSince(startedAt)
-            events.append(CaptionEvent(
-                platform: platform,
-                appBundleIdentifier: candidate.bundleIdentifier,
-                speakerName: candidate.speakerName,
-                text: candidate.text,
-                startSeconds: startSeconds,
-                endSeconds: startSeconds + candidate.estimatedDuration,
-                observedAt: now,
-                confidence: candidate.speakerName == nil ? 0.45 : 0.88,
-                rawPayload: candidate.rawText
-            ))
-            appended += 1
-        }
+        let now = Date()
+        let appended = consume(
+            candidates,
+            startSeconds: now.timeIntervalSince(startedAt),
+            observedAt: now,
+            platform: platform
+        )
 
         if appended > 0 {
             state = .listening(platform)

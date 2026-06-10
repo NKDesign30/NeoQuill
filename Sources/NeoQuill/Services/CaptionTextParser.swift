@@ -85,12 +85,10 @@ enum CaptionTextParser {
     }
 
     private static func isProbableSpeakerName(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (2...64).contains(trimmed.count) else { return false }
-        let lower = trimmed.lowercased()
-        if lower.contains("caption") || lower.contains("untertitel") || lower.contains("transcript") { return false }
-        let words = trimmed.split(separator: " ")
-        return words.count <= 5 && trimmed.rangeOfCharacter(from: .letters) != nil
+        TranscriptEventHeuristics.isProbableSpeakerName(
+            text,
+            blockedFragments: ["caption", "untertitel", "transcript"]
+        )
     }
 
     private static func isProbableCaptionText(_ text: String) -> Bool {
@@ -103,7 +101,6 @@ enum CaptionTextParser {
     }
 
     private static func estimatedDuration(for text: String) -> TimeInterval {
-        let words = max(1, text.split(separator: " ").count)
-        return min(8.0, max(1.2, Double(words) / 2.4))
+        TranscriptEventHeuristics.estimatedDuration(for: text)
     }
 }

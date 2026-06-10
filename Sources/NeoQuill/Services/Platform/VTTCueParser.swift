@@ -29,10 +29,12 @@ struct VTTCue: Hashable {
         guard let colon = payload.firstIndex(of: ":") else { return nil }
         let speaker = payload[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
         let text = payload[payload.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !speaker.isEmpty, !text.isEmpty else { return nil }
-        let words = speaker.split(whereSeparator: { $0.isWhitespace })
-        guard words.count >= 1, words.count <= 6 else { return nil }
-        guard speaker.rangeOfCharacter(from: .letters) != nil else { return nil }
+        guard !text.isEmpty else { return nil }
+        // VTT-Profil: 1-Zeichen-Speaker erlaubt (anonymisierte "A:"-Cues),
+        // bis zu 6 Wörter (lange Roster-Display-Namen).
+        guard TranscriptEventHeuristics.isProbableSpeakerName(speaker, minLength: 1, maxWords: 6) else {
+            return nil
+        }
         return (speaker, text)
     }
 }

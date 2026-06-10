@@ -324,13 +324,11 @@ enum PlatformTranscriptParser {
     }
 
     private static func isProbableSpeakerName(_ text: String) -> Bool {
-        guard (2...64).contains(text.count), text.rangeOfCharacter(from: .letters) != nil else { return false }
-        return text.split(separator: " ").count <= 5
+        TranscriptEventHeuristics.isProbableSpeakerName(text)
     }
 
     private static func estimatedDuration(_ text: String) -> TimeInterval {
-        let words = max(1, text.split(separator: " ").count)
-        return min(8, max(1.2, Double(words) / 2.4))
+        TranscriptEventHeuristics.estimatedDuration(for: text)
     }
 
     private static func jsonString(_ dict: [String: Any]) -> String? {

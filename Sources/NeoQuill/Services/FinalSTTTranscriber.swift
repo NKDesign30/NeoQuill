@@ -112,7 +112,7 @@ enum FinalSTTTranscriber {
             quality: quality,
             segments: segments
         )
-        guard quality.status == .passed else {
+        guard TranscriptQualityPolicy.accepts(quality) else {
             throw FinalSTTError.qualityRejected(run)
         }
         return FinalSTTResult(run: run, lines: run.transcriptLines())

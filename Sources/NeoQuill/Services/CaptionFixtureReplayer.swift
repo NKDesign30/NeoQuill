@@ -44,7 +44,7 @@ enum CaptionFixtureReplayer {
     /// Spielt eine Fixture deterministisch durch: pro Snapshot werden alle
     /// Candidates an `consume` weitergereicht — analog zum Live-Polling.
     /// Dedupe + Echo-Filter laufen identisch in der `consume`-Closure des
-    /// Aufrufers (typischerweise CaptionCaptureService.injectFixtureSnapshot).
+    /// Aufrufers (typischerweise CaptionCaptureService.replayFixture).
     static func replay(
         _ fixture: CaptionFixture,
         consume: (TimeInterval, [CaptionCandidate]) -> Void
@@ -55,10 +55,10 @@ enum CaptionFixtureReplayer {
         }
     }
 
-    /// Wenn die Fixture keine Dauer mitliefert, schaetzen wir aus der Wortzahl
-    /// (analog CaptionTextParser).
+    /// Wenn die Fixture keine Dauer mitliefert: dieselbe Formel wie alle
+    /// Event-Quellen. Vorher rechnete dieser Pfad words×0.45 statt words/2.4 —
+    /// der Kommentar behauptete "analog CaptionTextParser", die Zahlen drifteten.
     static func defaultDuration(for text: String) -> TimeInterval {
-        let words = max(1, text.split(separator: " ").count)
-        return min(TimeInterval(words) * 0.45, 12)
+        TranscriptEventHeuristics.estimatedDuration(for: text)
     }
 }

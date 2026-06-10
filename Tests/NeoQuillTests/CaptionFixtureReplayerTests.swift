@@ -30,11 +30,19 @@ final class CaptionFixtureReplayerTests: XCTestCase {
         XCTAssertEqual(collected[1].1, ["Zwei"])
     }
 
-    func testDefaultDurationGrowsWithWordCountButCaps() {
-        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: "Ein Wort"), 0.9, accuracy: 0.001)
-        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: "Vier Worte sind hier"), 1.8, accuracy: 0.001)
+    /// Fixture-Defaults nutzen DIESELBE Formel wie alle Event-Quellen
+    /// (TranscriptEventHeuristics) — der alte Pin hielt eine bereits
+    /// gedriftete Replayer-eigene Formel fest (words×0.45, Cap 12).
+    func testDefaultDurationMatchesSharedHeuristic() {
+        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: "Ein Wort"), 1.2, accuracy: 0.001)
+        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: "Vier Worte sind hier"), 4.0 / 2.4, accuracy: 0.001)
         let veryLong = Array(repeating: "Wort", count: 50).joined(separator: " ")
-        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: veryLong), 12, accuracy: 0.001)
+        XCTAssertEqual(CaptionFixtureReplayer.defaultDuration(for: veryLong), 8, accuracy: 0.001)
+        XCTAssertEqual(
+            CaptionFixtureReplayer.defaultDuration(for: "Ein Wort"),
+            TranscriptEventHeuristics.estimatedDuration(for: "Ein Wort"),
+            accuracy: 0.0001
+        )
     }
 
     @MainActor

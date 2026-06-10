@@ -122,7 +122,7 @@ struct MeetingTranscriber {
             audioSha256: AudioFingerprint.sha256(samples: audioData)
         )
         persistRun(run)
-        if run.quality.status == .failed {
+        if !TranscriptQualityPolicy.accepts(run.quality) {
             NSLog("[NeoQuill] WhisperKit Quality rejected (\(speaker)/\(stem)): \(run.quality.warnings.map(\.rawValue).joined(separator: ","))")
             return []
         }
