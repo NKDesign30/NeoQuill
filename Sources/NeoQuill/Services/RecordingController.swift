@@ -4,11 +4,12 @@ import AVFoundation
 
 // Orchestrator für eine Live-Aufnahme:
 // - PermissionGate prüft Mic/Audio.
-// - AudioCapture liefert dual-stream Float-Chunks (Mic + System-Audio via ProcessTap).
-// - LiveTranscriber (WhisperKit) verarbeitet Chunks → TranscriptSegments.
-// - SpeakerDiarizer (FluidAudio) labelt Speaker auf dem System-Audio-Stream (Phase 4b).
-// - LiveLines werden gepublished für RecordingView.
-// - Auf Stop: finales Transcript wird in MeetingStore persistiert (Phase 4b).
+// - AudioCapture puffert dual-stream Audio (Mic + System-Audio via ProcessTap).
+// - Post-Recording-Architektur: Whisper läuft beim Stop einmal pro Stem über
+//   das volle Float-Array statt live chunk-weise — keine RMS-Drops bei leisem
+//   Mic-Pegel, mehr Kontext für Whisper.
+// - SpeakerDiarizer (FluidAudio) labelt Speaker auf dem System-Audio-Stream.
+// - Auf Stop: finales Transcript wird in MeetingStore persistiert.
 
 @MainActor
 final class RecordingController: ObservableObject {
@@ -16,13 +17,8 @@ final class RecordingController: ObservableObject {
     // MARK: - Published state für UI
 
     @Published private(set) var state: RecordingState = .idle
-    @Published private(set) var liveLines: [TranscriptLine] = []
     @Published private(set) var elapsed: TimeInterval = 0
-    @Published private(set) var device: String = "Mikrofon"
-    @Published private(set) var modelLabel: String = "WhisperKit ANE"
     @Published private(set) var statusText: String = "Bereit"
-    @Published private(set) var captionStatusText: String = "Captions aus"
-    @Published private(set) var captionEventCount: Int = 0
     @Published private(set) var hasMicPermission: Bool = false
     /// Live-Audio-Level (RMS, 0..~1) — UI-Header/Pille zeigt Live-Bars.
     @Published private(set) var audioLevel: Float = 0
@@ -33,7 +29,7 @@ final class RecordingController: ObservableObject {
     private let captionCapture = CaptionCaptureService()
     /// Single Whisper-Instance fuer Post-Recording. Mic- und Sys-Stem laufen
     /// sequenziell durch. Ein Modell = halbe RAM-Last + kein ANE-Konflikt.
-    private let transcriber = LiveTranscriber()
+    private let transcriber = WhisperKitTranscriber()
     /// Multi-Stem-STT-Orchestrierung (Stems rein, Zeilen raus) — ausgelagert
     /// aus diesem Controller in ein eigenes Modul mit klarem Interface.
     private lazy var meetingTranscriber = MeetingTranscriber(whisperKitFallback: transcriber)
@@ -50,23 +46,16 @@ final class RecordingController: ObservableObject {
     var licenseAllowsCrossMeetingSpeakerID: () -> Bool = { true }
 
     private var detectorCancellable: AnyCancellable?
-    private var deviceCancellable: AnyCancellable?
     private var levelCancellable: AnyCancellable?
-    private var captionStateCancellable: AnyCancellable?
-    private var captionEventsCancellable: AnyCancellable?
     private var autoDetectActive = false
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
-    private var micChunkOffset: TimeInterval = 0
-    private var sysChunkOffset: TimeInterval = 0
 
     // MARK: - Lifecycle
 
     init() {
-        wireTranscriber()
         wireAudioCapture()
-        wireCaptionCapture()
         refreshPermissions()
         applyAutoDetectSetting()
         NotificationCenter.default.addObserver(
@@ -134,12 +123,10 @@ final class RecordingController: ObservableObject {
     /// dadurch ist die erste Aufnahme nahezu sofort startbereit, statt erst
     /// bei `start()` Sekunden auf den Modell-Download/Decode zu warten.
     func prewarmModels() async {
-        modelLabel = FinalSTTTranscriber.isAvailable ? FinalSTTTranscriber.label : "WhisperKit ANE"
         if !FinalSTTTranscriber.isAvailable {
             let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
             let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
             _ = await transcriber.loadModel(model: model, language: lang)
-            modelLabel = friendlyModelLabel(model)
         }
 
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
@@ -205,7 +192,6 @@ final class RecordingController: ObservableObject {
                 return
             }
         }
-        modelLabel = FinalSTTTranscriber.isAvailable ? FinalSTTTranscriber.label : friendlyModelLabel(model)
 
         // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal).
         // Bekannte Sprecher werden gleich als Bias mitgegeben — Re-Identification.
@@ -226,9 +212,6 @@ final class RecordingController: ObservableObject {
             }
             audioCapture.targetBundleIds = detector.detectedApp.bundleIdentifiers
             try await audioCapture.start()
-            liveLines.removeAll()
-            micChunkOffset = 0
-            sysChunkOffset = 0
             startedAt = Date()
             state = .recording(startedAt: startedAt!)
             statusText = "Aufnahme läuft"
@@ -255,9 +238,8 @@ final class RecordingController: ObservableObject {
         let captionEvents = captionCapture.stop()
 
         // UI sofort entlasten: Provisional-Detail einsetzen + State auf idle,
-        // sodass die RecordingView verlassen und die Detail-View mit
-        // "Wird transkribiert…" angezeigt wird. Whisper + Claude laufen im
-        // Hintergrund und updaten das Detail wenn fertig.
+        // sodass die Detail-View mit "Wird transkribiert…" angezeigt wird.
+        // Whisper + Claude laufen im Hintergrund und updaten das Detail wenn fertig.
         let meetingId = MeetingID.recording(at: started)
         insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started)
 
@@ -1235,47 +1217,15 @@ final class RecordingController: ObservableObject {
 
     // MARK: - Internal wiring
 
-    private func wireTranscriber() {
-        // Post-Recording-Architektur — Live-Callbacks bewusst NICHT mehr verdrahtet.
-        // Whisper laeuft beim Stop einmal pro Stem (Mic + Sys) ueber das volle
-        // Float-Array statt chunk-weise. Vorteile: keine RMS-Drops bei leisem
-        // Mic-Pegel, kein isBusy-Lock-Konflikt zwischen Streams, mehr Kontext
-        // fuer Whisper (-> bessere Transkription).
-    }
-
     private func wireAudioCapture() {
         // Mic + Sys werden in AudioCapture in `micRecording`/`sysRecording`
-        // gepuffert. Wir lassen die Live-Callbacks bewusst leer — der finale
-        // Whisper-Pass laeuft erst in `persistMeeting` ueber `collectFinalAudio`.
-        audioCapture.onMicChunk = nil
-        audioCapture.onSysChunk = nil
-
-        // UI-Header bekommt den echten Mic-Namen statt "Built-in Mic" hardcoded.
-        deviceCancellable = audioCapture.$currentMicName
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] name in
-                guard let self, !name.isEmpty else { return }
-                self.device = name
-            }
-
-        // Live-Audio-Level fuer die Pille (Bars im Recording-Modus).
+        // gepuffert — der finale Whisper-Pass läuft erst in `persistMeeting`
+        // über `collectFinalAudio`. Hier nur das Live-Audio-Level für die
+        // Pille (Bars im Recording-Modus).
         levelCancellable = audioCapture.$audioLevel
             .receive(on: DispatchQueue.main)
             .sink { [weak self] level in
                 self?.audioLevel = level
-            }
-    }
-
-    private func wireCaptionCapture() {
-        captionStateCancellable = captionCapture.$state
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] captureState in
-                self?.captionStatusText = captureState.label
-            }
-        captionEventsCancellable = captionCapture.$events
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] events in
-                self?.captionEventCount = events.count
             }
     }
 
@@ -1296,15 +1246,5 @@ final class RecordingController: ObservableObject {
     private func stopElapsedTimer() {
         elapsedTimer?.cancel()
         elapsedTimer = nil
-    }
-
-    private func friendlyModelLabel(_ raw: String) -> String {
-        switch raw {
-        case "openai_whisper-tiny":   return "Whisper Tiny"
-        case "openai_whisper-base":   return "Whisper Base"
-        case "openai_whisper-small":  return "Whisper Small"
-        case "openai_whisper-medium": return "Whisper Medium"
-        default: return raw
-        }
     }
 }

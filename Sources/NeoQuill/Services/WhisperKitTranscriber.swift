@@ -1,16 +1,13 @@
 import Foundation
 import WhisperKit
 
-/// Live-Transkription via WhisperKit (CoreML + ANE)
-final class LiveTranscriber: @unchecked Sendable {
+/// Post-Recording-Transkription via WhisperKit (CoreML + ANE).
+/// Fallback-Engine, wenn whisper-cli (`FinalSTTTranscriber`) nicht verfügbar ist —
+/// läuft beim Stop einmal pro Stem über das volle Float-Array.
+final class WhisperKitTranscriber: @unchecked Sendable {
     private var whisperKit: WhisperKit?
     private(set) var modelName: String
     private var languageHint: String
-    private var isBusy = false
-    private let queue = DispatchQueue(label: "com.neon.neoquill.transcriber", qos: .userInitiated)
-
-    /// Callback für neue Segmente
-    var onSegment: (@Sendable (TranscriptSegment) -> Void)?
 
     init(modelName: String = "openai_whisper-small", language: String = "de") {
         self.modelName = modelName
@@ -47,67 +44,10 @@ final class LiveTranscriber: @unchecked Sendable {
         }
     }
 
-    /// Transkribiert einen Audio-Chunk (Float32 PCM, 16kHz Mono)
-    func transcribe(audioData: [Float], sampleRate: Int = 16000, offset: TimeInterval = 0) {
-        guard whisperKit != nil else { return }
-        guard !isBusy else { return }
-
-        let prepared = Self.prepareForSpeech(audioData)
-        // Einfacher Energy-Check — Stille rausfiltern
-        let rms = sqrt(prepared.reduce(0) { $0 + $1 * $1 } / Float(max(prepared.count, 1)))
-        guard rms > 0.005 else { return }
-
-        isBusy = true
-        let callback = self.onSegment
-        let kit = self.whisperKit!
-
-        let lang = languageHint == "auto" ? nil : languageHint
-        let options = DecodingOptions(
-            task: .transcribe,
-            language: lang,
-            usePrefillPrompt: true,
-            skipSpecialTokens: true,
-            withoutTimestamps: false,
-            suppressBlank: true
-        )
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                let results = try await kit.transcribe(audioArray: prepared, decodeOptions: options)
-
-                for result in results {
-                    for segment in result.segments {
-                        let raw = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let text = Self.cleanTokens(raw)
-                        if text.isEmpty { continue }
-
-                        let seg = TranscriptSegment(
-                            text: text,
-                            start: offset + Double(segment.start),
-                            end: offset + Double(segment.end)
-                        )
-
-                        await MainActor.run {
-                            callback?(seg)
-                        }
-                    }
-                }
-            } catch {
-                print("[NeoQuill] Transkription fehlgeschlagen: \(error)")
-            }
-
-            let transcriber = self
-            await MainActor.run {
-                transcriber?.isBusy = false
-            }
-        }
-    }
-
-    /// Post-Recording Transkription — laeuft den Whisper-Pass auf einem
-    /// vollstaendigen Float-Array (statt 2s-Live-Chunks). Vorteile:
+    /// Post-Recording Transkription — läuft den Whisper-Pass auf einem
+    /// vollständigen Float-Array (statt 2s-Live-Chunks). Vorteile:
     /// - Kein RMS-Schwellen-Drop bei leisen Mic-Pegeln
     /// - Whisper sieht den ganzen Kontext (besser als chunk-by-chunk)
-    /// - Kein `isBusy`-Lock-Drop bei parallelen Streams
     func transcribeFull(audioData: [Float], speaker: String) async -> [TranscriptLine] {
         guard let kit = whisperKit else { return [] }
         guard !audioData.isEmpty else { return [] }

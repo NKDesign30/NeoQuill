@@ -36,8 +36,6 @@ final class AudioCapture: NSObject, ObservableObject {
     @Published var hasSystemAudio = false
     @Published var audioTooQuiet: Bool = false
     @Published var systemAudioTooQuiet: Bool = false
-    /// Echter Name des Mics das gerade läuft — für UI-Header (`Built-in Mic` ist hardcoded raus).
-    @Published var currentMicName: String = ""
 
     // Mic Capture
     private var micSession: AVCaptureSession?
@@ -62,9 +60,6 @@ final class AudioCapture: NSObject, ObservableObject {
     private var tapFallbackTimer: Timer?
     @Published var captureMode: String = ""  // "ProcessTap", "SCK", "Mic-only"
 
-    // Chunk-Buffer fuer Live-Transcription (werden periodisch geleert)
-    private var micBuffer: [Float] = []
-    private var sysBuffer: [Float] = []
     // Vollstaendige Aufnahme-Buffer (werden NIE geleert, nur beim Mix am Ende)
     private var micRecording: [Float] = []
     private var sysRecording: [Float] = []
@@ -96,17 +91,6 @@ final class AudioCapture: NSObject, ObservableObject {
     private let levelGuardWarmupSamples = 3 * 16000  // 3 Sekunden bei 16kHz
     private let quietThreshold: Float = 0.001
 
-    /// Callback fuer Mic-Chunks (eigene Stimme → lokaler Speaker).
-    var onMicChunk: (([Float]) -> Void)?
-    /// Callback fuer System-Audio-Chunks (Remote-Teilnehmer via ProcessTap → Speaker S1).
-    /// Vorher: System-Audio wurde nur akkumuliert und beim Stop gemixt — Live-Transkript
-    /// hatte deshalb nie die Teams-Stimme.
-    var onSysChunk: (([Float]) -> Void)?
-
-    private let minChunkSamples = 2 * 16000
-    private let maxChunkSamples = 8 * 16000
-    private var chunkTimer: Timer?
-
     /// Bundle IDs der aktiven Call-App
     var targetBundleIds: [String] = []
 
@@ -134,8 +118,6 @@ final class AudioCapture: NSObject, ObservableObject {
     func start() async throws {
         guard !isCapturing else { return }
 
-        micBuffer = []
-        sysBuffer = []
         micRecording = []
         sysRecording = []
         micRecordingHQ = []
@@ -170,12 +152,6 @@ final class AudioCapture: NSObject, ObservableObject {
 
         isCapturing = true
 
-        chunkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.flushChunk()
-            }
-        }
-
         let mode = hasSystemAudio && micGranted ? "Dual-Stream (ProcessTap + Mic)" :
                    hasSystemAudio ? "Nur System-Audio" :
                    micGranted ? "Nur Mikrofon" : "KEIN Audio!"
@@ -197,15 +173,6 @@ final class AudioCapture: NSObject, ObservableObject {
                     self?.checkMicFallback()
                 }
             }
-        }
-    }
-
-    func startSystemAudioLate() async {
-        guard isCapturing, !hasSystemAudio else { return }
-        do {
-            try startProcessTap()
-        } catch {
-            logger.error("ProcessTap Late-Start fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -277,8 +244,6 @@ final class AudioCapture: NSObject, ObservableObject {
     }
 
     func stop() async {
-        chunkTimer?.invalidate()
-        chunkTimer = nil
         tapFallbackTimer?.invalidate()
         tapFallbackTimer = nil
         micFallbackTimer?.invalidate()
@@ -299,8 +264,6 @@ final class AudioCapture: NSObject, ObservableObject {
         micEngine?.stop()
         micEngine = nil
 
-        flushChunk(force: true)
-
         let micSec = micRecording.count / 16000
         let sysSec = sysRecording.count / 16000
         let micRmsTotal = micRecording.isEmpty ? Float(0) : sqrt(micRecording.reduce(Float(0)) { $0 + $1 * $1 } / Float(micRecording.count))
@@ -312,10 +275,6 @@ final class AudioCapture: NSObject, ObservableObject {
         nonZeroSamplesTotal = 0
         audioTooQuiet = false
         systemAudioTooQuiet = false
-    }
-
-    func getRecordedAudio() -> [Float] {
-        return getMixedAudio()
     }
 
     // MARK: - Process Tap (System Audio)
@@ -386,8 +345,6 @@ final class AudioCapture: NSObject, ObservableObject {
         guard session.canAddInput(input) else { throw CaptureError.formatError }
         session.addInput(input)
 
-        currentMicName = mic.localizedName
-
         let audioOutput = AVCaptureAudioDataOutput()
         guard session.canAddOutput(audioOutput) else { throw CaptureError.formatError }
         session.addOutput(audioOutput)
@@ -424,7 +381,6 @@ final class AudioCapture: NSObject, ObservableObject {
         engine.prepare()
         try engine.start()
         micEngine = engine
-        currentMicName = currentMicName.isEmpty ? "System-Mikrofon" : "\(currentMicName) · Engine"
         logger.warning("Mic-Fallback AVAudioEngine gestartet: \(sourceFormat, privacy: .public)")
         diagLog("MIC ENGINE STARTED: format=\(sourceFormat)")
     }
@@ -443,10 +399,8 @@ final class AudioCapture: NSObject, ObservableObject {
 
         let nonZero = cleaned.contains { $0 != 0.0 }
         if source == "Tap" {
-            sysBuffer.append(contentsOf: cleaned)
             sysRecording.append(contentsOf: cleaned)
         } else {
-            micBuffer.append(contentsOf: cleaned)
             micRecording.append(contentsOf: cleaned)
         }
         if nonZero { nonZeroSamplesTotal += cleaned.count }
@@ -557,8 +511,6 @@ final class AudioCapture: NSObject, ObservableObject {
         sysRecordingHQ.removeAll()
         micHQStartOffset = nil
         sysHQStartOffset = nil
-        micBuffer.removeAll()
-        sysBuffer.removeAll()
     }
 
     private func getMixedAudio() -> [Float] {
@@ -601,26 +553,6 @@ final class AudioCapture: NSObject, ObservableObject {
         return mixed
     }
 
-    private func flushChunk(force: Bool = false) {
-        // Mic-Stream
-        let micCount = micBuffer.count
-        if micCount >= minChunkSamples || (force && micCount > 0) {
-            let chunkSize = min(micCount, maxChunkSamples)
-            let chunk = Array(micBuffer.prefix(chunkSize))
-            micBuffer.removeFirst(chunkSize)
-            onMicChunk?(chunk)
-        }
-
-        // Sys-Stream (Teams/Zoom-Remote-Stimme) — eigener Push, damit Whisper ihn
-        // ueberhaupt sieht. Vorher wurde `sysBuffer` nur stillschweigend geleert.
-        let sysCount = sysBuffer.count
-        if sysCount >= minChunkSamples || (force && sysCount > 0) {
-            let chunkSize = min(sysCount, maxChunkSamples)
-            let chunk = Array(sysBuffer.prefix(chunkSize))
-            sysBuffer.removeFirst(chunkSize)
-            onSysChunk?(chunk)
-        }
-    }
 }
 
 // MARK: - AVCaptureAudioDataOutput Delegate (Mikrofon)

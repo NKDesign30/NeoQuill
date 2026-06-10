@@ -9,7 +9,6 @@ import UniformTypeIdentifiers
 enum ViewMode: String, CaseIterable {
     case empty
     case detail
-    case recording
 }
 
 enum DetailLayout: String, CaseIterable {
@@ -85,7 +84,6 @@ final class AppState: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
-    @Published private(set) var liveSession: LiveSession = MockData.liveSession
 
     /// Aktives Meeting — nil wenn nichts selektiert oder Store leer.
     /// RootView zeigt dann EmptyView.

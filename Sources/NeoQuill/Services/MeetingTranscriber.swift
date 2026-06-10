@@ -14,7 +14,7 @@ import Foundation
 struct MeetingTranscriber {
     /// WhisperKit-Rückfallebene, wenn `FinalSTTTranscriber` (whisper.cpp) nicht
     /// verfügbar ist.
-    let whisperKitFallback: LiveTranscriber
+    let whisperKitFallback: WhisperKitTranscriber
 
     /// Transkribiert mic- und system-Stem, fällt bei dünnem/schlechtem Ergebnis
     /// auf den gemischten Stem zurück und gibt die zeitlich sortierten Zeilen.

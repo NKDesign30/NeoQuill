@@ -166,7 +166,7 @@ enum FinalSTTTranscriber {
         let response = try JSONDecoder().decode(WhisperCLIResponse.self, from: data)
         let chunkOffsetMilliseconds = Int((TimeInterval(chunk.startSample) / sampleRate * 1_000).rounded())
         return response.transcription.compactMap { segment in
-            let text = LiveTranscriber.cleanTokens(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))
+            let text = WhisperKitTranscriber.cleanTokens(segment.text.trimmingCharacters(in: .whitespacesAndNewlines))
             guard !text.isEmpty else { return nil }
             let isLocalSpeaker = LocalSpeakerProfile.isLocalSpeakerId(speaker)
             let start = chunkOffsetMilliseconds + segment.offsets.from

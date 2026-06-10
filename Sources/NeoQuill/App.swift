@@ -121,8 +121,6 @@ struct RootView: View {
                         } else {
                             EmptyView()
                         }
-                    case .recording:
-                        RecordingView(recorder: state.recorder, onStop: state.stopRecording)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

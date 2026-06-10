@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 // Domain-Modelle. 1:1-Reflex auf Bundle-data.js, Swift-idiomatisiert.
-// Werden später vom MeetingStore (SQLite WAL) gefüllt; aktuell aus MockData.
+// Werden vom MeetingStore (SQLite WAL) gefüllt.
 
 enum Platform: String, Codable, CaseIterable, Hashable {
     case teams = "TEAMS"
@@ -229,11 +229,4 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
             lifecycle: lifecycle ?? self.lifecycle
         )
     }
-}
-
-struct LiveSession: Codable, Hashable {
-    let startedAt: Date
-    let device: String       // "Built-in Mic"
-    let model: String        // "WhisperKit ANE"
-    var lines: [TranscriptLine]
 }

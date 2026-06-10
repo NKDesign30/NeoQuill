@@ -3,7 +3,7 @@ import XCTest
 
 final class MeetingTranscriberTests: XCTestCase {
 
-    private let sut = MeetingTranscriber(whisperKitFallback: LiveTranscriber())
+    private let sut = MeetingTranscriber(whisperKitFallback: WhisperKitTranscriber())
 
     func testWordCount() {
         let lines = [line("hallo welt"), line("drei vier fünf")]
