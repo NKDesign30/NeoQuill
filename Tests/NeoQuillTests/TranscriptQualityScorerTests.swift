@@ -45,7 +45,7 @@ final class TranscriptQualityScorerTests: XCTestCase {
             TranscriptLine(
                 id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
                 who: "ME",
-                displayName: "Niko Knez",
+                displayName: "Alex Meyer",
                 timestamp: "01:23",
                 startSeconds: 83,
                 endSeconds: 86,

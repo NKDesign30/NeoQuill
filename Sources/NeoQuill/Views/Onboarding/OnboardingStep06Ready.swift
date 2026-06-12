@@ -5,7 +5,9 @@ import SwiftUI
 
 struct ReadyContent: View {
     @ObservedObject var state: OnboardingState
+    @EnvironmentObject private var appState: AppState
     let accent: Color
+    @State private var preparationStatus: RuntimePreparationStatus = .idle
 
     private var firstName: String? {
         state.name.split(separator: " ").first.map(String.init)
@@ -22,7 +24,7 @@ struct ReadyContent: View {
         VStack(alignment: .leading, spacing: 32) {
             OnboardingHeading(
                 title: readyTitle,
-                lead: "Eine letzte Sache: dein Aufnahme-Shortcut. Halte ihn aus jeder App heraus gedrückt und Quill startet — auch ohne Fokus.",
+                lead: "Eine letzte Sache: dein Aufnahme-Shortcut. Quill bereitet im Hintergrund die lokale Speech-Runtime vor, damit die erste Aufnahme nicht am Modell-Download hängt.",
                 accent: accent
             )
 
@@ -33,9 +35,13 @@ struct ReadyContent: View {
                 }
 
                 successCard
+                runtimePreparationCard
                 signatureLine
             }
             .frame(maxWidth: 460)
+        }
+        .task {
+            await prepareRuntimeIfNeeded()
         }
     }
 
@@ -84,6 +90,140 @@ struct ReadyContent: View {
                 .tracking(1.0)
                 .foregroundStyle(accent)
         }
+    }
+
+    private var runtimePreparationCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(runtimeTint.opacity(0.16))
+                    Image(systemName: runtimeIcon)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(runtimeTint)
+                }
+                .frame(width: 28, height: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(runtimeTitle)
+                        .font(.neonBody(13, weight: .semibold))
+                        .foregroundStyle(Neon.textPrimary)
+                    Text("WhisperKit/Final-STT und optionale Speaker-Diarization")
+                        .font(.neonBody(11))
+                        .foregroundStyle(Neon.textTertiary)
+                }
+                Spacer(minLength: 8)
+                if preparationStatus.isWorking {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(accent)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                runtimeRow(label: "Sprachmodell", text: speechText, color: speechColor)
+                runtimeRow(label: "Speaker-Modell", text: diarizationText, color: diarizationColor)
+            }
+
+            if !preparationStatus.canFinishOnboarding && !preparationStatus.isWorking {
+                Button("Runtime erneut vorbereiten") {
+                    Task { await prepareRuntime() }
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(runtimeTint.opacity(0.25), lineWidth: Neon.hairlineWidth)
+        )
+    }
+
+    private func runtimeRow(label: String, text: String, color: Color) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(label)
+                .font(.neonMono(10, weight: .semibold))
+                .foregroundStyle(Neon.textTertiary)
+                .frame(width: 104, alignment: .leading)
+            Text(text)
+                .font(.neonBody(11))
+                .foregroundStyle(Neon.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var runtimeTitle: String {
+        if preparationStatus.isWorking { return "Runtime wird vorbereitet" }
+        if preparationStatus.canFinishOnboarding { return "Runtime ist bereit" }
+        return "Runtime noch nicht bereit"
+    }
+
+    private var runtimeIcon: String {
+        if preparationStatus.isWorking { return "arrow.down.circle" }
+        if preparationStatus.canFinishOnboarding { return "checkmark" }
+        return "exclamationmark.triangle"
+    }
+
+    private var runtimeTint: Color {
+        if preparationStatus.isWorking { return accent }
+        if preparationStatus.canFinishOnboarding { return Neon.statusSuccess }
+        return Neon.statusWarning
+    }
+
+    private var speechText: String {
+        switch preparationStatus.speech {
+        case .idle: return "Wartet auf Vorbereitung."
+        case .preparing(let message): return message
+        case .ready(let message): return message
+        case .failed(let message): return message
+        }
+    }
+
+    private var speechColor: Color {
+        switch preparationStatus.speech {
+        case .ready: return Neon.statusSuccess
+        case .failed: return Neon.statusError
+        case .preparing: return accent
+        case .idle: return Neon.textTertiary
+        }
+    }
+
+    private var diarizationText: String {
+        switch preparationStatus.diarization {
+        case .skipped(let message): return message
+        case .preparing(let message): return message
+        case .ready(let message): return message
+        case .failed(let message): return message
+        }
+    }
+
+    private var diarizationColor: Color {
+        switch preparationStatus.diarization {
+        case .ready: return Neon.statusSuccess
+        case .failed: return Neon.statusWarning
+        case .preparing: return accent
+        case .skipped: return Neon.textTertiary
+        }
+    }
+
+    private func prepareRuntimeIfNeeded() async {
+        guard !preparationStatus.isWorking, !preparationStatus.canFinishOnboarding else { return }
+        await prepareRuntime()
+    }
+
+    private func prepareRuntime() async {
+        state.runtimePrepared = false
+        preparationStatus = .preparing("Bereite Sprachmodell vor ...")
+        let snapshot = await appState.prepareFirstRunAssets()
+        preparationStatus = snapshot
+        state.runtimePrepared = snapshot.canFinishOnboarding
     }
 }
 

@@ -34,7 +34,7 @@ enum ClaudeCLIClient {
         return path?.isEmpty == false ? path : nil
     }
 
-    static func summarize(transcript: String, locale: String = "de") async -> MeetingSummaryAI? {
+    static func summarize(transcript: String, locale: String = "auto") async -> MeetingSummaryAI? {
         guard let bin = claudeBinaryPath() else {
             NSLog("[ClaudeCLI] claude binary not found")
             return nil

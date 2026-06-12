@@ -43,7 +43,7 @@ final class MeetingActionGeneratorTests: XCTestCase {
             platform: .meet,
             wordCount: 420,
             participants: [
-                Participant(id: "ME", name: "Niko", role: "Owner", colorHex: 0x2ECC71, spoke: "12m"),
+                Participant(id: "ME", name: "Alex", role: "Owner", colorHex: 0x2ECC71, spoke: "12m"),
                 Participant(id: "S1", name: "Sarah", role: "Kunde", colorHex: 0x3498DB, spoke: "18m"),
             ],
             tldr: "Wir planen Launch und offene Punkte.",

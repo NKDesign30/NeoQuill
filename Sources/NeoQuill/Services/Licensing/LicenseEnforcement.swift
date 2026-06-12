@@ -60,7 +60,7 @@ enum LicenseEnforcement {
     }
 
     /// Lokale WhisperKit-Transkription bleibt immer frei — kein Compute auf
-    /// Niko-Seite, kein API-Aufruf nach außen.
+    /// Betreiber-Seite, kein API-Aufruf nach außen.
     static func canTranscribeLocally(_ snapshot: LicenseSnapshot) -> Bool {
         true
     }

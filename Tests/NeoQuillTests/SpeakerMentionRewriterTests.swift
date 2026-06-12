@@ -4,18 +4,18 @@ import XCTest
 final class SpeakerMentionRewriterTests: XCTestCase {
 
     func testReplacesIdMentionAsWholeWord() {
-        let out = SpeakerMentionRewriter.rewrite(in: "S2 fragt nach.", oldId: "S2", oldName: nil, newName: "Thorsten")
-        XCTAssertEqual(out, "Thorsten fragt nach.")
+        let out = SpeakerMentionRewriter.rewrite(in: "S2 fragt nach.", oldId: "S2", oldName: nil, newName: "Morgan")
+        XCTAssertEqual(out, "Morgan fragt nach.")
     }
 
     func testReplacesSpokenLabelForm() {
-        let out = SpeakerMentionRewriter.rewrite(in: "Speaker 2 stimmt zu.", oldId: "S2", oldName: nil, newName: "Thorsten")
-        XCTAssertEqual(out, "Thorsten stimmt zu.")
+        let out = SpeakerMentionRewriter.rewrite(in: "Speaker 2 stimmt zu.", oldId: "S2", oldName: nil, newName: "Morgan")
+        XCTAssertEqual(out, "Morgan stimmt zu.")
     }
 
     func testReplacesOldName() {
-        let out = SpeakerMentionRewriter.rewrite(in: "Gast meldet sich.", oldId: "S3", oldName: "Gast", newName: "Nadja")
-        XCTAssertEqual(out, "Nadja meldet sich.")
+        let out = SpeakerMentionRewriter.rewrite(in: "Gast meldet sich.", oldId: "S3", oldName: "Gast", newName: "Casey")
+        XCTAssertEqual(out, "Casey meldet sich.")
     }
 
     func testDoesNotReplaceInsideLongerWord() {

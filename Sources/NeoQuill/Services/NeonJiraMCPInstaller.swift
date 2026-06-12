@@ -24,12 +24,15 @@ struct NeonJiraMCPStatus: Equatable, Sendable {
 
 enum NeonJiraMCPInstallerError: LocalizedError, Equatable {
     case npmMissing
+    case packageMissing
     case commandFailed(command: String, status: Int32, output: String)
 
     var errorDescription: String? {
         switch self {
         case .npmMissing:
             return "npm wurde nicht gefunden."
+        case .packageMissing:
+            return "MCP-Paketquelle fehlt."
         case .commandFailed(let command, let status, let output):
             return "\(command) fehlgeschlagen (\(status)): \(output)"
         }
@@ -37,42 +40,69 @@ enum NeonJiraMCPInstallerError: LocalizedError, Equatable {
 }
 
 enum NeonJiraMCPInstaller {
-    static let repository = "github:NKDesign30/neon-jira-mcp"
-    static let installArguments = ["install", "-g", repository]
+    static let defaultCommand = "jira-mcp"
 
-    static func currentStatus() async -> NeonJiraMCPStatus {
-        await Task.detached(priority: .utility) {
+    static func installArguments(package: String) -> [String] {
+        ["install", "-g", package.trimmingCharacters(in: .whitespacesAndNewlines)]
+    }
+
+    static func currentStatus(command: String = defaultCommand) async -> NeonJiraMCPStatus {
+        let mcpCommand = normalizedCommand(command)
+        return await Task.detached(priority: .utility) {
             NeonJiraMCPStatus(
                 nodePath: executablePath("node"),
                 npmPath: executablePath("npm"),
-                mcpPath: executablePath("neon-jira-mcp"),
+                mcpPath: executablePath(mcpCommand),
                 jiraPath: executablePath("jira")
             )
         }.value
     }
 
-    static func install() async throws -> String {
-        try await Task.detached(priority: .userInitiated) {
+    static func install(package: String) async throws -> String {
+        let package = package.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await Task.detached(priority: .userInitiated) {
+            guard !package.isEmpty else {
+                throw NeonJiraMCPInstallerError.packageMissing
+            }
             guard let npmPath = executablePath("npm") else {
                 throw NeonJiraMCPInstallerError.npmMissing
             }
-            return try run(executable: npmPath, arguments: installArguments)
+            return try run(executable: npmPath, arguments: installArguments(package: package))
         }.value
     }
 
     static func mcpConfigSnippet(command: String) -> String {
-        """
+        let encodedCommand = jsonString(normalizedCommand(command))
+        return """
         {
           "mcpServers": {
             "neon-jira": {
-              "command": "\(command)"
+              "command": \(encodedCommand)
             }
           }
         }
         """
     }
 
+    private static func normalizedCommand(_ command: String) -> String {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? defaultCommand : trimmed
+    }
+
+    private static func jsonString(_ value: String) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return encoded
+    }
+
     private static func executablePath(_ name: String) -> String? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        if name.contains("/") {
+            return FileManager.default.isExecutableFile(atPath: name) ? name : nil
+        }
         let candidates = [
             "/opt/homebrew/bin/\(name)",
             "/usr/local/bin/\(name)",

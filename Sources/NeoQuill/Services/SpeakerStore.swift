@@ -5,7 +5,7 @@ import FluidAudio
 // SQLite-Backed Persistenz für gelabelte Sprecher.
 // FluidAudio liefert Embeddings als [Float] pro Diarize-Run — wir speichern sie
 // zusammen mit dem User-gegebenen Namen, sodass beim nächsten Call automatisch
-// matched wird (User labelt "Thorsten" einmal, Diarizer erkennt ihn wieder).
+// matched wird (User labelt "Morgan" einmal, Diarizer erkennt ihn wieder).
 
 final class SpeakerStore: ObservableObject {
 

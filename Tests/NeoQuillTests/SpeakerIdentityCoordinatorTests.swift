@@ -40,14 +40,14 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
         coordinator.label(
             meetingId: "rec-001",
             internalId: "S1",
-            name: "Thorsten",
+            name: "Morgan",
             colorHex: 0x2EAB73,
             cachedEmbedding: staleCache,
             allowCrossMeetingBackfill: false
         )
 
         let viaMeetingScoped = speakerStore.bestMatch(for: meetingScoped)
-        XCTAssertEqual(viaMeetingScoped?.id, "speaker-thorsten",
+        XCTAssertEqual(viaMeetingScoped?.id, "speaker-morgan",
                        "Profil muss das meeting-bezogene Embedding tragen")
         XCTAssertNil(speakerStore.bestMatch(for: staleCache),
                      "Der stale Cache der letzten Aufnahme darf NICHT im Profil landen")
@@ -76,7 +76,7 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
         let migrated = coordinator.label(
             meetingId: "rec-001",
             internalId: "S1",
-            name: "Thorsten",
+            name: "Morgan",
             colorHex: 0x2EAB73,
             allowCrossMeetingBackfill: false
         )
@@ -99,7 +99,7 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
     }
 
     func testKnownSpeakerIdWins() {
-        let id = SpeakerIdentityCoordinator.canonicalId(name: "Niko", knownSpeakerId: "speaker-fixed")
+        let id = SpeakerIdentityCoordinator.canonicalId(name: "Alex", knownSpeakerId: "speaker-fixed")
         XCTAssertEqual(id, "speaker-fixed")
     }
 

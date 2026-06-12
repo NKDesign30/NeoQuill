@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Speichert das Datum des allerersten App-Starts in der Keychain.
@@ -39,6 +40,7 @@ final class KeychainFirstLaunchMarker: FirstLaunchMarkerStoring {
             kSecAttrAccount: account as CFString,
             kSecReturnData: kCFBooleanTrue,
             kSecMatchLimit: kSecMatchLimitOne,
+            kSecUseAuthenticationContext: nonInteractiveAuthenticationContext(),
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -62,6 +64,7 @@ final class KeychainFirstLaunchMarker: FirstLaunchMarkerStoring {
             kSecAttrAccount: account as CFString,
             kSecValueData: data as CFData,
             kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock,
+            kSecUseAuthenticationContext: nonInteractiveAuthenticationContext(),
         ]
         let status = SecItemAdd(insert as CFDictionary, nil)
         guard status == errSecSuccess || status == errSecDuplicateItem else {
@@ -75,8 +78,15 @@ final class KeychainFirstLaunchMarker: FirstLaunchMarkerStoring {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service as CFString,
             kSecAttrAccount: account as CFString,
+            kSecUseAuthenticationContext: nonInteractiveAuthenticationContext(),
         ]
         SecItemDelete(query as CFDictionary)
+    }
+
+    private func nonInteractiveAuthenticationContext() -> LAContext {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return context
     }
 
     private static let formatter: ISO8601DateFormatter = {

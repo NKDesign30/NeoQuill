@@ -45,7 +45,7 @@ final class SpeakerPaletteTests: XCTestCase {
     func testLabeledAndCaptionSpeakersAreNotAnonymous() {
         // Kanonische Slug-IDs und Caption-Namen, die zufällig mit S beginnen,
         // sind KEINE anonymen Slots — der alte Prefix-Check traf sie fälschlich.
-        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "speaker-thorsten", name: "Thorsten"))
+        XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "speaker-morgan", name: "Morgan"))
         XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "Sarah", name: "Sarah"))
         XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "S", name: "S"))
         XCTAssertFalse(SpeakerPalette.isAnonymousSpeaker(id: "EXT", name: "Zusatzaufnahme"))

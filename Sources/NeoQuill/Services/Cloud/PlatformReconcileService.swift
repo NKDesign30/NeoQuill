@@ -5,8 +5,8 @@ import Foundation
 // drei Clients sind bewusst klein gehalten und teilen sich Auth + Networking.
 //
 // Aktuell sind die Provider-Endpoints implementiert, aber ohne echte Tenant-
-// Konfiguration nicht testbar (siehe CloudOAuthConfig). Sobald Niko Client-IDs
-// hinterlegt + sich anmeldet, fliessen die Daten via PlatformImportService in
+// Konfiguration nicht testbar (siehe CloudOAuthConfig). Sobald Client-IDs
+// hinterlegt sind und der Nutzer angemeldet ist, fliessen die Daten via PlatformImportService in
 // MeetingStore zurück.
 
 enum PlatformReconcileError: LocalizedError {

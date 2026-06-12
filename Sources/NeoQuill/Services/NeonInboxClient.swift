@@ -1,7 +1,7 @@
 import Foundation
 
-/// Drop-In Helper für Neo Action-Inbox. Wird identisch in NeoVoice und NeoQuill
-/// genutzt. POST an `http://127.0.0.1:3850/api/action-inbox/tickets/ingest`.
+/// Drop-In Helper für optionale Action-Inbox-Integrationen.
+/// Der Endpoint kommt aus den User-Settings oder wird explizit injiziert.
 /// Backend-Limits werden clientseitig geclampt (title 200, body 4000, label 60,
 /// max 10 labels), damit kein 400 wegen Längen fliegt.
 public struct NeonInboxClient: Sendable {
@@ -50,52 +50,80 @@ public struct NeonInboxClient: Sendable {
         public let created: Bool
     }
 
-    public enum InboxError: Error, Sendable, Equatable {
+    public enum InboxError: Error, Sendable, Equatable, LocalizedError {
+        case missingEndpoint
         case invalidEndpoint
         case http(status: Int, body: String)
         case decode(String)
         case transport(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .missingEndpoint:
+                return "Action-Inbox-Endpoint ist nicht konfiguriert."
+            case .invalidEndpoint:
+                return "Action-Inbox-Endpoint muss eine gültige HTTP- oder HTTPS-URL sein."
+            case .http(let status, let body):
+                let suffix = body.trimmingCharacters(in: .whitespacesAndNewlines)
+                return suffix.isEmpty
+                    ? "Action-Inbox antwortete mit HTTP \(status)."
+                    : "Action-Inbox antwortete mit HTTP \(status): \(suffix)"
+            case .decode(let message):
+                return "Action-Inbox-Antwort konnte nicht gelesen werden: \(message)"
+            case .transport(let message):
+                return "Action-Inbox-Verbindung fehlgeschlagen: \(message)"
+            }
+        }
     }
 
     /// UserDefaults-Key, über den ein Nutzer einen eigenen Inbox-Endpoint setzt.
     /// Self-contained gehalten, damit der Client als Drop-In ohne `AppSettings` bleibt.
     public static let endpointDefaultsKey = "action_inbox_endpoint"
 
-    /// Fallback, wenn kein eigener Endpoint konfiguriert ist (lokaler Neon-Stack).
-    public static let defaultEndpoint: URL = {
-        guard let url = URL(string: "http://127.0.0.1:3850/api/action-inbox/tickets/ingest") else {
-            preconditionFailure("NeonInboxClient.defaultEndpoint URL string is not parseable")
-        }
-        return url
-    }()
+    public static let endpointPlaceholder = "https://automation.example.com/action-inbox/ingest"
 
-    /// Liest den vom Nutzer konfigurierten Endpoint aus den Defaults, sonst Fallback.
-    public static func resolvedEndpoint(defaults: UserDefaults = .standard) -> URL {
-        guard let raw = defaults.string(forKey: endpointDefaultsKey)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty,
-              let url = URL(string: raw)
-        else {
-            return defaultEndpoint
-        }
-        return url
+    /// Liest den vom Nutzer konfigurierten Endpoint aus den Defaults.
+    /// Kein Endpoint heißt bewusst: Integration nicht konfiguriert.
+    public static func resolvedEndpoint(defaults: UserDefaults = .standard) -> URL? {
+        try? endpointOrError(defaults: defaults).get()
     }
 
-    public let endpoint: URL
+    public let endpoint: URL?
     public let timeout: TimeInterval
     private let session: URLSession
+    private let configurationError: InboxError?
 
     public init(
         endpoint: URL? = nil,
         timeout: TimeInterval = 4.0,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        defaults: UserDefaults = .standard
     ) {
-        self.endpoint = endpoint ?? NeonInboxClient.resolvedEndpoint()
+        if let endpoint {
+            self.endpoint = endpoint
+            self.configurationError = nil
+        } else {
+            switch NeonInboxClient.endpointOrError(defaults: defaults) {
+            case .success(let endpoint):
+                self.endpoint = endpoint
+                self.configurationError = nil
+            case .failure(let error):
+                self.endpoint = nil
+                self.configurationError = error
+            }
+        }
         self.timeout = timeout
         self.session = session
     }
 
     public func ingest(_ ingest: Ingest) async throws -> Result {
+        if let configurationError {
+            throw configurationError
+        }
+        guard let endpoint else {
+            throw InboxError.missingEndpoint
+        }
+
         let payload: Data
         do {
             payload = try encodePayload(ingest)
@@ -180,6 +208,21 @@ public struct NeonInboxClient: Sendable {
             .filter { !$0.isEmpty }
             .map { String($0.prefix(60)) }
         return Array(cleaned.prefix(10))
+    }
+
+    private static func endpointOrError(defaults: UserDefaults = .standard) -> Swift.Result<URL, InboxError> {
+        guard let raw = defaults.string(forKey: endpointDefaultsKey)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return .failure(.missingEndpoint)
+        }
+        guard let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else {
+            return .failure(.invalidEndpoint)
+        }
+        return .success(url)
     }
 }
 

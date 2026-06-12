@@ -61,7 +61,7 @@ final class PermissionGate {
     }
 
     func requestAccessibility() {
-        // Nativer macOS-Dialog: trägt NeoWispr automatisch in die Accessibility-Liste ein
+        // Nativer macOS-Dialog: trägt NeoQuill automatisch in die Accessibility-Liste ein
         // und zeigt den System-Prompt. User muss dann nur noch den Toggle aktivieren.
         // Apple-stabiler Raw-Key statt CFString-Konstante (Swift 6 Concurrency-safe)
         let options: NSDictionary = ["AXTrustedCheckOptionPrompt": true]

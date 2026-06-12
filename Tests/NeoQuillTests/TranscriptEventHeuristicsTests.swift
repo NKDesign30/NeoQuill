@@ -34,7 +34,7 @@ final class TranscriptEventHeuristicsTests: XCTestCase {
             "Live-Untertitel", blockedFragments: ["caption", "untertitel", "transcript"]
         ))
         XCTAssertTrue(TranscriptEventHeuristics.isProbableSpeakerName(
-            "Niko", blockedFragments: ["caption", "untertitel", "transcript"]
+            "Alex", blockedFragments: ["caption", "untertitel", "transcript"]
         ))
     }
 

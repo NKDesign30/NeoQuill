@@ -9,8 +9,8 @@ import Foundation
 ///   - Marker existiert UND Marker < Cutoff → grace
 ///   - sonst (kein Marker, kein Cutoff oder Marker ≥ Cutoff) → keine Grace
 ///
-/// Wenn `cutoffDate == nil` wird bewusst KEINE Grace gegeben — Niko muss
-/// das Cutoff-Datum explizit setzen damit der Switch wirkt. Schutz gegen
+/// Wenn `cutoffDate == nil` wird bewusst KEINE Grace gegeben — der Release
+/// muss das Cutoff-Datum explizit setzen damit der Switch wirkt. Schutz gegen
 /// versehentliches "Alle kriegen alles gratis".
 enum BetaGraceResolver {
 

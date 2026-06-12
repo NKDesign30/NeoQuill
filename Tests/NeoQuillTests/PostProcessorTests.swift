@@ -75,7 +75,7 @@ final class PostProcessorTests: XCTestCase {
             title: "Sprint-Planung",
             tldr: "Wir planen den Launch.",
             highlights: [HighlightAI(label: "Entscheidung", text: "Launch am Freitag", tone: "brand")],
-            tasks: [TaskAI(who: "Niko", task: "Release bauen", due: "Fr", status: "open")],
+            tasks: [TaskAI(who: "Alex", task: "Release bauen", due: "Fr", status: "open")],
             chapters: [ChapterAI(timestamp: "00:00", label: "Planung", duration: "5m")]
         )
         let line = TranscriptLine(who: "ME", timestamp: "00:00", body: "Wir planen den Launch.")

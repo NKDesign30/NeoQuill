@@ -4,7 +4,7 @@ import FluidAudio
 
 // On-Device Speaker-Diarization via FluidAudio (Pyannote Community-1 + WeSpeaker).
 // Phase 1 (heute): Service-Skelett mit Init + Diarize + bekannte Speaker laden.
-// Phase 2: Persistenz von Speaker-Embeddings (z.B. "Thorsten") in MeetingStore,
+// Phase 2: Persistenz von Speaker-Embeddings (z.B. "Morgan") in MeetingStore,
 // Auto-Re-Identification bei zukünftigen Calls.
 //
 // Architektur für Teams-Calls:

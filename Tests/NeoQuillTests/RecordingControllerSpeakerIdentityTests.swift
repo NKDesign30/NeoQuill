@@ -5,18 +5,18 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
     @MainActor
     func testKnownSpeakerIdWinsOverGeneratedSlug() {
         let id = SpeakerIdentityCoordinator.canonicalId(
-            name: "Thorsten Fischer",
-            knownSpeakerId: "speaker-thorsten-2026"
+            name: "Morgan Lee",
+            knownSpeakerId: "speaker-morgan-2026"
         )
 
-        XCTAssertEqual(id, "speaker-thorsten-2026")
+        XCTAssertEqual(id, "speaker-morgan-2026")
     }
 
     @MainActor
     func testExistingSpeakerNameReusesLegacyIdentity() {
-        let existing = labeledSpeaker(id: "TF", name: "Thorsten Fischer")
+        let existing = labeledSpeaker(id: "TF", name: "Morgan Lee")
         let id = SpeakerIdentityCoordinator.canonicalId(
-            name: " thorsten   fischer ",
+            name: " morgan   lee ",
             knownSpeakerId: "   ",
             existingSpeakers: [existing]
         )
@@ -27,21 +27,21 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
     @MainActor
     func testNewMultiWordSpeakerUsesStableNameSlug() {
         let id = SpeakerIdentityCoordinator.canonicalId(
-            name: "Thorsten Fischer",
+            name: "Morgan Lee",
             knownSpeakerId: "   "
         )
 
-        XCTAssertEqual(id, "speaker-thorsten-fischer")
+        XCTAssertEqual(id, "speaker-morgan-lee")
     }
 
     @MainActor
     func testSingleNamesDoNotCollideByInitial() {
-        let nikoId = SpeakerIdentityCoordinator.canonicalId(name: "Niko")
-        let nadjaId = SpeakerIdentityCoordinator.canonicalId(name: "Nadja")
+        let alexId = SpeakerIdentityCoordinator.canonicalId(name: "Alex")
+        let caseyId = SpeakerIdentityCoordinator.canonicalId(name: "Casey")
 
-        XCTAssertEqual(nikoId, "speaker-niko")
-        XCTAssertEqual(nadjaId, "speaker-nadja")
-        XCTAssertNotEqual(nikoId, nadjaId)
+        XCTAssertEqual(alexId, "speaker-alex")
+        XCTAssertEqual(caseyId, "speaker-casey")
+        XCTAssertNotEqual(alexId, caseyId)
     }
 
     @MainActor
@@ -59,13 +59,13 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
         let migrated = harness.recorder.labelSpeaker(
             internalId: "S1",
-            name: "Niko",
+            name: "Alex",
             colorHex: 0x2EAB73,
             meetingId: "meeting-current"
         )
 
         XCTAssertEqual(migrated, 0)
-        XCTAssertEqual(harness.meetingStore.detail(for: "meeting-current")?.participants.first?.id, "speaker-niko")
+        XCTAssertEqual(harness.meetingStore.detail(for: "meeting-current")?.participants.first?.id, "speaker-alex")
         XCTAssertEqual(harness.meetingStore.detail(for: "meeting-other")?.participants.first?.id, "S2")
         XCTAssertNotNil(harness.speakerStore.meetingEmbedding(meetingId: "meeting-other", internalId: "S2"))
     }
@@ -78,15 +78,15 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
         let migrated = harness.recorder.labelSpeaker(
             internalId: "S1",
-            name: "Niko",
+            name: "Alex",
             colorHex: 0x2EAB73,
             meetingId: "meeting-current"
         )
 
         XCTAssertEqual(migrated, 1)
-        XCTAssertEqual(harness.meetingStore.detail(for: "meeting-other")?.participants.first?.id, "speaker-niko")
+        XCTAssertEqual(harness.meetingStore.detail(for: "meeting-other")?.participants.first?.id, "speaker-alex")
         XCTAssertNil(harness.speakerStore.meetingEmbedding(meetingId: "meeting-other", internalId: "S2"))
-        XCTAssertNotNil(harness.speakerStore.meetingEmbedding(meetingId: "meeting-other", internalId: "speaker-niko"))
+        XCTAssertNotNil(harness.speakerStore.meetingEmbedding(meetingId: "meeting-other", internalId: "speaker-alex"))
     }
 
     private func labeledSpeaker(id: String, name: String) -> LabeledSpeaker {

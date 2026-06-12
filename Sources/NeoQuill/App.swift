@@ -17,6 +17,7 @@ struct NeoQuillApp: App {
         WindowGroup("NeoQuill") {
             RootView()
                 .environmentObject(state)
+                .environmentObject(updater)
                 .frame(minWidth: 1080, idealWidth: 1280, minHeight: 700, idealHeight: 820)
                 .preferredColorScheme(.dark)
                 .background(Neon.windowBackdrop.ignoresSafeArea())
@@ -76,16 +77,15 @@ struct NeoQuillApp: App {
                 Button("Split") { state.detailLayout = .split }
                     .keyboardShortcut("2", modifiers: [.command, .option])
             }
+            CommandGroup(replacing: .appSettings) {
+                Button("Einstellungen …") {
+                    state.openSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesMenuButton(updater: updater)
             }
-        }
-
-        Settings {
-            SettingsView()
-                .environmentObject(state)
-                .environmentObject(updater)
-                .preferredColorScheme(.dark)
         }
     }
 }
@@ -99,39 +99,64 @@ struct RootView: View {
     )
 
     var body: some View {
-        QuillWindow {
-            Sidebar()
-            VStack(spacing: 0) {
-                TrialBannerView(snapshot: snapshot) {
-                    state.showLicenseGate = true
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+        ZStack {
+            QuillWindow {
+                Sidebar()
+                VStack(spacing: 0) {
+                    TrialBannerView(snapshot: snapshot) {
+                        state.showLicenseGate = true
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
-                ZStack {
-                    switch state.viewMode {
-                    case .empty:
-                        EmptyView()
-                    case .detail:
-                        if let meeting = state.activeMeeting {
-                            switch state.detailLayout {
-                            case .editorial: DetailEditorial(meeting: meeting)
-                            case .split:     DetailSplit(meeting: meeting)
-                            }
-                        } else {
+                    ZStack {
+                        switch state.viewMode {
+                        case .empty:
                             EmptyView()
+                        case .detail:
+                            if let meeting = state.activeMeeting {
+                                switch state.detailLayout {
+                                case .editorial: DetailEditorial(meeting: meeting)
+                                case .split:     DetailSplit(meeting: meeting)
+                                }
+                            } else {
+                                EmptyView()
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .allowsHitTesting(!state.isSettingsPresented)
+
+            if state.isSettingsPresented {
+                settingsOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
+        .animation(.easeOut(duration: 0.16), value: state.isSettingsPresented)
         .task {
             // Initial sync + dann auf License-Service-Änderungen reagieren.
             snapshot = state.license.snapshot
             for await s in state.license.$snapshot.values {
                 snapshot = s
             }
+        }
+    }
+
+    private var settingsOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.48)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    state.closeSettings()
+                }
+
+            SettingsView(selection: $state.settingsSelection, onClose: {
+                state.closeSettings()
+            })
+            .environmentObject(state)
+            .padding(34)
         }
     }
 }

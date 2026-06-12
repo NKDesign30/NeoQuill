@@ -29,7 +29,7 @@ final class MeetingExporterTranscriptJSONTests: XCTestCase {
             platform: .call,
             wordCount: 4,
             participants: [
-                Participant(id: "ME", name: "Niko Knez", role: "Host", colorHex: 0x2EAB73, spoke: "3m")
+                Participant(id: "ME", name: "Alex Meyer", role: "Host", colorHex: 0x2EAB73, spoke: "3m")
             ],
             tldr: "Kurz.",
             highlights: [],
@@ -38,7 +38,7 @@ final class MeetingExporterTranscriptJSONTests: XCTestCase {
             transcript: [
                 TranscriptLine(
                     who: "ME",
-                    displayName: "Niko Knez",
+                    displayName: "Alex Meyer",
                     timestamp: "00:01",
                     startSeconds: 1,
                     endSeconds: 3,

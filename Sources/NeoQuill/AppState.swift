@@ -35,6 +35,8 @@ final class AppState: ObservableObject {
     @Published var transientNotice: String?
     @Published var showLicenseGate: Bool = false
     @Published var showBetaGracePrompt: Bool = false
+    @Published var isSettingsPresented: Bool = false
+    @Published var settingsSelection: QuillSettingsSection = .audio
 
     private var transientNoticeTask: Task<Void, Never>?
 
@@ -109,7 +111,7 @@ final class AppState: ObservableObject {
             trial: KeychainTrialTracker(),
             validator: licenseValidator,
             modeProvider: { LicenseEnforcement.currentMode() },
-            cutoffProvider: { nil }   // Cutoff wird gesetzt wenn Niko den Switch macht
+            cutoffProvider: { nil }   // Cutoff wird erst beim Lizenz-Switch gesetzt.
         )
         Task { [license] in await license.bootstrap() }
 
@@ -204,6 +206,15 @@ final class AppState: ObservableObject {
                 self?.handleDetection(note)
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .openSettingsOverlay)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                let section = (note.userInfo?["section"] as? String)
+                    .flatMap(QuillSettingsSection.init(rawValue:)) ?? .audio
+                self?.openSettings(section)
+            }
+            .store(in: &cancellables)
     }
 
     private func handleDetection(_ note: Notification) {
@@ -245,6 +256,19 @@ final class AppState: ObservableObject {
 
     func toggleRecording() {
         Task { await recorder.toggle() }
+    }
+
+    func prepareFirstRunAssets() async -> RuntimePreparationStatus {
+        await recorder.prewarmModels()
+    }
+
+    func openSettings(_ section: QuillSettingsSection = .audio) {
+        settingsSelection = section
+        isSettingsPresented = true
+    }
+
+    func closeSettings() {
+        isSettingsPresented = false
     }
 
     func reprocessMeeting(_ meetingId: String) {
@@ -337,4 +361,8 @@ final class AppState: ObservableObject {
 
     var statusLabel: String { recorder.statusText }
     var isRecording: Bool { recorder.state.isRecording }
+}
+
+extension Notification.Name {
+    static let openSettingsOverlay = Notification.Name("com.neon.quill.openSettingsOverlay")
 }

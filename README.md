@@ -7,8 +7,8 @@
 ### Was gesagt wurde. *Was wichtig war.*
 
 Local-first meeting intelligence for macOS.
-WhisperKit on the Apple Neural Engine for transcription, Claude Haiku 4.5 for
-analysis — TL;DR, action items and chapters land in your library in seconds.
+WhisperKit on the Apple Neural Engine for transcription, your configured AI
+provider for analysis — TL;DR, action items and chapters land in your library in seconds.
 No cloud upload of your audio.
 
 [**⬇ Download Installer (.dmg)**](https://github.com/NKDesign30/NeoQuill/releases/latest) ·
@@ -70,7 +70,8 @@ NeoQuill does the opposite:
 - Playback correction for too-short or pitched recordings via rendered WAV
   copies.
 - Teams, Google Meet and Zoom transcript import/parsing.
-- OpenAI-compatible summary providers; secrets stored in the macOS Keychain.
+- OpenAI-compatible, Anthropic, Ollama and Claude CLI summary providers;
+  secrets stored in the macOS Keychain.
 - Privacy-safe diagnostics export.
 - Reproducible release packaging with changelog gate, SHA256 and JSON
   manifest.

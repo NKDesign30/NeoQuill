@@ -4,7 +4,7 @@ import Foundation
 // PostProcessor in MeetingDetail überführt (Adapter-Layer kommt in einer späteren Phase).
 //
 // Schmaler als das alte Quill-Modell — keine AgentAction, keine Atlassian-Credentials,
-// keine Babsi-Ausführungslogik. Pures Audio + Transkript.
+// Keine Ausführungslogik. Pures Audio + Transkript.
 
 struct TranscriptSegment: Identifiable, Codable, Sendable, Hashable {
     let id: UUID

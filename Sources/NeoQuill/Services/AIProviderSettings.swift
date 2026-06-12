@@ -75,6 +75,18 @@ protocol AIProviderSecretPersisting {
     func clearAPIKey(for scope: AIProviderKeyScope)
 }
 
+enum AIProviderSecretStoreError: LocalizedError, Equatable {
+    case keychainStatus(OSStatus)
+
+    var errorDescription: String? {
+        switch self {
+        case .keychainStatus(let status):
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
+            return "API-Key konnte nicht im macOS-Schlüsselbund gespeichert werden (\(status): \(message))."
+        }
+    }
+}
+
 final class AIProviderSecretStore: AIProviderSecretPersisting {
     private let account = "api-key"
 
@@ -103,17 +115,22 @@ final class AIProviderSecretStore: AIProviderSecretPersisting {
             kSecAttrService: scope.keychainService as CFString,
             kSecAttrAccount: account as CFString,
         ]
-        SecItemDelete(baseQuery as CFDictionary)
+        let update: [CFString: CFTypeRef] = [
+            kSecValueData: data as CFData,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        let updateStatus = SecItemUpdate(baseQuery as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw AIProviderSecretStoreError.keychainStatus(updateStatus)
+        }
+
         var insert = baseQuery
         insert[kSecValueData] = data as CFData
         insert[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlock
-        let status = SecItemAdd(insert as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw NSError(
-                domain: "AIProviderSecretStore",
-                code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Keychain-Speicherung fehlgeschlagen (\(status))"]
-            )
+        let addStatus = SecItemAdd(insert as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw AIProviderSecretStoreError.keychainStatus(addStatus)
         }
     }
 

@@ -3,42 +3,215 @@ import AppKit
 import AVFoundation
 import ApplicationServices
 
-// Settings-Scene: Audio (Mic+Whisper-Modell) · KI (Diarization) · Permissions.
-// Apple-HIG-Form mit Neon-Tokens für Status, sonst Standard-Look.
+// In-App Settings-Overlay im NeoWispr-Stil: Sidebar + grouped Forms.
+// Der Inhalt bleibt native macOS-Form, die Präsentation liegt im Hauptfenster.
+
+enum QuillSettingsSection: String, CaseIterable, Identifiable {
+    case audio
+    case ai
+    case actions
+    case cloud
+    case data
+    case permissions
+    case license
+    case version
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .audio: return "Audio"
+        case .ai: return "KI"
+        case .actions: return "Aktionen"
+        case .cloud: return "Cloud"
+        case .data: return "Daten"
+        case .permissions: return "Berechtigungen"
+        case .license: return "Lizenz"
+        case .version: return "Version"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .audio: return "mic.fill"
+        case .ai: return "sparkles"
+        case .actions: return "bolt.fill"
+        case .cloud: return "cloud.fill"
+        case .data: return "externaldrive.fill"
+        case .permissions: return "lock.shield"
+        case .license: return "key.fill"
+        case .version: return "number"
+        }
+    }
+}
 
 struct SettingsView: View {
+    @Binding private var selection: QuillSettingsSection
+    var onClose: (() -> Void)?
+    private let version = AppVersionInfo.current()
+
+    init(selection: Binding<QuillSettingsSection>, onClose: (() -> Void)? = nil) {
+        _selection = selection
+        self.onClose = onClose
+    }
+
     var body: some View {
-        TabView {
-            AudioSettingsTab()
-                .tabItem { Label("Audio", systemImage: "mic.fill") }
+        HStack(spacing: 0) {
+            settingsSidebar
 
-            AIIntelligenceTab()
-                .tabItem { Label("KI", systemImage: "sparkles") }
-
-            ActionConnectorsTab()
-                .tabItem { Label("Aktionen", systemImage: "bolt.fill") }
-
-            CloudIntegrationsTab()
-                .tabItem { Label("Cloud", systemImage: "cloud.fill") }
-
-            DataPrivacyTab()
-                .tabItem { Label("Daten", systemImage: "externaldrive.fill") }
-
-            PermissionsTab()
-                .tabItem { Label("Berechtigungen", systemImage: "lock.shield") }
-
-            LicenseSettingsTab()
-                .tabItem { Label("Lizenz", systemImage: "key.fill") }
-
-            BuildInfoTab()
-                .tabItem { Label("Version", systemImage: "number") }
+            VStack(spacing: 0) {
+                settingsHeader
+                Divider().background(Neon.strokeHairline)
+                detailContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                Divider().background(Neon.strokeHairline)
+                versionFooter
+            }
+            .background(Neon.surfaceBackground)
         }
-        .frame(width: 660, height: 540)
+        .frame(minWidth: 780, idealWidth: 940, maxWidth: 1080, minHeight: 560, idealHeight: 660)
+        .background(Neon.surfaceBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 28, x: 0, y: 18)
+        .preferredColorScheme(.dark)
+        .tint(Neon.brandPrimary)
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("SETTINGS")
+                .font(.neonMono(10, weight: .semibold))
+                .tracking(1.0)
+                .foregroundStyle(Neon.textQuaternary)
+                .padding(.horizontal, 18)
+                .padding(.top, 22)
+                .padding(.bottom, 12)
+
+            VStack(spacing: 4) {
+                ForEach(QuillSettingsSection.allCases) { section in
+                    sidebarRow(section)
+                }
+            }
+            .padding(.horizontal, 10)
+
+            Spacer(minLength: 0)
+        }
+        .frame(width: 214)
+        .background(Neon.surfaceSunken)
+    }
+
+    private func sidebarRow(_ section: QuillSettingsSection) -> some View {
+        let isSelected = selection == section
+        return Button {
+            selection = section
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(isSelected ? Neon.textPrimary : Neon.textSecondary)
+                    .frame(width: 18)
+
+                Text(section.title)
+                    .font(.neonBody(13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Neon.textPrimary : Neon.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.07) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var settingsHeader: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(selection.title)
+                    .font(.neonDisplay(30))
+                    .foregroundStyle(Neon.textPrimary)
+                Text("NeoQuill")
+                    .neonEyebrow(Neon.textQuaternary)
+            }
+            Spacer(minLength: 0)
+
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Neon.textSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            Circle()
+                                .fill(Color.white.opacity(0.06))
+                                .overlay(Circle().stroke(Neon.strokeHairline, lineWidth: Neon.hairlineWidth))
+                        )
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(.horizontal, 30)
+        .padding(.top, 28)
+        .padding(.bottom, 20)
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        switch selection {
+        case .audio:
+            AudioSettingsTab()
+        case .ai:
+            AIIntelligenceTab()
+        case .actions:
+            ActionConnectorsTab()
+        case .cloud:
+            CloudIntegrationsTab()
+        case .data:
+            DataPrivacyTab()
+        case .permissions:
+            PermissionsTab()
+        case .license:
+            LicenseSettingsTab()
+        case .version:
+            BuildInfoTab()
+        }
+    }
+
+    private var versionFooter: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "info.circle")
+                .font(.caption)
+            Text("NeoQuill \(version.displayVersion)")
+                .font(.caption)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Neon.textSecondary)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
     }
 }
 
 private struct CloudIntegrationsTab: View {
     @AppStorage(AppSettings.localOnlyMode) private var localOnlyMode = false
+    @AppStorage(AppSettings.cloudTeamsClientId) private var teamsClientId = ""
+    @AppStorage(AppSettings.cloudTeamsScopes) private var teamsScopes = ""
+    @AppStorage(AppSettings.cloudMeetClientId) private var meetClientId = ""
+    @AppStorage(AppSettings.cloudMeetScopes) private var meetScopes = ""
+    @AppStorage(AppSettings.cloudZoomClientId) private var zoomClientId = ""
+    @AppStorage(AppSettings.cloudZoomScopes) private var zoomScopes = ""
     @EnvironmentObject private var state: AppState
     @State private var lastError: String?
 
@@ -53,12 +226,29 @@ private struct CloudIntegrationsTab: View {
             }
             ForEach(CloudProvider.allCases, id: \.self) { provider in
                 Section(provider.displayName) {
+                    let config = CloudOAuthCatalog.config(for: provider)
                     let connected = state.cloudOAuth.connectedProviders.contains(provider)
-                    let configured = CloudOAuthCatalog.config(for: provider).isConfigured
+                    let configured = config.isConfigured
                     LabeledContent("Status") {
                         Text(statusLabel(connected: connected, configured: configured))
                             .foregroundStyle(connected ? Neon.brandPrimary : Neon.statusError)
                     }
+                    TextField("Client-ID", text: clientIdBinding(for: provider), prompt: Text("OAuth Client ID"))
+                    LabeledContent("Redirect URI") {
+                        HStack(spacing: 8) {
+                            Text(config.redirectURI.absoluteString)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Button("Kopieren") {
+                                copy(config.redirectURI.absoluteString)
+                            }
+                        }
+                    }
+                    TextField("Scopes überschreiben", text: scopesBinding(for: provider), prompt: Text("Standard-Scopes verwenden"))
+                    Text("Aktive Scopes: \(config.scopes.joined(separator: ", "))")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                     HStack {
                         if connected {
                             Button("Verbindung trennen") {
@@ -66,18 +256,14 @@ private struct CloudIntegrationsTab: View {
                             }
                             .foregroundStyle(Neon.statusError)
                         } else {
-                            Button(configured ? "Mit \(provider.displayName) anmelden" : "App-Registrierung fehlt") {
+                            Button(configured ? "Mit \(provider.displayName) anmelden" : "Client-ID fehlt") {
                                 Task { await signIn(provider) }
                             }
                             .disabled(!configured || localOnlyMode)
                         }
                     }
                     if !configured {
-                        Text(configHintText(provider: provider))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(scopeText(provider: provider))
+                        Text(setupHint(provider: provider))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -97,24 +283,40 @@ private struct CloudIntegrationsTab: View {
 
     private func statusLabel(connected: Bool, configured: Bool) -> String {
         if connected { return "Verbunden" }
-        if !configured { return "App-Registrierung fehlt" }
+        if !configured { return "Client-ID fehlt" }
         return "Nicht verbunden"
     }
 
-    private func configHintText(provider: CloudProvider) -> String {
+    private func setupHint(provider: CloudProvider) -> String {
         switch provider {
         case .teams:
-            return "Microsoft Entra App registrieren, Client-ID als Info.plist-Key 'NeoQuillTeamsClientId' eintragen + Redirect-URI 'neoquill://oauth/teams'."
+            return "Microsoft Entra App registrieren, Redirect-URI eintragen, Client-ID hier speichern. Kein Secret nötig."
         case .meet:
-            return "Google Cloud OAuth-Client (macOS) anlegen, Client-ID als 'NeoQuillMeetClientId' eintragen + Redirect-URI 'neoquill://oauth/meet'."
+            return "Google Cloud OAuth-Client anlegen, Redirect-URI eintragen, Client-ID hier speichern. Kein Secret nötig."
         case .zoom:
-            return "Zoom Marketplace OAuth-App anlegen, Client-ID als 'NeoQuillZoomClientId' eintragen + Redirect-URI 'neoquill://oauth/zoom'."
+            return "Zoom Marketplace OAuth-App anlegen, Redirect-URI eintragen, Client-ID hier speichern. Kein Secret nötig."
         }
     }
 
-    private func scopeText(provider: CloudProvider) -> String {
-        let scopes = CloudOAuthCatalog.config(for: provider).scopes.joined(separator: ", ")
-        return "Scopes: \(scopes)"
+    private func clientIdBinding(for provider: CloudProvider) -> Binding<String> {
+        switch provider {
+        case .teams: return $teamsClientId
+        case .meet: return $meetClientId
+        case .zoom: return $zoomClientId
+        }
+    }
+
+    private func scopesBinding(for provider: CloudProvider) -> Binding<String> {
+        switch provider {
+        case .teams: return $teamsScopes
+        case .meet: return $meetScopes
+        case .zoom: return $zoomScopes
+        }
+    }
+
+    private func copy(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private func signIn(_ provider: CloudProvider) async {
@@ -280,8 +482,10 @@ private struct ActionConnectorsTab: View {
     @AppStorage(AppSettings.actionJiraBaseURL) private var jiraBaseURL = ""
     @AppStorage(AppSettings.actionWebhookURL) private var webhookURL = ""
     @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
-    @AppStorage(AppSettings.actionInboxEndpoint) private var inboxEndpoint = NeonInboxClient.defaultEndpoint.absoluteString
+    @AppStorage(AppSettings.actionInboxEndpoint) private var inboxEndpoint = ""
     @AppStorage(AppSettings.actionJiraMCPEnabled) private var jiraMCPEnabled = false
+    @AppStorage(AppSettings.actionJiraMCPPackage) private var jiraMCPPackage = ""
+    @AppStorage(AppSettings.actionJiraMCPCommand) private var jiraMCPCommand = NeonJiraMCPInstaller.defaultCommand
     @State private var jiraMCPStatus = NeonJiraMCPStatus.empty
     @State private var jiraMCPMessage = ""
     @State private var jiraMCPInstalling = false
@@ -298,8 +502,13 @@ private struct ActionConnectorsTab: View {
             Section("Action-Inbox") {
                 Toggle("Aktionen an eine Action-Inbox senden", isOn: $inboxBridgeEnabled)
                 if inboxBridgeEnabled {
-                    TextField("Inbox-Endpoint", text: $inboxEndpoint, prompt: Text(NeonInboxClient.defaultEndpoint.absoluteString))
-                    Text("POSTet Meeting-Aktionen als JSON an einen lokalen oder selbst gehosteten Action-Inbox-Endpoint (z. B. eine eigene Automations-Pipeline). Standard ist der lokale Neon-Stack. Die zugehörigen Buttons erscheinen nur, wenn aktiviert.")
+                    TextField("Action-Inbox-Endpoint", text: $inboxEndpoint, prompt: Text(NeonInboxClient.endpointPlaceholder))
+                    if inboxEndpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Trage einen Endpoint ein, bevor du Action-Inbox-Aktionen nutzt.")
+                            .font(.callout)
+                            .foregroundStyle(Neon.statusWarning)
+                    }
+                    Text("POSTet Meeting-Aktionen als JSON an deinen lokalen oder selbst gehosteten Action-Inbox-Endpoint. Ohne Endpoint bleibt die Integration aus und es wird nichts an einen vorgegebenen Neon-Stack gesendet.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -308,51 +517,62 @@ private struct ActionConnectorsTab: View {
             Section("Jira MCP") {
                 Toggle("Jira-MCP-Integration verwenden", isOn: $jiraMCPEnabled)
                 if jiraMCPEnabled {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(jiraMCPStatus.installed ? Neon.statusSuccess : Neon.statusWarning)
-                            .frame(width: 8, height: 8)
-                        Text(jiraMCPStatus.installed ? "Installiert" : "Nicht installiert")
-                            .font(.headline)
-                        Spacer()
-                        if jiraMCPRefreshing || jiraMCPInstalling {
-                            ProgressView()
-                                .controlSize(.small)
+                    TextField(
+                        "npm-Paket oder GitHub-Quelle",
+                        text: $jiraMCPPackage,
+                        prompt: Text("github:company/jira-mcp oder @company/jira-mcp")
+                    )
+                    TextField("Command", text: $jiraMCPCommand, prompt: Text(NeonJiraMCPInstaller.defaultCommand))
+                    if jiraMCPPackageTrimmed.isEmpty {
+                        Text("Trage eine Paketquelle ein, bevor NeoQuill den MCP installiert.")
+                            .font(.callout)
+                            .foregroundStyle(Neon.statusWarning)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(jiraMCPStatus.installed ? Neon.statusSuccess : Neon.statusWarning)
+                                .frame(width: 8, height: 8)
+                            Text(jiraMCPStatus.installed ? "Installiert" : "Nicht installiert")
+                                .font(.headline)
+                            Spacer()
+                            if jiraMCPRefreshing || jiraMCPInstalling {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+
+                        Text(jiraMCPStatusDetail)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        if !jiraMCPMessage.isEmpty {
+                            Text(jiraMCPMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
-                    Text(jiraMCPStatusDetail)
+                    HStack {
+                        Button("Status prüfen") {
+                            Task { await refreshJiraMCPStatus() }
+                        }
+                        .disabled(jiraMCPRefreshing || jiraMCPInstalling)
+
+                        Button(jiraMCPStatus.installed ? "Neu installieren" : "Installieren") {
+                            Task { await installJiraMCP() }
+                        }
+                        .disabled(jiraMCPPackageTrimmed.isEmpty || !jiraMCPStatus.canInstall || jiraMCPInstalling)
+
+                        Button("MCP-Config kopieren") {
+                            copyJiraMCPConfig()
+                        }
+                    }
+
+                    Text("Installiert die konfigurierte MCP-Paketquelle global über npm. Für echtes Ticket-Erstellen braucht der Nutzer lokal `jira login`; NeoQuill speichert keine Jira-Secrets.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-
-                    if !jiraMCPMessage.isEmpty {
-                        Text(jiraMCPMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                HStack {
-                    Button("Status prüfen") {
-                        Task { await refreshJiraMCPStatus() }
-                    }
-                    .disabled(jiraMCPRefreshing || jiraMCPInstalling)
-
-                    Button(jiraMCPStatus.installed ? "Neu installieren" : "Installieren") {
-                        Task { await installJiraMCP() }
-                    }
-                    .disabled(!jiraMCPStatus.canInstall || jiraMCPInstalling)
-
-                    Button("MCP-Config kopieren") {
-                        copyJiraMCPConfig()
-                    }
-                    .disabled(!jiraMCPStatus.installed)
-                }
-
-                Text("Installiert `neon-jira-mcp` aus GitHub. Für echtes Ticket-Erstellen braucht der Nutzer lokal `jira login`; NeoQuill speichert keine Jira-Secrets.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -384,7 +604,10 @@ private struct ActionConnectorsTab: View {
 
     private var jiraMCPStatusDetail: String {
         if jiraMCPStatus.installed {
-            return "MCP-Binary: \(jiraMCPStatus.mcpPath ?? "neon-jira-mcp")"
+            return "MCP-Binary: \(jiraMCPStatus.mcpPath ?? normalizedJiraMCPCommand)"
+        }
+        if jiraMCPPackageTrimmed.isEmpty {
+            return "Paketquelle fehlt. Beispiel: ein internes npm-Paket oder ein GitHub-Package deiner Firma."
         }
         if !jiraMCPStatus.canInstall {
             return "npm wurde nicht gefunden. Installiere Node.js/npm, danach kann NeoQuill den MCP einrichten."
@@ -392,9 +615,18 @@ private struct ActionConnectorsTab: View {
         return "Bereit für Installation über npm. Jira CLI: \(jiraMCPStatus.jiraPath ?? "nicht gefunden")"
     }
 
+    private var jiraMCPPackageTrimmed: String {
+        jiraMCPPackage.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedJiraMCPCommand: String {
+        let trimmed = jiraMCPCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? NeonJiraMCPInstaller.defaultCommand : trimmed
+    }
+
     private func refreshJiraMCPStatus() async {
         jiraMCPRefreshing = true
-        jiraMCPStatus = await NeonJiraMCPInstaller.currentStatus()
+        jiraMCPStatus = await NeonJiraMCPInstaller.currentStatus(command: normalizedJiraMCPCommand)
         jiraMCPRefreshing = false
     }
 
@@ -402,9 +634,9 @@ private struct ActionConnectorsTab: View {
         jiraMCPInstalling = true
         jiraMCPMessage = "Installation läuft ..."
         do {
-            let output = try await NeonJiraMCPInstaller.install()
-            jiraMCPMessage = output.isEmpty ? "Neon Jira MCP installiert." : output
-            jiraMCPStatus = await NeonJiraMCPInstaller.currentStatus()
+            let output = try await NeonJiraMCPInstaller.install(package: jiraMCPPackageTrimmed)
+            jiraMCPMessage = output.isEmpty ? "Jira MCP installiert." : output
+            jiraMCPStatus = await NeonJiraMCPInstaller.currentStatus(command: normalizedJiraMCPCommand)
         } catch {
             jiraMCPMessage = error.localizedDescription
         }
@@ -412,7 +644,7 @@ private struct ActionConnectorsTab: View {
     }
 
     private func copyJiraMCPConfig() {
-        let snippet = NeonJiraMCPInstaller.mcpConfigSnippet(command: jiraMCPStatus.mcpPath ?? "neon-jira-mcp")
+        let snippet = NeonJiraMCPInstaller.mcpConfigSnippet(command: jiraMCPStatus.mcpPath ?? normalizedJiraMCPCommand)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(snippet, forType: .string)
         jiraMCPMessage = "MCP-Config kopiert."
@@ -623,7 +855,7 @@ private struct BuildInfoTab: View {
             Section("Updates") {
                 Toggle("Automatisch nach Updates suchen", isOn: $autoCheck)
                 LabeledContent("Update-Kanal") {
-                    Text("Stable · github.com/NKDesign30/NeoQuill")
+                    Text("Stable · signierter Sparkle-Appcast")
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)

@@ -4,12 +4,14 @@ enum MeetingSummaryPrompt {
     static func build(transcript: String, locale: String) -> String {
         let lang: String
         switch locale {
+        case "de":
+            lang = "German"
         case "en":
             lang = "English"
         case "auto":
-            lang = "German for the summary; preserve quoted terms, names, and original phrasing when the transcript mixes languages"
+            lang = "the transcript's primary language; preserve quoted terms, names, and original phrasing when the transcript mixes languages"
         default:
-            lang = "German"
+            lang = "the transcript's primary language"
         }
         return """
         Du bist ein Meeting-Notizen-Assistent. Analysiere das folgende Transkript und antworte AUSSCHLIESSLICH mit gültigem JSON in dieser Struktur (Sprache: \(lang)):

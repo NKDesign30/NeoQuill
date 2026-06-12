@@ -204,7 +204,7 @@ enum FinalSTTTranscriber {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let candidates = [
             home.appendingPathComponent(".cache/whisper-cpp/ggml-large-v3-turbo.bin"),
-            home.appendingPathComponent("Library/Application Support/NeoWispr/models/ggml-large-v3-turbo.bin"),
+            home.appendingPathComponent("Library/Application Support/NeoQuill/models/ggml-large-v3-turbo.bin"),
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }

@@ -6,7 +6,7 @@ import Foundation
 /// `https://<store>.lemonsqueezy.com/checkout/buy/<slug>` (mit optionalem
 /// `?embed=1` für das Overlay-Widget). Slugs werden in
 /// `Tools/LSAdmin/state.json` gepflegt und müssen hier mit der Quelle
-/// synchron bleiben — wenn Niko in LS eine Variant löscht und neu anlegt,
+/// synchron bleiben — wenn in LS eine Variant gelöscht und neu angelegt wird,
 /// ändert sich der Slug.
 enum LicenseCheckoutURLs {
 

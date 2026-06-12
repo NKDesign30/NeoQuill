@@ -29,9 +29,9 @@ final class SpeakerDiarizerResolutionTests: XCTestCase {
     func testKnownVoiceMatchWinsAndCarriesScore() {
         let segment = SpeakerDiarizer.resolveSegment(
             start: 0, end: 4, rawSpeakerId: "0", embedding: [0.5, 0.5],
-            matcher: { _ in ("speaker-thorsten", 0.91) }
+            matcher: { _ in ("speaker-morgan", 0.91) }
         )
-        XCTAssertEqual(segment?.speakerId, "speaker-thorsten")
+        XCTAssertEqual(segment?.speakerId, "speaker-morgan")
         XCTAssertEqual(segment?.speakerSource, .knownVoice)
         XCTAssertEqual(segment?.confidence ?? 0, 0.91, accuracy: 0.0001)
     }

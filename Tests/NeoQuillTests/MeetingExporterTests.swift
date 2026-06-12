@@ -51,7 +51,7 @@ final class MeetingExporterTests: XCTestCase {
             platform: .meet,
             wordCount: 420,
             participants: [
-                Participant(id: "ME", name: "Niko", role: "Owner", colorHex: 0x2EAB73, spoke: "10m")
+                Participant(id: "ME", name: "Alex", role: "Owner", colorHex: 0x2EAB73, spoke: "10m")
             ],
             tldr: "Wir planen den Launch.",
             highlights: [

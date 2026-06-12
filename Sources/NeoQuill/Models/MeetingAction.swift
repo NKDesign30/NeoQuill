@@ -12,7 +12,7 @@ enum MeetingActionKind: String, Codable, CaseIterable {
         case .followUpEmail: return "Follow-up Mail"
         case .followUpMeeting: return "Follow-up Meeting"
         case .jiraTicket: return "Jira Ticket"
-        case .inboxTask: return "Neo Inbox"
+        case .inboxTask: return "Action Inbox"
         case .webhookPayload: return "Webhook"
         }
     }

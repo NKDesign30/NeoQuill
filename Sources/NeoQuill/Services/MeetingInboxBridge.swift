@@ -1,6 +1,6 @@
 import Foundation
 
-/// Brücke von NeoQuill-Meetings zur Neo Action-Inbox. Pro ActionItem ein Ticket
+/// Brücke von NeoQuill-Meetings zu einer optionalen Action-Inbox. Pro ActionItem ein Ticket
 /// mit stabiler sourceId (`neoquill:<meetingId>:<itemId>`), damit ein zweites
 /// Senden derselben Aufgabe sie nicht dupliziert, sondern im Backend nur
 /// aktualisiert.
@@ -105,7 +105,7 @@ enum MeetingInboxBridge {
         case .followUpEmail: return "Gmail-Draft über gog erstellen. Nicht direkt senden."
         case .followUpMeeting: return "Kalender-Event über gog erstellen."
         case .jiraTicket: return "Jira-Ticket über lokale Jira-CLI oder Jira-Skill erstellen."
-        case .inboxTask: return "Neo-Inbox-Aufgabe erstellen oder übernehmen."
+        case .inboxTask: return "Action-Inbox-Aufgabe erstellen oder übernehmen."
         case .webhookPayload: return "Webhook/Automation-Payload prüfen und ausführen, falls konfiguriert."
         }
     }

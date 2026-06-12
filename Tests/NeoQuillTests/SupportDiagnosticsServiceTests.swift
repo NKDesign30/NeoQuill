@@ -13,10 +13,10 @@ final class SupportDiagnosticsServiceTests: XCTestCase {
         try Data([6, 7, 8, 9]).write(to: recordings.appendingPathComponent("meeting-1.wav"))
 
         let defaults = UserDefaults(suiteName: "SupportDiagnosticsServiceTests-\(UUID().uuidString)")!
-        defaults.set("Niko Secret", forKey: AppSettings.ownerDisplayName)
+        defaults.set("Private Speaker", forKey: AppSettings.ownerDisplayName)
         defaults.set("https://jira.secret.local", forKey: AppSettings.actionJiraBaseURL)
         defaults.set("https://hooks.secret.local", forKey: AppSettings.actionWebhookURL)
-        defaults.set("nikola@example.com", forKey: AppSettings.actionDefaultRecipient)
+        defaults.set("speaker@example.com", forKey: AppSettings.actionDefaultRecipient)
         defaults.set("hardware-id-123", forKey: AppSettings.micDeviceId)
         defaults.set("openai_whisper-small", forKey: AppSettings.whisperModel)
         defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel)
@@ -57,10 +57,10 @@ final class SupportDiagnosticsServiceTests: XCTestCase {
         XCTAssertNil(unreadableAudio.durationSeconds)
         XCTAssertTrue(json.contains(AppSettings.whisperModel))
         XCTAssertTrue(json.contains("mic_device_selected"))
-        XCTAssertFalse(json.contains("Niko Secret"))
+        XCTAssertFalse(json.contains("Private Speaker"))
         XCTAssertFalse(json.contains("jira.secret"))
         XCTAssertFalse(json.contains("hooks.secret"))
-        XCTAssertFalse(json.contains("nikola@example.com"))
+        XCTAssertFalse(json.contains("speaker@example.com"))
         XCTAssertFalse(json.contains("hardware-id-123"))
         XCTAssertFalse(json.contains(root.path))
     }

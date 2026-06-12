@@ -103,7 +103,7 @@ struct SpeakerIdentityCoordinator {
 
     // MARK: - Label-Use-Case
 
-    /// Der komplette "User labelt S1 → Thorsten"-Flow: Embedding auflösen,
+    /// Der komplette "User labelt S1 → Morgan"-Flow: Embedding auflösen,
     /// kanonische ID bestimmen, Profil upserten, das aktuelle Meeting migrieren
     /// und — wenn erlaubt — bekannte Stimmen in andere Meetings zurückschreiben.
     ///

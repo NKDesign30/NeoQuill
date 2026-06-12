@@ -1,7 +1,7 @@
 import Foundation
 
 /// Ersetzt Sprecher-Erwähnungen in zusammengefasstem Text, wenn ein Sprecher
-/// umbenannt wird — etwa „S2" / „Speaker 2" / der alte Name → „Thorsten" in
+/// umbenannt wird — etwa „S2" / „Speaker 2" / der alte Name → „Morgan" in
 /// TL;DR, Highlights, Tasks und Kapiteln.
 ///
 /// Vorher lag diese reine String-Logik privat in `MeetingStore` und war damit nur

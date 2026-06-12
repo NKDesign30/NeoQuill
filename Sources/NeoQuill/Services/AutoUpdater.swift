@@ -5,11 +5,9 @@ import Sparkle
 /// Sparkle 2 integration for NeoQuill's Direct-Sale updater.
 ///
 /// The updater is configured via `Info.plist`:
-/// - `SUFeedURL` points at the EdDSA-signed `appcast.xml` on `main` of the
-///   public `NKDesign30/NeoQuill` repo — the repo must stay public, otherwise
-///   every installed app loses update checks (the URL is baked into the bundle).
-/// - `SUPublicEDKey` is the EdDSA public key matching the private key in the
-///   macOS Keychain and 1Password (Automation Vault).
+/// - `SUFeedURL` points at the EdDSA-signed `appcast.xml` for the configured
+///   release channel; it is baked into the bundle for the installed app.
+/// - `SUPublicEDKey` is the EdDSA public key matching the release signing key.
 /// - `SUEnableAutomaticChecks` enables Sparkle's first-launch prompt asking the
 ///   user whether to check for updates automatically.
 ///

@@ -34,6 +34,14 @@ enum AppSettings {
     static let actionNeoSkillBridgeEnabled = "action_neo_skill_bridge_enabled"
     static let actionInboxEndpoint = NeonInboxClient.endpointDefaultsKey
     static let actionJiraMCPEnabled = "action_jira_mcp_enabled"
+    static let actionJiraMCPPackage = "action_jira_mcp_package"
+    static let actionJiraMCPCommand = "action_jira_mcp_command"
+    static let cloudTeamsClientId = "cloud_teams_client_id"
+    static let cloudTeamsScopes = "cloud_teams_scopes"
+    static let cloudMeetClientId = "cloud_meet_client_id"
+    static let cloudMeetScopes = "cloud_meet_scopes"
+    static let cloudZoomClientId = "cloud_zoom_client_id"
+    static let cloudZoomScopes = "cloud_zoom_scopes"
     static let captureSourceTeams  = "capture_source_teams"
     static let captureSourceZoom   = "capture_source_zoom"
     static let captureSourceMeet   = "capture_source_meet"
@@ -71,8 +79,16 @@ enum AppSettings {
             actionJiraBaseURL: "",
             actionWebhookURL: "",
             actionNeoSkillBridgeEnabled: false,
-            actionInboxEndpoint: NeonInboxClient.defaultEndpoint.absoluteString,
+            actionInboxEndpoint: "",
             actionJiraMCPEnabled: false,
+            actionJiraMCPPackage: "",
+            actionJiraMCPCommand: NeonJiraMCPInstaller.defaultCommand,
+            cloudTeamsClientId: "",
+            cloudTeamsScopes: "",
+            cloudMeetClientId: "",
+            cloudMeetScopes: "",
+            cloudZoomClientId: "",
+            cloudZoomScopes: "",
             captureSourceTeams: true,
             captureSourceZoom: true,
             captureSourceMeet: true,

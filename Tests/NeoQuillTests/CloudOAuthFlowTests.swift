@@ -73,6 +73,32 @@ final class CloudOAuthFlowTests: XCTestCase {
         XCTAssertTrue(items.contains { $0.name == "prompt" && $0.value == "consent" })
     }
 
+    func testCatalogUsesUserConfiguredClientIdAndScopes() {
+        let suiteName = "NeoQuill.CloudOAuthFlowTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(" teams-client-id ", forKey: AppSettings.cloudTeamsClientId)
+        defaults.set("openid, profile\nOnlineMeetings.Read", forKey: AppSettings.cloudTeamsScopes)
+
+        let config = CloudOAuthCatalog.config(for: .teams, defaults: defaults)
+
+        XCTAssertEqual(config.clientId, "teams-client-id")
+        XCTAssertEqual(config.scopes, ["openid", "profile", "OnlineMeetings.Read"])
+    }
+
+    func testCatalogKeepsDefaultScopesWhenUserOverrideIsBlank() {
+        let suiteName = "NeoQuill.CloudOAuthFlowTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("  ", forKey: AppSettings.cloudZoomScopes)
+
+        let config = CloudOAuthCatalog.config(for: .zoom, defaults: defaults)
+
+        XCTAssertEqual(config.scopes, ["recording:read", "meeting:read", "user:read"])
+    }
+
     // MARK: - Callback parsing
 
     func testParseCallbackExtractsCodeWhenStateMatches() throws {

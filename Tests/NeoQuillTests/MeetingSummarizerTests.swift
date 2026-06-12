@@ -4,13 +4,13 @@ import XCTest
 final class MeetingSummarizerTests: XCTestCase {
 
     func testTaskIdsUseMeetingIdAndPrefix() {
-        let tasks = [taskAI(who: "Niko"), taskAI(who: "Babsi")]
+        let tasks = [taskAI(who: "Alex"), taskAI(who: "Jordan")]
         let mapped = MeetingSummarizer.mapTasks(tasks, meetingId: "m42", idPrefix: "merge-")
         XCTAssertEqual(mapped.map(\.id), ["m42-merge-task-0", "m42-merge-task-1"])
     }
 
     func testEmptyPrefixKeepsPlainTaskIds() {
-        let mapped = MeetingSummarizer.mapTasks([taskAI(who: "Niko")], meetingId: "m1", idPrefix: "")
+        let mapped = MeetingSummarizer.mapTasks([taskAI(who: "Alex")], meetingId: "m1", idPrefix: "")
         XCTAssertEqual(mapped.first?.id, "m1-task-0")
     }
 

@@ -117,18 +117,18 @@ final class SpeakerStoreCrossMeetingTests: XCTestCase {
     }
 
     func testBestMatchReturnsClearWinner() {
-        store.upsert(id: "niko", name: "Niko", embedding: [1, 0, 0], colorHex: 0x2EAB73)
-        store.upsert(id: "thorsten", name: "Thorsten", embedding: [0, 1, 0], colorHex: 0x7C8AFF)
+        store.upsert(id: "alex", name: "Alex", embedding: [1, 0, 0], colorHex: 0x2EAB73)
+        store.upsert(id: "morgan", name: "Morgan", embedding: [0, 1, 0], colorHex: 0x7C8AFF)
 
         let match = store.bestMatch(for: [0.98, 0.05, 0], threshold: 0.5, minScoreMargin: 0.08)
 
-        XCTAssertEqual(match?.id, "niko")
+        XCTAssertEqual(match?.id, "alex")
         XCTAssertGreaterThan(match?.score ?? 0, 0.95)
     }
 
     func testBestMatchRejectsAmbiguousKnownSpeakerScores() {
-        store.upsert(id: "niko", name: "Niko", embedding: [1, 0, 0], colorHex: 0x2EAB73)
-        store.upsert(id: "thorsten", name: "Thorsten", embedding: [0.995, 0.1, 0], colorHex: 0x7C8AFF)
+        store.upsert(id: "alex", name: "Alex", embedding: [1, 0, 0], colorHex: 0x2EAB73)
+        store.upsert(id: "morgan", name: "Morgan", embedding: [0.995, 0.1, 0], colorHex: 0x7C8AFF)
 
         let match = store.bestMatch(for: [1, 0, 0], threshold: 0.5, minScoreMargin: 0.08)
 

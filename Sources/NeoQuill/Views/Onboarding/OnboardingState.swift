@@ -79,6 +79,7 @@ final class OnboardingState: ObservableObject {
     // Engine
     @Published var engine: Engine = .ane
     @Published var claudeAnalysisEnabled: Bool = true
+    @Published var summaryProviderVerified: Bool = false
 
     // Quellen
     @Published var captureTeams:  Bool = true
@@ -98,6 +99,7 @@ final class OnboardingState: ObservableObject {
     @Published var accessibilityStatus: PermissionStatus = .unknown
     @Published var calendarStatus: PermissionStatus = .unknown
     @Published var notificationStatus: PermissionStatus = .unknown
+    @Published var runtimePrepared: Bool = false
 
     init() {
         let defaults = UserDefaults.standard
@@ -120,7 +122,6 @@ final class OnboardingState: ObservableObject {
             self.hotkeyParts = raw.split(separator: "+").map { String($0).trimmingCharacters(in: .whitespaces) }
         }
         refreshMicList()
-        refreshPermissionStates()
     }
 
     // MARK: - Navigation
@@ -129,6 +130,8 @@ final class OnboardingState: ObservableObject {
         switch currentStep {
         case .voice: return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .microphone: return micStatus == .granted
+        case .engine: return !claudeAnalysisEnabled || summaryProviderVerified
+        case .ready: return runtimePrepared
         default: return true
         }
     }
@@ -137,7 +140,7 @@ final class OnboardingState: ObservableObject {
         switch currentStep {
         case .welcome:    return "Loslegen"
         case .microphone: return micStatus == .granted ? "Weiter" : "Mikrofon erlauben"
-        case .ready:      return "NeoQuill öffnen"
+        case .ready:      return runtimePrepared ? "NeoQuill öffnen" : "Runtime vorbereiten ..."
         default:          return "Weiter"
         }
     }
@@ -147,6 +150,7 @@ final class OnboardingState: ObservableObject {
         case .welcome:    return "Tour überspringen"
         case .microphone: return micStatus == .granted ? nil : "Später"
         case .voice:      return "Sample überspringen"
+        case .engine:     return claudeAnalysisEnabled && !summaryProviderVerified ? "KI später einrichten" : nil
         default:          return nil
         }
     }
@@ -162,6 +166,10 @@ final class OnboardingState: ObservableObject {
     func skip() {
         if currentStep == .welcome {
             currentStep = .ready
+        } else if currentStep == .engine {
+            claudeAnalysisEnabled = false
+            summaryProviderVerified = false
+            advance()
         } else {
             advance()
         }

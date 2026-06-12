@@ -19,7 +19,7 @@ enum PostProcessor {
     static func process(
         meetingId: String,
         transcriptLines: [TranscriptLine],
-        locale: String = "de",
+        locale: String = "auto",
         licenseAllowsSummary: () -> Bool = { true },
         defaults: UserDefaults = .standard,
         providerFactory: () -> SummaryProvider? = { AIProviderSettings.makeProvider() }
@@ -69,7 +69,7 @@ enum PostProcessor {
         return await provider.summarize(transcript: transcript, locale: locale)
     }
 
-    /// Formatiert die TranscriptLines fuer den Claude-Prompt und kuerzt
+    /// Formatiert die TranscriptLines fuer den Summary-Prompt und kuerzt
     /// lange Meetings (>500 Lines) symmetrisch (erste + letzte Lines)
     /// damit der Prompt unter 100 KB bleibt und der ganze Meeting-Bogen
     /// (Anfang + Ende) erhalten bleibt.

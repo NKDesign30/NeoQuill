@@ -6,6 +6,18 @@ import SwiftUI
 /// `SummaryProvider.probe`, kennt die einzelnen Anbieter also nicht.
 struct SummaryProviderSettingsSection: View {
     @AppStorage(AppSettings.claudeAnalysisEnabled) private var summaryEnabled = true
+
+    var body: some View {
+        Section("Zusammenfassung") {
+            Toggle("KI-Zusammenfassung aktivieren", isOn: $summaryEnabled)
+            SummaryProviderConfigurationFields()
+        }
+    }
+}
+
+struct SummaryProviderConfigurationFields: View {
+    var onVerificationChanged: ((Bool) -> Void)?
+
     @AppStorage(AppSettings.aiSummaryProvider) private var providerRaw = AIProviderSettings.defaultProvider
     @AppStorage(AppSettings.aiSummaryBaseURL) private var openAIBaseURL = AIProviderSettings.defaultOpenAIBaseURL
     @AppStorage(AppSettings.aiSummaryModel) private var openAIModel = AIProviderSettings.defaultOpenAIModel
@@ -33,8 +45,7 @@ struct SummaryProviderSettingsSection: View {
     }
 
     var body: some View {
-        Section("Zusammenfassung") {
-            Toggle("KI-Zusammenfassung aktivieren", isOn: $summaryEnabled)
+        Group {
             Picker("Provider", selection: $providerRaw) {
                 ForEach(AISummaryProvider.allCases) { provider in
                     Text(provider.displayName).tag(provider.rawValue)
@@ -42,28 +53,29 @@ struct SummaryProviderSettingsSection: View {
             }
 
             switch provider {
-            case .claudeCLI:    claudeFields
+            case .claudeCLI: claudeFields
             case .openAICompatible: openAIFields
             case .anthropicAPI: anthropicFields
-            case .ollama:       ollamaFields
+            case .ollama: ollamaFields
             }
 
             testConnectionRow
         }
         .onAppear(perform: refreshKeyState)
-        .onChange(of: providerRaw) { _, _ in
-            refreshKeyState()
-            keyStatus = nil
-            probeStatus = nil
-            apiKeyInput = ""
-        }
+        .onChange(of: providerRaw) { _, _ in resetProbeState(clearKeyInput: true) }
+        .onChange(of: openAIBaseURL) { _, _ in resetProbeState() }
+        .onChange(of: openAIModel) { _, _ in resetProbeState() }
+        .onChange(of: anthropicBaseURL) { _, _ in resetProbeState() }
+        .onChange(of: anthropicModel) { _, _ in resetProbeState() }
+        .onChange(of: ollamaBaseURL) { _, _ in resetProbeState() }
+        .onChange(of: ollamaModel) { _, _ in resetProbeState() }
     }
 
     // MARK: - Provider-spezifische Felder
 
     private var claudeFields: some View {
         Group {
-            LabeledContent("Account", value: summaryEnabled ? "lokaler Claude-Login" : "Aus")
+            LabeledContent("Account", value: "lokaler Claude-Login")
             hint("Nutzt den lokal eingeloggten Claude-Account über die Claude CLI. Kein API-Key wird gespeichert.")
         }
     }
@@ -94,11 +106,11 @@ struct SummaryProviderSettingsSection: View {
         }
     }
 
-    // MARK: - API-Key (scope-genau)
+    // MARK: - API-Key
 
     private var apiKeyControls: some View {
         Group {
-            LabeledContent("API-Key", value: hasStoredKey ? "In Keychain gespeichert" : "Fehlt")
+            LabeledContent("API-Key", value: hasStoredKey ? "Im Schlüsselbund gespeichert" : "Noch nicht gespeichert")
             SecureField("Neuen API-Key eintragen", text: $apiKeyInput)
             HStack {
                 Button("API-Key speichern") { saveKey() }
@@ -141,15 +153,26 @@ struct SummaryProviderSettingsSection: View {
         hasStoredKey = AIProviderSecretStore().apiKey(for: scope) != nil
     }
 
+    private func resetProbeState(clearKeyInput: Bool = false) {
+        refreshKeyState()
+        probeStatus = nil
+        onVerificationChanged?(false)
+        if clearKeyInput {
+            keyStatus = nil
+            apiKeyInput = ""
+        }
+    }
+
     private func saveKey() {
         guard let scope = keyScope else { return }
         do {
             try AIProviderSecretStore().setAPIKey(apiKeyInput, for: scope)
             apiKeyInput = ""
             keyStatus = "API-Key gespeichert."
-            refreshKeyState()
+            resetProbeState()
         } catch {
-            keyStatus = "API-Key konnte nicht gespeichert werden."
+            keyStatus = error.localizedDescription
+            onVerificationChanged?(false)
         }
     }
 
@@ -158,7 +181,7 @@ struct SummaryProviderSettingsSection: View {
         AIProviderSecretStore().clearAPIKey(for: scope)
         apiKeyInput = ""
         keyStatus = "API-Key gelöscht."
-        refreshKeyState()
+        resetProbeState()
     }
 
     private func testConnection() {
@@ -170,15 +193,14 @@ struct SummaryProviderSettingsSection: View {
             case .success(let provider):
                 result = await provider.probe()
             case .failure(let configError):
-                // Config-Fehler VOR dem Netz-Call konkret benennen (fehlender
-                // Key, kaputte URL, leeres Modell) statt generisch zu raten.
                 result = .failed(configError.userMessage)
             }
             await MainActor.run {
                 switch result {
-                case .ok(let detail):    probeStatus = "✓ \(detail)"
+                case .ok(let detail): probeStatus = "✓ \(detail)"
                 case .failed(let reason): probeStatus = "✗ \(reason)"
                 }
+                onVerificationChanged?(result.isOK)
                 probing = false
             }
         }

@@ -11,6 +11,60 @@ import AVFoundation
 // - SpeakerDiarizer (FluidAudio) labelt Speaker auf dem System-Audio-Stream.
 // - Auf Stop: finales Transcript wird in MeetingStore persistiert.
 
+struct RuntimePreparationStatus: Equatable, Sendable {
+    enum RequiredAsset: Equatable, Sendable {
+        case idle
+        case preparing(String)
+        case ready(String)
+        case failed(String)
+
+        var isReady: Bool {
+            if case .ready = self { return true }
+            return false
+        }
+
+        var isWorking: Bool {
+            if case .preparing = self { return true }
+            return false
+        }
+    }
+
+    enum OptionalAsset: Equatable, Sendable {
+        case skipped(String)
+        case preparing(String)
+        case ready(String)
+        case failed(String)
+
+        var isWorking: Bool {
+            if case .preparing = self { return true }
+            return false
+        }
+    }
+
+    let speech: RequiredAsset
+    let diarization: OptionalAsset
+
+    static let idle = RuntimePreparationStatus(
+        speech: .idle,
+        diarization: .skipped("Noch nicht geprüft.")
+    )
+
+    static func preparing(_ message: String) -> RuntimePreparationStatus {
+        RuntimePreparationStatus(
+            speech: .preparing(message),
+            diarization: .skipped("Wartet auf Sprachmodell.")
+        )
+    }
+
+    var isWorking: Bool {
+        speech.isWorking || diarization.isWorking
+    }
+
+    var canFinishOnboarding: Bool {
+        speech.isReady
+    }
+}
+
 @MainActor
 final class RecordingController: ObservableObject {
 
@@ -20,6 +74,7 @@ final class RecordingController: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var statusText: String = "Bereit"
     @Published private(set) var hasMicPermission: Bool = false
+    @Published private(set) var modelPreparation: RuntimePreparationStatus = .idle
     /// Live-Audio-Level (RMS, 0..~1) — UI-Header/Pille zeigt Live-Bars.
     @Published private(set) var audioLevel: Float = 0
 
@@ -48,6 +103,7 @@ final class RecordingController: ObservableObject {
     private var detectorCancellable: AnyCancellable?
     private var levelCancellable: AnyCancellable?
     private var autoDetectActive = false
+    private var prewarmTask: Task<RuntimePreparationStatus, Never>?
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
@@ -126,16 +182,56 @@ final class RecordingController: ObservableObject {
     /// Laedt Whisper- und Diarizer-Modelle im Hintergrund nach App-Start —
     /// dadurch ist die erste Aufnahme nahezu sofort startbereit, statt erst
     /// bei `start()` Sekunden auf den Modell-Download/Decode zu warten.
-    func prewarmModels() async {
+    @discardableResult
+    func prewarmModels() async -> RuntimePreparationStatus {
+        if let prewarmTask {
+            return await prewarmTask.value
+        }
+
+        let task = Task<RuntimePreparationStatus, Never> { @MainActor [weak self] in
+            guard let self else { return RuntimePreparationStatus.idle }
+            return await self.runPrewarmModels()
+        }
+        prewarmTask = task
+        let snapshot = await task.value
+        prewarmTask = nil
+        return snapshot
+    }
+
+    private func runPrewarmModels() async -> RuntimePreparationStatus {
+        modelPreparation = .preparing("Bereite Sprachmodell vor ...")
+        let speech: RuntimePreparationStatus.RequiredAsset
+
         if !FinalSTTTranscriber.isAvailable {
             let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
             let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
-            _ = await transcriber.loadModel(model: model, language: lang)
+            let loaded = await transcriber.loadModel(model: model, language: lang)
+            speech = loaded
+                ? .ready("WhisperKit ist bereit (\(model), Sprache: \(lang)).")
+                : .failed("WhisperKit-Modell konnte nicht geladen werden.")
+        } else {
+            speech = .ready("Final-STT ist bereit (whisper-cli + large-v3-turbo gefunden).")
         }
 
+        let diarization: RuntimePreparationStatus.OptionalAsset
         if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
+            modelPreparation = RuntimePreparationStatus(
+                speech: speech,
+                diarization: .preparing("Bereite Speaker-Diarization vor ...")
+            )
             await diarizer.warmUp()
+            if diarizer.isReady {
+                diarization = .ready("Speaker-Diarization ist bereit.")
+            } else {
+                diarization = .failed(diarizer.lastError ?? "Speaker-Diarization konnte nicht vorbereitet werden.")
+            }
+        } else {
+            diarization = .skipped("Speaker-Diarization ist deaktiviert.")
         }
+
+        let snapshot = RuntimePreparationStatus(speech: speech, diarization: diarization)
+        modelPreparation = snapshot
+        return snapshot
     }
 
     /// User hat in der Pille auf "Ablehnen" geklickt — Detection fuer
@@ -490,7 +586,7 @@ final class RecordingController: ObservableObject {
         statusText = "KI verarbeitet"
 
         // Embeddings frisch entdeckter Speaker für später vorhalten — UI-Labeling-Sheet
-        // greift darauf zu, wenn der User "S1 = Thorsten" tippt.
+        // greift darauf zu, wenn der User "S1 = Morgan" tippt.
         for (speakerId, embedding) in pendingEmbeddings where !embedding.isEmpty {
             self.lastEmbeddings[speakerId] = embedding
         }
@@ -945,7 +1041,7 @@ final class RecordingController: ObservableObject {
         }
     }
 
-    /// User labelt "S1 → Thorsten". Der komplette Flow (Embedding-Auflösung,
+    /// User labelt "S1 → Morgan". Der komplette Flow (Embedding-Auflösung,
     /// kanonische ID, Relabel, Cross-Meeting-Backfill) lebt im
     /// `SpeakerIdentityCoordinator` — der Controller liefert nur seinen
     /// Embedding-Cache der letzten Aufnahme als Fallback plus das Lizenz-Gate.

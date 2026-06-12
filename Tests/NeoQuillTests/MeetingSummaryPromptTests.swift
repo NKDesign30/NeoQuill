@@ -2,13 +2,24 @@ import XCTest
 @testable import NeoQuill
 
 final class MeetingSummaryPromptTests: XCTestCase {
-    func testAutoLocaleKeepsMixedLanguageInstruction() {
+    func testAutoLocaleUsesTranscriptLanguageInsteadOfGermanDefault() {
         let prompt = MeetingSummaryPrompt.build(
             transcript: "ME [00:00]: Hallo. S1 [00:05]: Let's ship.",
             locale: "auto"
         )
 
+        XCTAssertTrue(prompt.contains("the transcript's primary language"))
         XCTAssertTrue(prompt.contains("transcript mixes languages"))
+        XCTAssertFalse(prompt.contains("German for the summary"))
+    }
+
+    func testUnknownLocaleUsesTranscriptLanguageInsteadOfGermanDefault() {
+        let prompt = MeetingSummaryPrompt.build(
+            transcript: "ME [00:00]: Let's ship.",
+            locale: "system"
+        )
+
+        XCTAssertTrue(prompt.contains("the transcript's primary language"))
     }
 
     func testParsesSummaryFromCodeFence() throws {

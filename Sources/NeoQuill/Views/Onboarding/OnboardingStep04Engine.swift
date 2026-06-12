@@ -1,7 +1,7 @@
 import SwiftUI
 
-// 04 — KI-Engine. Zwei EngineCards (ANE / Cloud) + Claude-Toggle.
-// Visual: Pipeline-Diagramm mit Mikrofon → Engine → Claude → Mediathek.
+// 04 — KI-Engine. Zwei EngineCards (ANE / Cloud) + Summary-Toggle.
+// Visual: Pipeline-Diagramm mit Mikrofon → Engine → KI-Zusammenfassung → Mediathek.
 
 struct EngineContent: View {
     @ObservedObject var state: OnboardingState
@@ -11,11 +11,11 @@ struct EngineContent: View {
         VStack(alignment: .leading, spacing: 32) {
             OnboardingHeading(
                 title: "Wo soll Quill denken?",
-                lead: "WhisperKit läuft auf der Apple Neural Engine — schnell, lokal, ohne Cloud. Cloud-Modelle sind genauer bei seltenen Sprachen, brauchen aber Internet.",
+                lead: "Transkription läuft lokal mit WhisperKit. Für TL;DR, Aufgaben und Kapitel nutzt Quill deinen eigenen KI-Provider — API-Keys bleiben in deiner Keychain.",
                 accent: accent
             )
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 EngineCard(
                     accent: accent,
                     selected: state.engine == .ane,
@@ -42,13 +42,39 @@ struct EngineContent: View {
 
                 OnboardingToggleRow(
                     symbol: "flame",
-                    title: "Claude analysieren lassen",
-                    subtitle: "TL;DR, Aktionspunkte, Highlights & Kapitel werden mit Claude Haiku 4.5 destilliert.",
+                    title: "KI-Zusammenfassung aktivieren",
+                    subtitle: "Richte jetzt deinen Provider ein oder überspringe KI bis später.",
                     badge: "ANALYSE",
                     value: $state.claudeAnalysisEnabled,
                     accent: accent
                 )
                 .padding(.top, 4)
+
+                if state.claudeAnalysisEnabled {
+                    VStack(alignment: .leading, spacing: 10) {
+                        OnboardingFormLabel(text: "KI-PROVIDER", hint: "· Verbindung testen")
+                        SummaryProviderConfigurationFields { verified in
+                            state.summaryProviderVerified = verified
+                        }
+                        .font(.neonBody(12))
+                        .foregroundStyle(Neon.textPrimary)
+                        Text(state.summaryProviderVerified
+                             ? "Provider ist bereit. Die erste Summary nutzt genau diese Konfiguration."
+                             : "Ohne erfolgreichen Test bleibt der Setup-Schritt gesperrt. Du kannst KI bewusst später einrichten.")
+                            .font(.neonBody(11))
+                            .foregroundStyle(state.summaryProviderVerified ? accent : Neon.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.03))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(state.summaryProviderVerified ? accent.opacity(0.35) : Neon.strokeHairline, lineWidth: Neon.hairlineWidth)
+                    )
+                }
             }
             .frame(maxWidth: 460)
         }
@@ -171,9 +197,9 @@ struct EngineVisual: View {
                      sub: state.engine == .ane ? "Lokal · M-Series Neural Engine" : "Verschlüsselt · TLS 1.3",
                      active: true, highlight: true, accent: accent)
             PipeArrow(accent: accent, dashed: !state.claudeAnalysisEnabled)
-            PipeNode(icon: "flame",
-                     label: "Claude · Analyse",
-                     sub: state.claudeAnalysisEnabled ? "Haiku 4.5 · TL;DR, Tasks, Kapitel" : "Deaktiviert — nur Roh-Transkript",
+            PipeNode(icon: "sparkles",
+                     label: "KI · Zusammenfassung",
+                     sub: state.claudeAnalysisEnabled ? "Dein Provider · TL;DR, Tasks, Kapitel" : "Deaktiviert — nur Roh-Transkript",
                      active: state.claudeAnalysisEnabled, highlight: false, accent: accent)
             PipeArrow(accent: accent, dashed: false)
             PipeNode(icon: "tray.full", label: "NeoQuill · Mediathek",

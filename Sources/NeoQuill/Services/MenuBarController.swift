@@ -178,7 +178,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func onSettings(_ sender: Any?) {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.canBecomeMain {
+            window.makeKeyAndOrderFront(nil)
+            break
+        }
+        NotificationCenter.default.post(name: .openSettingsOverlay, object: nil)
     }
 
     @objc private func onQuit(_ sender: Any?) {

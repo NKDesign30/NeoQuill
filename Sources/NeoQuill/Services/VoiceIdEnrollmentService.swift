@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import AVFoundation
 import Combine
 
-// Einmaliges Voice-ID Onboarding für den lokalen Sprecher (Niko/ME).
+// Einmaliges Voice-ID Onboarding für den lokalen Sprecher (ME).
 // Nimmt 8s Mic-Audio in 16 kHz Mono auf, extrahiert ein WeSpeaker-Embedding
 // über FluidAudio und persistiert es im SpeakerStore unter LocalSpeakerProfile.id.
 //
