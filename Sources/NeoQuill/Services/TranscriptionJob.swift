@@ -65,6 +65,7 @@ enum TranscriptionJob {
             arguments.append(contentsOf: ["--vad", "-vm", vad.path])
         }
         process.arguments = arguments
+        process.environment = environment(for: spec.executable, useGPU: useGPU)
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
@@ -77,6 +78,17 @@ enum TranscriptionJob {
             throw Failure.outputMissing
         }
         return jsonURL
+    }
+
+    private static func environment(for executable: URL, useGPU: Bool) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let executableDir = executable.deletingLastPathComponent()
+        let backendName = useGPU ? "libggml-metal.so" : "libggml-cpu-apple_m1.so"
+        let backend = executableDir.appendingPathComponent(backendName)
+        if FileManager.default.fileExists(atPath: backend.path) {
+            environment["GGML_BACKEND_PATH"] = backend.path
+        }
+        return environment
     }
 
     /// Startet `process` und wartet maximal `seconds`. Endet der Prozess von

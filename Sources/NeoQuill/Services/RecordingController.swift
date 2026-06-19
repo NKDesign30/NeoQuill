@@ -179,9 +179,8 @@ final class RecordingController: ObservableObject {
         await start()
     }
 
-    /// Laedt Whisper- und Diarizer-Modelle im Hintergrund nach App-Start —
-    /// dadurch ist die erste Aufnahme nahezu sofort startbereit, statt erst
-    /// bei `start()` Sekunden auf den Modell-Download/Decode zu warten.
+    /// Prüft die bevorzugte Final-STT Runtime und wärmt optionale Modelle vor,
+    /// damit die erste Aufnahme nicht erst im `start()`-Pfad scheitert.
     @discardableResult
     func prewarmModels() async -> RuntimePreparationStatus {
         if let prewarmTask {

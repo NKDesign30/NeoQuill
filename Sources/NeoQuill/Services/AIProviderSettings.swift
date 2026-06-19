@@ -12,11 +12,11 @@ enum AISummaryProvider: String, CaseIterable, Codable, Identifiable {
     var displayName: String {
         switch self {
         case .claudeCLI:
-            return "Claude CLI (lokaler Login)"
+            return "Claude CLI (OAuth-Login)"
         case .openAICompatible:
-            return "OpenAI-kompatibel"
+            return "Codex / OpenAI-kompatibel"
         case .anthropicAPI:
-            return "Anthropic API (Claude)"
+            return "Claude API (Anthropic-Key)"
         case .ollama:
             return "Ollama (lokal)"
         }

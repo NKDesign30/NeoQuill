@@ -1,6 +1,6 @@
 import SwiftUI
 
-// 04 — KI-Engine. Zwei EngineCards (ANE / Cloud) + Summary-Toggle.
+// 04 — KI-Engine. Zwei EngineCards (lokal / Cloud) + Summary-Toggle.
 // Visual: Pipeline-Diagramm mit Mikrofon → Engine → KI-Zusammenfassung → Mediathek.
 
 struct EngineContent: View {
@@ -11,7 +11,7 @@ struct EngineContent: View {
         VStack(alignment: .leading, spacing: 32) {
             OnboardingHeading(
                 title: "Wo soll Quill denken?",
-                lead: "Transkription läuft lokal mit WhisperKit. Für TL;DR, Aufgaben und Kapitel nutzt Quill deinen eigenen KI-Provider — API-Keys bleiben in deiner Keychain.",
+                lead: "Transkription läuft lokal mit gebündeltem Whisper large-v3-turbo. Für TL;DR, Aufgaben und Kapitel richtest du einmal deinen KI-Provider ein — Claude per OAuth-Login oder API-Key, Codex/OpenAI per API-Key.",
                 accent: accent
             )
 
@@ -20,9 +20,9 @@ struct EngineContent: View {
                     accent: accent,
                     selected: state.engine == .ane,
                     icon: "sparkles",
-                    name: "WhisperKit · ANE",
+                    name: "Whisper large-v3-turbo",
                     tag: "EMPFOHLEN",
-                    desc: "Läuft auf der Apple Neural Engine. Audio verlässt deinen Mac nicht.",
+                    desc: "Wird mit NeoQuill installiert. Audio verlässt deinen Mac nicht.",
                     stats: [("GESCHWINDIGKEIT", "4.2× Echtzeit"),
                             ("PRIVATSPHÄRE",   "On-device"),
                             ("SPRACHEN",       "99")]
@@ -34,7 +34,7 @@ struct EngineContent: View {
                     icon: "flame",
                     name: "Whisper · Cloud",
                     tag: nil,
-                    desc: "Höhere Genauigkeit bei Akzenten und Fachsprache. Audio wird verschlüsselt übertragen.",
+                    desc: "Späterer Cloud-Pfad. Für diesen Release bleibt lokale Transkription der sichere Default.",
                     stats: [("GESCHWINDIGKEIT", "1.8× Echtzeit"),
                             ("PRIVATSPHÄRE",   "TLS · 24h"),
                             ("SPRACHEN",       "57")]
@@ -43,7 +43,7 @@ struct EngineContent: View {
                 OnboardingToggleRow(
                     symbol: "flame",
                     title: "KI-Zusammenfassung aktivieren",
-                    subtitle: "Richte jetzt deinen Provider ein oder überspringe KI bis später.",
+                    subtitle: "Claude: CLI OAuth oder Anthropic-Key. Codex/OpenAI: API-Key oder OpenAI-kompatibler Endpoint.",
                     badge: "ANALYSE",
                     value: $state.claudeAnalysisEnabled,
                     accent: accent
@@ -193,8 +193,8 @@ struct EngineVisual: View {
                      active: true, highlight: false, accent: accent)
             PipeArrow(accent: accent, dashed: false)
             PipeNode(icon: state.engine == .ane ? "sparkles" : "flame",
-                     label: state.engine == .ane ? "WhisperKit · ANE" : "Whisper · Cloud",
-                     sub: state.engine == .ane ? "Lokal · M-Series Neural Engine" : "Verschlüsselt · TLS 1.3",
+                     label: state.engine == .ane ? "Whisper large-v3-turbo" : "Whisper · Cloud",
+                     sub: state.engine == .ane ? "Lokal · mit NeoQuill installiert" : "Späterer Cloud-Pfad",
                      active: true, highlight: true, accent: accent)
             PipeArrow(accent: accent, dashed: !state.claudeAnalysisEnabled)
             PipeNode(icon: "sparkles",

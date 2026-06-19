@@ -75,8 +75,8 @@ struct SummaryProviderConfigurationFields: View {
 
     private var claudeFields: some View {
         Group {
-            LabeledContent("Account", value: "lokaler Claude-Login")
-            hint("Nutzt den lokal eingeloggten Claude-Account über die Claude CLI. Kein API-Key wird gespeichert.")
+            LabeledContent("Account", value: "Claude CLI OAuth")
+            hint("Nutzt den lokal eingeloggten Claude-Account über die Claude CLI. Einmal `claude login` reicht; NeoQuill speichert keinen Claude-Key.")
         }
     }
 
@@ -85,7 +85,7 @@ struct SummaryProviderConfigurationFields: View {
             TextField("Base URL", text: $openAIBaseURL)
             TextField("Modell", text: $openAIModel)
             apiKeyControls
-            hint("OpenAI, OpenRouter, Groq, Together, lokale Server — alles, was chat/completions spricht. Secrets bleiben in der macOS Keychain.")
+            hint("Codex/OpenAI, OpenRouter, Groq, Together oder lokale Server über chat/completions. API-Key einmal speichern; Secret bleibt in der macOS Keychain.")
         }
     }
 
@@ -94,7 +94,7 @@ struct SummaryProviderConfigurationFields: View {
             TextField("Base URL", text: $anthropicBaseURL)
             TextField("Modell", text: $anthropicModel)
             apiKeyControls
-            hint("Anthropic API mit eigenem Key (api.anthropic.com). Modell z. B. claude-haiku-4-5. Secrets bleiben in der macOS Keychain.")
+            hint("Claude über Anthropic API mit eigenem Key (api.anthropic.com). Modell z. B. claude-haiku-4-5. Secret bleibt in der macOS Keychain.")
         }
     }
 

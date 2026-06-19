@@ -34,6 +34,38 @@ enum ClaudeCLIClient {
         return path?.isEmpty == false ? path : nil
     }
 
+    static func probeLogin(timeout: TimeInterval = 20) async -> ProviderProbeResult {
+        guard let bin = claudeBinaryPath() else {
+            return .failed("claude CLI nicht gefunden. Claude API-Key nutzen oder Claude CLI installieren und einmal `claude login` ausführen.")
+        }
+
+        return await Task.detached(priority: .utility) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: bin)
+            process.arguments = [
+                "-p", "Reply with OK only.",
+                "--model", "haiku",
+                "--output-format", "json",
+            ]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            process.environment = ProcessInfo.processInfo.environment
+
+            do {
+                let finished = try TranscriptionJob.runWithTimeout(process, seconds: timeout)
+                guard finished else {
+                    return .failed("Claude CLI reagiert nicht. Einmal `claude login` ausführen und erneut testen.")
+                }
+                guard process.terminationStatus == 0 else {
+                    return .failed("Claude CLI OAuth ist nicht bereit. Einmal `claude login` ausführen und erneut testen.")
+                }
+                return .ok("Claude CLI OAuth ist bereit.")
+            } catch {
+                return .failed("Claude CLI konnte nicht gestartet werden: \(error.localizedDescription)")
+            }
+        }.value
+    }
+
     static func summarize(transcript: String, locale: String = "auto") async -> MeetingSummaryAI? {
         guard let bin = claudeBinaryPath() else {
             NSLog("[ClaudeCLI] claude binary not found")

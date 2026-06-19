@@ -18,6 +18,8 @@ enum FinalSTTTranscriber {
     private static let quietThreshold: Float = 0.00035
     private static let maxChunkDurationSeconds: TimeInterval = 600
     private static let chunkOverlapSeconds: TimeInterval = 0
+    private static let whisperCLIName = "whisper-cli"
+    private static let largeV3TurboModelName = "ggml-large-v3-turbo.bin"
 
     static var isAvailable: Bool {
         executableURL() != nil && modelURL() != nil
@@ -192,7 +194,12 @@ enum FinalSTTTranscriber {
     }
 
     private static func executableURL() -> URL? {
-        [
+        let bundledExecutable = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/MacOS")
+            .appendingPathComponent(whisperCLIName)
+
+        return [
+            bundledExecutable.path,
             "/opt/homebrew/bin/whisper-cli",
             "/usr/local/bin/whisper-cli",
         ]
@@ -202,10 +209,14 @@ enum FinalSTTTranscriber {
 
     private static func modelURL() -> URL? {
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let candidates = [
-            home.appendingPathComponent(".cache/whisper-cpp/ggml-large-v3-turbo.bin"),
+        var candidates: [URL] = []
+        if let resourceURL = Bundle.main.resourceURL {
+            candidates.append(resourceURL.appendingPathComponent("Models").appendingPathComponent(largeV3TurboModelName))
+        }
+        candidates.append(contentsOf: [
             home.appendingPathComponent("Library/Application Support/NeoQuill/models/ggml-large-v3-turbo.bin"),
-        ]
+            home.appendingPathComponent(".cache/whisper-cpp/ggml-large-v3-turbo.bin"),
+        ])
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 

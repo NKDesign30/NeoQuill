@@ -36,9 +36,6 @@ struct ClaudeCLISummaryProvider: SummaryProvider {
     }
 
     func probe() async -> ProviderProbeResult {
-        guard let path = ClaudeCLIClient.claudeBinaryPath() else {
-            return .failed("claude CLI nicht gefunden. Installiere die Claude CLI und logge dich ein.")
-        }
-        return .ok("claude CLI gefunden: \(path)")
+        await ClaudeCLIClient.probeLogin()
     }
 }

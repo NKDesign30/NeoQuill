@@ -382,7 +382,7 @@ private struct AudioSettingsTab: View {
             }
 
             Section("Transkription") {
-                Picker("WhisperKit-Modell", selection: $whisperModel) {
+                Picker("Fallback-Modell", selection: $whisperModel) {
                     ForEach(availableModels, id: \.0) { value, label in
                         Text(label).tag(value)
                     }
@@ -392,7 +392,7 @@ private struct AudioSettingsTab: View {
                     Text("Deutsch").tag("de")
                     Text("Englisch").tag("en")
                 }
-                Text("Für Meetings mit 2-4 Sprachen Auto-Detect nutzen. Whisper erkennt die Sprache segmentweise besser als ein hart gesetztes Deutsch-Modell.")
+                Text("NeoQuill nutzt zuerst die mitgelieferte whisper-cli Runtime mit large-v3-turbo. Diese Auswahl gilt nur als WhisperKit-Fallback. Für Meetings mit 2-4 Sprachen Auto-Detect nutzen.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

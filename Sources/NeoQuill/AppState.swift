@@ -142,9 +142,9 @@ final class AppState: ObservableObject {
         menuBar.install(with: recorder)
         pill.bind(to: recorder)
 
-        // Whisper- und Diarizer-Modelle im Hintergrund laden damit der erste
-        // Recording-Start nahezu sofort funktioniert. Danach hängengebliebene
-        // Transkripte (App während STT beendet/abgestürzt) automatisch nachholen.
+        // Final-STT Runtime prüfen und optionale Modelle vorwärmen. Danach
+        // hängengebliebene Transkripte (App während STT beendet/abgestürzt)
+        // automatisch nachholen.
         Task { @MainActor [weak recorder] in
             await recorder?.prewarmModels()
             recorder?.recoverOrphanedTranscripts()

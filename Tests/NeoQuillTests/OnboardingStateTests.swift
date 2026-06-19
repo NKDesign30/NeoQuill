@@ -52,11 +52,11 @@ final class OnboardingStateTests: XCTestCase {
 
     func testRuntimePreparationStatusAllowsFinishWhenSpeechIsReady() {
         let ready = RuntimePreparationStatus(
-            speech: .ready("WhisperKit bereit."),
+            speech: .ready("Final-STT bereit."),
             diarization: .failed("Optionales Speaker-Modell fehlt.")
         )
         let failed = RuntimePreparationStatus(
-            speech: .failed("WhisperKit fehlt."),
+            speech: .failed("Sprachruntime fehlt."),
             diarization: .skipped("Nicht aktiv.")
         )
 

@@ -24,7 +24,7 @@ struct ReadyContent: View {
         VStack(alignment: .leading, spacing: 32) {
             OnboardingHeading(
                 title: readyTitle,
-                lead: "Eine letzte Sache: dein Aufnahme-Shortcut. Quill bereitet im Hintergrund die lokale Speech-Runtime vor, damit die erste Aufnahme nicht am Modell-Download hängt.",
+                lead: "Eine letzte Sache: dein Aufnahme-Shortcut. Quill prüft die mitgelieferte Whisper large-v3-turbo Runtime, damit die erste Aufnahme lokal starten kann.",
                 accent: accent
             )
 
@@ -60,7 +60,7 @@ struct ReadyContent: View {
                 Text("Du bist startklar.")
                     .font(.neonBody(13, weight: .semibold))
                     .foregroundStyle(Neon.textPrimary)
-                Text("Quill nimmt deine Meetings ab jetzt automatisch auf. Die erste Aufnahme erscheint direkt in der Mediathek — mit TL;DR, Aktionspunkten und Kapiteln.")
+                Text(successDescription)
                     .font(.neonBody(12))
                     .foregroundStyle(Neon.textSecondary)
                     .lineSpacing(3)
@@ -92,6 +92,13 @@ struct ReadyContent: View {
         }
     }
 
+    private var successDescription: String {
+        if state.claudeAnalysisEnabled {
+            return "Quill nimmt deine Meetings ab jetzt automatisch auf. Die erste Aufnahme erscheint direkt in der Mediathek — mit TL;DR, Aktionspunkten und Kapiteln."
+        }
+        return "Quill nimmt deine Meetings ab jetzt automatisch auf. Die erste Aufnahme erscheint lokal transkribiert in der Mediathek; KI-Zusammenfassungen kannst du später aktivieren."
+    }
+
     private var runtimePreparationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -108,7 +115,7 @@ struct ReadyContent: View {
                     Text(runtimeTitle)
                         .font(.neonBody(13, weight: .semibold))
                         .foregroundStyle(Neon.textPrimary)
-                    Text("WhisperKit/Final-STT und optionale Speaker-Diarization")
+                    Text("Gebündeltes whisper-cli + large-v3-turbo und optionale Speaker-Diarization")
                         .font(.neonBody(11))
                         .foregroundStyle(Neon.textTertiary)
                 }
