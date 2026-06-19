@@ -31,3 +31,8 @@ Release tags should match the version file, for example `v0.9.0`.
   `build-dmg.sh --notarize`, `publish-update.sh` and `market-readiness.sh` must
   pass on `main` with a Developer ID Application certificate, a notary profile,
   complete DMG / ZIP / manifest assets and an EdDSA-signed Sparkle appcast.
+- `scripts/smoke-download-install.sh latest` verifies the published user path:
+  GitHub DMG download, SHA256, DMG mount, copied app bundle, codesign,
+  Gatekeeper acceptance and launch stability. The release scripts auto-detect a
+  working `neoquill-notary` Keychain profile unless `NEOQUILL_NOTARY_PROFILE`
+  overrides it.

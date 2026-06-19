@@ -5,6 +5,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+source scripts/lib/notary-profile.sh
+
 VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
 TAG_NAME="v$VERSION_VALUE"
 REPO="${NEOQUILL_GITHUB_REPO:-NKDesign30/NeoQuill}"
@@ -365,10 +367,10 @@ if security find-identity -v -p codesigning 2>/dev/null | grep -q 'Apple Distrib
   warn "Apple Distribution Zertifikat ist vorhanden; für Direct-Sale braucht NeoQuill trotzdem Developer ID Application"
 fi
 
-if [ -n "${NEOQUILL_NOTARY_PROFILE:-}" ]; then
-  pass "NEOQUILL_NOTARY_PROFILE ist gesetzt"
+if NOTARY_PROFILE="$(neoquill_resolve_notary_profile 2>/dev/null)"; then
+  pass "Notary-Profil ist verfügbar: $NOTARY_PROFILE"
 else
-  fail "NEOQUILL_NOTARY_PROFILE ist nicht gesetzt"
+  fail "kein Notary-Profil verfügbar: NEOQUILL_NOTARY_PROFILE fehlt und Keychain-Profil 'neoquill-notary' ist nicht nutzbar"
 fi
 
 if command -v gh >/dev/null 2>&1; then

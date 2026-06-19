@@ -6,6 +6,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+source scripts/lib/notary-profile.sh
+
 ALLOW_DIRTY=0
 CLEAN_BUILD=0
 LAUNCH_SMOKE=0
@@ -80,7 +82,11 @@ if [ "$NOTARIZE" = "1" ]; then
     exit 1
   fi
   if [ -z "$NOTARY_PROFILE" ]; then
+    NOTARY_PROFILE="$(neoquill_resolve_notary_profile || true)"
+  fi
+  if [ -z "$NOTARY_PROFILE" ]; then
     echo "FEHLER: --notarize braucht --notary-profile oder NEOQUILL_NOTARY_PROFILE."
+    neoquill_notary_profile_help
     exit 1
   fi
 fi

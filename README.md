@@ -164,11 +164,16 @@ swift test
 For public Direct-Sale distribution:
 
 ```bash
-NEOQUILL_NOTARY_PROFILE=<profile> ./scripts/package-release.sh --strict-distribution --notarize
+./scripts/package-release.sh --strict-distribution --notarize
 ./scripts/build-dmg.sh --notarize
 ./scripts/publish-update.sh
 ./scripts/market-readiness.sh
+./scripts/smoke-download-install.sh latest
 ```
+
+If the local Keychain contains a working `neoquill-notary` profile, the
+notarization scripts use it automatically; `NEOQUILL_NOTARY_PROFILE` is only
+needed for custom profile names.
 
 `build-dmg.sh` packages the signed release `.app` into a branded, signed and
 notarized DMG installer (drag-to-Applications layout, retina background,
