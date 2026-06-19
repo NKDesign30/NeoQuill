@@ -9,6 +9,24 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.12.0] - 2026-06-19
+
+- Added: Einstellungen sind jetzt direkt in der App — ein Sidebar-Overlay im
+  Hauptfenster löst das alte Tab-Fenster ab und bündelt Audio, KI, Aktionen,
+  Cloud, Daten, Berechtigungen, Lizenz und Version an einer Stelle.
+- Added: Der KI-Anbieter für Zusammenfassungen ist frei wählbar — neben
+  OpenAI-kompatiblen Endpoints stehen Anthropic, lokales Ollama und die lokale
+  Claude CLI zur Auswahl.
+- Changed: Die Action-Inbox-Anbindung nutzt einen frei konfigurierbaren
+  Endpoint aus den Einstellungen statt einer fest verdrahteten lokalen Adresse
+  und meldet Verbindungsfehler verständlich.
+- Changed: Das Onboarding führt durch die neue Anbieter- und Einstellungs-
+  Struktur.
+- Changed: Release-Tooling gehärtet — die Notarisierungs-Skripte finden ein
+  vorhandenes `neoquill-notary` Keychain-Profil automatisch und ein neuer
+  Download-Smoke-Test prüft den echten Update-Pfad (GitHub-DMG, SHA256, Mount,
+  Codesign, Gatekeeper, Start).
+
 ## [0.11.0] - 2026-06-10
 
 - Added: Freie Wahl des KI-Anbieters für Zusammenfassungen — neben
