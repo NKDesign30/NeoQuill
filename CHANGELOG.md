@@ -9,6 +9,16 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.12.1] - 2026-06-19
+
+- Fixed: Die In-App-Einstellungen stürzen auf Installationen mit fehlendem
+  oder anders aufgelöstem Lokalisierungs-Bundle nicht mehr ab.
+- Added: Das Installationspaket bringt jetzt die benötigte finale
+  Transkriptions-Runtime mit: `whisper-cli`, `ggml-large-v3-turbo.bin` und die
+  passenden GGML-/Whisper-Bibliotheken inklusive Metal- und CPU-Fallbacks.
+- Changed: Onboarding und Einstellungen erklären klarer, dass Claude/Codex nur
+  mit eigener CLI-/OAuth- oder API-Konfiguration genutzt werden können.
+
 ## [0.12.0] - 2026-06-19
 
 - Added: Einstellungen sind jetzt direkt in der App — ein Sidebar-Overlay im
