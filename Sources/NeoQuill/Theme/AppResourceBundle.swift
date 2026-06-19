@@ -4,6 +4,10 @@ enum AppResourceBundle {
     private static let packageBundleName = "NeoQuill_NeoQuill"
 
     static func candidates() -> [Bundle] {
+        cachedCandidates
+    }
+
+    private static let cachedCandidates: [Bundle] = {
         var bundles: [Bundle] = [.main]
 
         for url in packageBundleURLs() {
@@ -15,7 +19,7 @@ enum AppResourceBundle {
         }
 
         return bundles
-    }
+    }()
 
     static func url(forResource name: String, withExtension ext: String, subdirectory: String? = nil) -> URL? {
         for bundle in candidates() {
@@ -32,12 +36,42 @@ enum AppResourceBundle {
 
     private static func packageBundleURLs() -> [URL] {
         var roots: [URL] = []
+        func appendRoot(_ url: URL) {
+            let standardized = url.standardizedFileURL
+            if !roots.contains(standardized) {
+                roots.append(standardized)
+            }
+        }
+
+        func appendRootAndParents(_ url: URL) {
+            var current = url.standardizedFileURL
+            for _ in 0..<5 {
+                appendRoot(current)
+                let parent = current.deletingLastPathComponent().standardizedFileURL
+                if parent == current {
+                    break
+                }
+                current = parent
+            }
+        }
+
         if let resourceURL = Bundle.main.resourceURL {
-            roots.append(resourceURL)
+            appendRootAndParents(resourceURL)
         }
         if let executableDirectory = Bundle.main.executableURL?.deletingLastPathComponent() {
-            roots.append(executableDirectory)
-            roots.append(executableDirectory.appendingPathComponent("../Resources").standardizedFileURL)
+            appendRootAndParents(executableDirectory)
+            appendRoot(executableDirectory.appendingPathComponent("../Resources"))
+        }
+        for bundle in Bundle.allBundles + Bundle.allFrameworks {
+            if bundle.bundleURL.deletingPathExtension().lastPathComponent == packageBundleName {
+                appendRoot(bundle.bundleURL.deletingLastPathComponent())
+            }
+            if let resourceURL = bundle.resourceURL {
+                appendRootAndParents(resourceURL)
+            }
+            if let executableDirectory = bundle.executableURL?.deletingLastPathComponent() {
+                appendRootAndParents(executableDirectory)
+            }
         }
 
         var urls: [URL] = []

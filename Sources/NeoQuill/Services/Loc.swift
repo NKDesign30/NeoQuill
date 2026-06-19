@@ -3,8 +3,8 @@ import Foundation
 /// Zentrale Lokalisierung mit umschaltbarer App-Sprache.
 ///
 /// Warum nicht direkt `Text("key")`: SwiftUI sucht Localizations in
-/// `Bundle.main`, die SPM-Resources liegen aber in `Bundle.module`
-/// (`NeoQuill_NeoQuill.bundle`). Aller UI-Text geht deshalb über diesen Helper.
+/// `Bundle.main`, die SPM-Resources liegen im installierten Build im
+/// `NeoQuill_NeoQuill.bundle`. Aller UI-Text geht deshalb über diesen Helper.
 /// Zusätzlich erlaubt er eine vom Nutzer gewählte Sprache (`app_language`),
 /// unabhängig von der System-Sprache — "system" folgt der System-Einstellung.
 enum Loc {
@@ -43,12 +43,35 @@ enum Loc {
     ]
 
     private static func resolveBundle(for lang: String) -> Bundle {
-        guard lang != "system",
-              let path = Bundle.module.path(forResource: lang, ofType: "lproj"),
-              let bundle = Bundle(path: path)
-        else {
-            return .module
+        let candidates = AppResourceBundle.candidates()
+        if lang != "system",
+           let bundle = localizedBundle(for: lang, in: candidates) {
+            return bundle
         }
-        return bundle
+        return resourceBundle(in: candidates)
+    }
+
+    private static func localizedBundle(for lang: String, in candidates: [Bundle]) -> Bundle? {
+        for candidate in candidates {
+            guard let path = candidate.path(forResource: lang, ofType: "lproj"),
+                  let bundle = Bundle(path: path) else {
+                continue
+            }
+            return bundle
+        }
+        return nil
+    }
+
+    private static func resourceBundle(in candidates: [Bundle]) -> Bundle {
+        let knownLanguages = selectableLanguages
+            .map(\.code)
+            .filter { $0 != "system" }
+
+        for candidate in candidates {
+            if knownLanguages.contains(where: { candidate.path(forResource: $0, ofType: "lproj") != nil }) {
+                return candidate
+            }
+        }
+        return .main
     }
 }

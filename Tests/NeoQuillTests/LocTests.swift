@@ -11,9 +11,9 @@ final class LocTests: XCTestCase {
         XCTAssertEqual(Loc.string("nonexistent.key.xyz", lang: "en"), "nonexistent.key.xyz")
     }
 
-    func testSystemLanguageResolvesFromModuleBundle() {
-        // "system" -> defaultLocalization (de). Beweist, dass Bundle.module die
-        // Lokalisierung trägt, ohne eine konkrete Sprache zu erzwingen.
+    func testSystemLanguageResolvesFromResourceBundle() {
+        // "system" -> defaultLocalization (de). Beweist, dass der produktive
+        // Resource-Bundle-Resolver Lokalisierung trägt, ohne eine konkrete Sprache zu erzwingen.
         XCTAssertEqual(Loc.string("test.probe", lang: "system"), "Lokalisierung funktioniert")
     }
 }
