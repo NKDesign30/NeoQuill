@@ -9,6 +9,17 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.12.2] - 2026-06-29
+
+- Added: Meetings können jetzt in Workspaces organisiert werden: Projekt, Team
+  oder Organisation mit eigenem Kontext.
+- Added: Aufnahmen und Audio-Importe landen direkt im aktuell gewählten
+  Workspace, und der Workspace-Kontext fließt in die KI-Zusammenfassung ein.
+- Added: Die Sidebar unterstützt Rechtsklick-Aktionen auf Meetings inklusive
+  Workspace-Zuordnung, Markdown-Export, Final-STT und Audio ergänzen.
+- Added: Mehrere Meetings lassen sich per Cmd-/Shift-Auswahl gemeinsam in einen
+  Workspace verschieben oder aus einem Workspace entfernen.
+
 ## [0.12.1] - 2026-06-19
 
 - Fixed: Die In-App-Einstellungen stürzen auf Installationen mit fehlendem
