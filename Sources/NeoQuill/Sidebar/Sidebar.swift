@@ -10,10 +10,10 @@ struct Sidebar: View {
     private var grouped: [(String, [MeetingSummary])] {
         let filtered: [MeetingSummary]
         if state.query.isEmpty {
-            filtered = state.meetings
+            filtered = state.visibleMeetings
         } else {
             let q = state.query.lowercased()
-            filtered = state.meetings.filter {
+            filtered = state.visibleMeetings.filter {
                 $0.title.lowercased().contains(q)
                     || $0.date.lowercased().contains(q)
                     || $0.platform.rawValue.lowercased().contains(q)
@@ -40,6 +40,7 @@ struct Sidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            workspacePicker
             search
             list
             footer
@@ -70,6 +71,12 @@ struct Sidebar: View {
             .padding(.bottom, 10)
     }
 
+    private var workspacePicker: some View {
+        WorkspacePicker()
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
+    }
+
     private var list: some View {
         ScrollView {
             LazyVStack(spacing: 1, pinnedViews: [.sectionHeaders]) {
@@ -86,10 +93,9 @@ struct Sidebar: View {
                             ForEach(items) { m in
                                 MeetingRow(
                                     meeting: m,
-                                    active: m.id == state.selectedMeetingId,
+                                    active: state.selectedMeetingIds.contains(m.id),
                                     isRecording: state.isRecording && m.id == state.selectedMeetingId,
-                                    density: state.density,
-                                    onTap: { state.select(m.id) }
+                                    density: state.density
                                 )
                             }
                         }
@@ -106,7 +112,7 @@ struct Sidebar: View {
 
     private var footer: some View {
         HStack {
-            Text("\(state.meetings.count) Meetings")
+            Text(footerCount)
                 .font(.neonMono(10))
                 .tracking(0.4)
                 .foregroundStyle(Neon.textTertiary)
@@ -126,5 +132,12 @@ struct Sidebar: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Neon.strokeHairline).frame(height: Neon.hairlineWidth)
         }
+    }
+
+    private var footerCount: String {
+        if state.workspaceSelection == .all {
+            return "\(state.meetings.count) Meetings"
+        }
+        return "\(state.visibleMeetings.count) / \(state.meetings.count) Meetings"
     }
 }

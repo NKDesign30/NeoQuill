@@ -160,6 +160,7 @@ struct MeetingSummary: Identifiable, Codable, Hashable {
     let group: String       // "Diesen Monat" / "Früher"
     let participantIds: [String]
     var unread: Bool = false
+    var workspaceId: String? = nil
 }
 
 struct MeetingDetail: Identifiable, Codable, Hashable {
@@ -178,6 +179,7 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
     let transcript: [TranscriptLine]
     var audioURL: String? = nil    // Pfad zur WAV-Datei in Application Support
     var lifecycle: MeetingLifecycle = .done   // Single Source of Truth für den Verarbeitungsstand
+    var workspaceId: String? = nil
 
     /// Abgeleitete "läuft gerade etwas?"-Sicht für die UI. Früher ein eigenes
     /// gespeichertes Feld; jetzt aus `lifecycle` abgeleitet, damit beide nie
@@ -209,7 +211,8 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
         chapters: [Chapter]? = nil,
         transcript: [TranscriptLine]? = nil,
         audioURL: String? = nil,
-        lifecycle: MeetingLifecycle? = nil
+        lifecycle: MeetingLifecycle? = nil,
+        workspaceId: String? = nil
     ) -> MeetingDetail {
         MeetingDetail(
             id: id,
@@ -226,7 +229,8 @@ struct MeetingDetail: Identifiable, Codable, Hashable {
             chapters: chapters ?? self.chapters,
             transcript: transcript ?? self.transcript,
             audioURL: audioURL ?? self.audioURL,
-            lifecycle: lifecycle ?? self.lifecycle
+            lifecycle: lifecycle ?? self.lifecycle,
+            workspaceId: workspaceId ?? self.workspaceId
         )
     }
 }

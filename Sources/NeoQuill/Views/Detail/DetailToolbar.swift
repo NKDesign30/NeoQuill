@@ -50,6 +50,25 @@ struct DetailToolbar: View {
 
                 Divider()
 
+                Menu("Workspace") {
+                    Button("Kein Workspace") {
+                        assignWorkspace(nil)
+                    }
+                    .disabled(meeting == nil || meeting?.workspaceId == nil)
+                    if !state.workspaces.isEmpty {
+                        Divider()
+                        ForEach(state.workspaces) { workspace in
+                            Button(workspace.name) {
+                                assignWorkspace(workspace.id)
+                            }
+                            .disabled(meeting == nil || meeting?.workspaceId == workspace.id)
+                        }
+                    }
+                }
+                .disabled(meeting == nil)
+
+                Divider()
+
                 Button("Markdown kopieren") { copyAction() }
                     .disabled(meeting == nil)
                 Button("Auf Desktop exportieren") { exportAction() }
@@ -108,6 +127,11 @@ struct DetailToolbar: View {
     private func mergeAudioAction() {
         guard let m = meeting, !m.processing else { return }
         state.mergeAudio(into: m.id)
+    }
+
+    private func assignWorkspace(_ workspaceId: String?) {
+        guard let m = meeting else { return }
+        state.assignWorkspace(meetingId: m.id, workspaceId: workspaceId)
     }
 
     private func exportAction() {

@@ -31,12 +31,14 @@ enum MeetingSummarizer {
         idPrefix: String = "",
         transcriptLines: [TranscriptLine],
         locale: String,
+        context: String? = nil,
         licenseAllowsSummary: () -> Bool
     ) async -> MeetingSummaryResult {
         let result = await PostProcessor.process(
             meetingId: meetingId,
             transcriptLines: transcriptLines,
             locale: locale,
+            context: context,
             licenseAllowsSummary: licenseAllowsSummary
         )
         return MeetingSummaryResult(

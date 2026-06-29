@@ -20,6 +20,7 @@ enum PostProcessor {
         meetingId: String,
         transcriptLines: [TranscriptLine],
         locale: String = "auto",
+        context: String? = nil,
         licenseAllowsSummary: () -> Bool = { true },
         defaults: UserDefaults = .standard,
         providerFactory: () -> SummaryProvider? = { AIProviderSettings.makeProvider() }
@@ -39,8 +40,9 @@ enum PostProcessor {
         // Lizenz-Gate. Recording + Transkript bleiben frei, nur die
         // AI-Summary-Stufe ist Pro. Bei block: Fallback-Title/TLDR aus
         // erstem Transkript-Satz, keine Highlights/Tasks/Chapters.
+        let promptInput = Self.promptInput(transcript: transcript, context: context)
         let ai: MeetingSummaryAI? = licenseAllowsSummary()
-            ? await summarize(transcript: transcript, locale: locale, defaults: defaults, providerFactory: providerFactory)
+            ? await summarize(transcript: promptInput, locale: locale, defaults: defaults, providerFactory: providerFactory)
             : nil
 
         return PostProcessResult(
@@ -84,6 +86,20 @@ enum PostProcessor {
         let omitted = lines.count - head.count - tail.count
         let marker = "\n\n[... \(omitted) Lines des Mittelteils gekuerzt — Anfang und Ende voll ...]\n\n"
         return (head.joined(separator: "\n")) + marker + (tail.joined(separator: "\n"))
+    }
+
+    private static func promptInput(transcript: String, context: String?) -> String {
+        guard let context = context?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !context.isEmpty else {
+            return transcript
+        }
+        return """
+        Workspace-Kontext:
+        \(context)
+
+        Transkript:
+        \(transcript)
+        """
     }
 
     private static func fallbackTitle(from lines: [TranscriptLine]) -> String {

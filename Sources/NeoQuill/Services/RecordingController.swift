@@ -93,6 +93,7 @@ final class RecordingController: ObservableObject {
     let detector = MeetingDetector()
     weak var store: MeetingStore?
     weak var speakerStore: SpeakerStore?
+    var activeWorkspaceId: String?
 
     /// Lizenz-Gate für AI-Summaries. Wird vom AppState gesetzt. Default `true`
     /// damit Tests + Builds ohne LicenseService weiterhin funktionieren.
@@ -107,6 +108,7 @@ final class RecordingController: ObservableObject {
 
     private var elapsedTimer: AnyCancellable?
     private var startedAt: Date?
+    private var sessionWorkspaceId: String?
     /// Plattform der laufenden Aufnahme — beim `start()` eingefroren, damit die
     /// Persist-Pipeline nie den Detector zur Persist-Zeit liest (der beim
     /// Call-Ende bereits auf `.unknown` resettet ist).
@@ -317,6 +319,7 @@ final class RecordingController: ObservableObject {
             if detector.detectedApp == .unknown {
                 detector.detectOnce()
             }
+            sessionWorkspaceId = activeWorkspaceId
             sessionPlatform = Self.mappedPlatform(from: detector.detectedApp)
             try await audioCapture.start(bundleIds: detector.detectedApp.bundleIdentifiers)
             startedAt = Date()
@@ -361,22 +364,25 @@ final class RecordingController: ObservableObject {
         // sodass die Detail-View mit "Wird transkribiert…" angezeigt wird.
         // Whisper + Claude laufen im Hintergrund und updaten das Detail wenn fertig.
         let meetingId = MeetingID.recording(at: session.startedAt)
+        let workspaceId = sessionWorkspaceId
         insertProvisionalMeeting(
             id: meetingId,
             runtime: session.runtime,
             started: session.startedAt,
+            workspaceId: workspaceId,
             platform: session.platform
         )
 
         state = .idle
         statusText = "Bereit"
+        sessionWorkspaceId = nil
         // Detector wurde nicht pausiert — kein Resume nötig. Self-Trigger
         // verhindert via State-Check in `handleDetectorChange`.
 
         // Heavy Lifting im Hintergrund — Whisper auf Stems, FluidAudio-Diarize,
         // Claude-Summary. Updated das Provisional-Detail Schritt für Schritt.
         Task { [weak self] in
-            await self?.persistMeeting(meetingId: meetingId, session: session)
+            await self?.persistMeeting(meetingId: meetingId, session: session, workspaceId: workspaceId)
         }
     }
 
@@ -464,13 +470,22 @@ final class RecordingController: ObservableObject {
             return "Audio konnte nicht gespeichert werden: \(error.localizedDescription)"
         }
 
-        insertProvisionalMeeting(id: meetingId, runtime: runtime, started: started, title: fileName, platform: .call)
+        let workspaceId = activeWorkspaceId
+        insertProvisionalMeeting(
+            id: meetingId,
+            runtime: runtime,
+            started: started,
+            title: fileName,
+            workspaceId: workspaceId,
+            platform: .call
+        )
         await persistImportedMeeting(
             meetingId: meetingId,
             samples: samples,
             started: started,
             runtime: runtime,
-            fileName: fileName
+            fileName: fileName,
+            workspaceId: workspaceId
         )
         return nil
     }
@@ -482,6 +497,7 @@ final class RecordingController: ObservableObject {
         runtime: TimeInterval,
         started: Date,
         title: String? = nil,
+        workspaceId: String? = nil,
         platform: Platform
     ) {
         guard let store else { return }
@@ -497,7 +513,8 @@ final class RecordingController: ObservableObject {
         let summary = MeetingSummary(
             id: id, title: provisionalTitle, date: dateShort, time: timeShort,
             duration: durationShort, platform: platform, wordCount: 0,
-            group: "Diesen Monat", participantIds: [LocalSpeakerProfile.id], unread: true
+            group: "Diesen Monat", participantIds: [LocalSpeakerProfile.id], unread: true,
+            workspaceId: workspaceId
         )
         let provisional = MeetingDetail(
             id: id, title: provisionalTitle, dateLong: dateLong, timeRange: timeRange,
@@ -505,12 +522,13 @@ final class RecordingController: ObservableObject {
             participants: participants,
             tldr: "Wird transkribiert…",
             highlights: [], tasks: [], chapters: [],
-            transcript: [], audioURL: nil, lifecycle: .transcribing
+            transcript: [], audioURL: nil, lifecycle: .transcribing,
+            workspaceId: workspaceId
         )
         store.insert(summary: summary, detail: provisional)
     }
 
-    private func persistMeeting(meetingId: String, session: CapturedSession) async {
+    private func persistMeeting(meetingId: String, session: CapturedSession, workspaceId: String?) async {
         guard let store else { return }
         let id = meetingId
         let timeline = MeetingTimeline(started: session.startedAt, runtime: session.runtime)
@@ -579,7 +597,8 @@ final class RecordingController: ObservableObject {
             chapters: [],
             transcript: allLines,
             audioURL: nil,
-            lifecycle: .summarizing
+            lifecycle: .summarizing,
+            workspaceId: workspaceId
         )
         store.updateDetail(transcribed)
         statusText = "KI verarbeitet"
@@ -595,6 +614,7 @@ final class RecordingController: ObservableObject {
             meetingId: id,
             transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
+            context: workspaceContext(for: workspaceId),
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
 
@@ -615,7 +635,8 @@ final class RecordingController: ObservableObject {
             chapters: summary.chapters,
             transcript: allLines,
             audioURL: shouldDeleteAudio ? nil : finalAudioPath,
-            lifecycle: .done
+            lifecycle: .done,
+            workspaceId: workspaceId
         )
 
         store.updateDetail(finalDetail)
@@ -633,7 +654,8 @@ final class RecordingController: ObservableObject {
         samples: [Float],
         started: Date,
         runtime: TimeInterval,
-        fileName: String
+        fileName: String,
+        workspaceId: String?
     ) async {
         guard let store else { return }
         let timeline = MeetingTimeline(started: started, runtime: runtime)
@@ -660,7 +682,8 @@ final class RecordingController: ObservableObject {
                 participants: [LocalSpeakerProfile.participant(spoke: durationShort)],
                 tldr: "Keine Sprach-Inhalte erkannt.",
                 highlights: [], tasks: [], chapters: [], transcript: [],
-                audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
+                audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done,
+                workspaceId: workspaceId
             )
             store.updateDetail(empty)
             if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
@@ -677,7 +700,8 @@ final class RecordingController: ObservableObject {
             duration: durationShort, platform: .call, wordCount: wordCount,
             participants: participants, tldr: "KI-Zusammenfassung läuft…",
             highlights: [], tasks: [], chapters: [], transcript: lines,
-            audioURL: audioPath, lifecycle: .summarizing
+            audioURL: audioPath, lifecycle: .summarizing,
+            workspaceId: workspaceId
         )
         store.updateDetail(transcribed)
         statusText = "KI verarbeitet"
@@ -686,6 +710,7 @@ final class RecordingController: ObservableObject {
             meetingId: meetingId,
             transcriptLines: summaryLines.isEmpty ? lines : summaryLines,
             locale: lang,
+            context: workspaceContext(for: workspaceId),
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         let finalTitle = summary.title.isEmpty ? fileName : summary.title
@@ -694,7 +719,8 @@ final class RecordingController: ObservableObject {
             duration: durationShort, platform: .call, wordCount: wordCount,
             participants: participants, tldr: summary.tldr,
             highlights: summary.highlights, tasks: summary.tasks, chapters: summary.chapters, transcript: lines,
-            audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done
+            audioURL: shouldDeleteAudio ? nil : audioPath, lifecycle: .done,
+            workspaceId: workspaceId
         )
         store.updateDetail(finalDetail)
         if shouldDeleteAudio { _ = try? PrivacyDataService.deleteAudioFiles(for: meetingId) }
@@ -792,6 +818,7 @@ final class RecordingController: ObservableObject {
             idPrefix: "merge-",
             transcriptLines: summaryLines.isEmpty ? mergedLines : summaryLines,
             locale: lang,
+            context: workspaceContext(for: detail.workspaceId),
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         store.updateDetail(detail.with(
@@ -983,6 +1010,7 @@ final class RecordingController: ObservableObject {
             idPrefix: "reprocess-",
             transcriptLines: summaryLines.isEmpty ? allLines : summaryLines,
             locale: lang,
+            context: workspaceContext(for: detail.workspaceId),
             licenseAllowsSummary: { [weak self] in self?.licenseAllowsSummary() ?? true }
         )
         let final = transcribed.with(
@@ -1255,6 +1283,22 @@ final class RecordingController: ObservableObject {
             return prefix
         }
         return "Aufnahme \(MeetingTimeline.timeString(from: started))"
+    }
+
+    private func workspaceContext(for workspaceId: String?) -> String? {
+        guard let workspaceId,
+              let workspace = store?.workspaces.first(where: { $0.id == workspaceId }) else {
+            return nil
+        }
+        var lines = [
+            "Name: \(workspace.name)",
+            "Art: \(workspace.kind.label)",
+        ]
+        let context = workspace.context.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !context.isEmpty {
+            lines.append("Notiz: \(context)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Internal wiring

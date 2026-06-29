@@ -29,7 +29,11 @@ final class AppState: ObservableObject {
     @Published var detailLayout: DetailLayout = AppState.loadLayout()
     @Published var density: SidebarDensity = AppState.loadDensity()
     @Published var selectedMeetingId: String? = nil
+    @Published var selectedMeetingIds: Set<String> = []
     @Published var query: String = ""
+    @Published var workspaceSelection: WorkspaceSelection = .all {
+        didSet { syncSelectedMeetingForCurrentFilter() }
+    }
     @Published var showProfileOnboarding: Bool = false
     @Published var pendingTranscriptDetection: TranscriptDetectionEvent?
     @Published var transientNotice: String?
@@ -86,12 +90,22 @@ final class AppState: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     @Published private(set) var meetings: [MeetingSummary] = []
+    @Published private(set) var workspaces: [MeetingWorkspace] = []
+
+    var visibleMeetings: [MeetingSummary] {
+        meetings.filter { workspaceSelection.includes($0) }
+    }
 
     /// Aktives Meeting — nil wenn nichts selektiert oder Store leer.
     /// RootView zeigt dann EmptyView.
     var activeMeeting: MeetingDetail? {
         guard let id = selectedMeetingId else { return nil }
         return store.detail(for: id)
+    }
+
+    var activeWorkspace: MeetingWorkspace? {
+        guard case .workspace(let id) = workspaceSelection else { return nil }
+        return workspaces.first { $0.id == id }
     }
 
     init() {
@@ -154,15 +168,21 @@ final class AppState: ObservableObject {
             .sink { [weak self] list in
                 guard let self else { return }
                 self.meetings = list
-                if list.isEmpty {
-                    self.selectedMeetingId = nil
-                    if self.viewMode == .detail { self.viewMode = .empty }
-                } else if self.selectedMeetingId == nil
-                          || !list.contains(where: { $0.id == self.selectedMeetingId }) {
-                    self.selectedMeetingId = list.first?.id
-                    if self.viewMode == .empty { self.viewMode = .detail }
+                self.syncSelectedMeetingForCurrentFilter()
+            }
+            .store(in: &cancellables)
+
+        store.$workspaces
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] list in
+                guard let self else { return }
+                self.workspaces = list
+                if case .workspace(let id) = self.workspaceSelection,
+                   !list.contains(where: { $0.id == id }) {
+                    self.workspaceSelection = .all
+                } else {
+                    self.syncSelectedMeetingForCurrentFilter()
                 }
-                self.objectWillChange.send()
             }
             .store(in: &cancellables)
 
@@ -243,10 +263,104 @@ final class AppState: ObservableObject {
 
     func select(_ meetingId: String) {
         selectedMeetingId = meetingId
+        selectedMeetingIds = [meetingId]
         viewMode = .detail
     }
 
+    private func syncSelectedMeetingForCurrentFilter() {
+        let visible = visibleMeetings
+        let visibleIds = Set(visible.map(\.id))
+        let filteredSelection = selectedMeetingIds.intersection(visibleIds)
+        if filteredSelection != selectedMeetingIds {
+            selectedMeetingIds = filteredSelection
+        }
+        if visible.isEmpty {
+            selectedMeetingId = nil
+            selectedMeetingIds = []
+            if viewMode == .detail { viewMode = .empty }
+        } else if selectedMeetingId == nil
+                  || !visible.contains(where: { $0.id == selectedMeetingId }) {
+            selectedMeetingId = visible.first?.id
+            selectedMeetingIds = selectedMeetingId.map { [$0] } ?? []
+            if viewMode == .empty { viewMode = .detail }
+        } else if selectedMeetingIds.isEmpty, let selectedMeetingId {
+            selectedMeetingIds = [selectedMeetingId]
+        }
+        objectWillChange.send()
+    }
+
+    func toggleMeetingSelection(_ meetingId: String) {
+        var selection = selectedMeetingIds
+        if selection.isEmpty, let selectedMeetingId {
+            selection.insert(selectedMeetingId)
+        }
+        let wasSelected = selection.contains(meetingId)
+        if wasSelected {
+            selection.remove(meetingId)
+        } else {
+            selection.insert(meetingId)
+        }
+        guard !selection.isEmpty else {
+            select(meetingId)
+            return
+        }
+        selectedMeetingIds = selection
+        if wasSelected, selectedMeetingId == meetingId {
+            selectedMeetingId = visibleMeetings.first(where: { selection.contains($0.id) })?.id
+        } else {
+            selectedMeetingId = meetingId
+        }
+        viewMode = .detail
+    }
+
+    func extendMeetingSelection(to meetingId: String) {
+        let ids = visibleMeetings.map(\.id)
+        guard let targetIndex = ids.firstIndex(of: meetingId),
+              let anchorId = selectedMeetingId,
+              let anchorIndex = ids.firstIndex(of: anchorId) else {
+            select(meetingId)
+            return
+        }
+        let lower = min(anchorIndex, targetIndex)
+        let upper = max(anchorIndex, targetIndex)
+        selectedMeetingIds = Set(ids[lower...upper])
+        selectedMeetingId = meetingId
+        viewMode = .detail
+    }
+
+    func contextMeetingIds(anchorMeetingId: String) -> Set<String> {
+        if selectedMeetingIds.contains(anchorMeetingId) {
+            return selectedMeetingIds
+        }
+        return [anchorMeetingId]
+    }
+
+    func selectWorkspace(_ selection: WorkspaceSelection) {
+        workspaceSelection = selection
+        recorder.activeWorkspaceId = selection.recordingWorkspaceId
+    }
+
+    @discardableResult
+    func createWorkspace(name: String, kind: WorkspaceKind, context: String) -> MeetingWorkspace? {
+        guard let workspace = store.createWorkspace(name: name, kind: kind, context: context) else {
+            return nil
+        }
+        selectWorkspace(.workspace(workspace.id))
+        return workspace
+    }
+
+    func assignWorkspace(meetingId: String, workspaceId: String?) {
+        store.assignWorkspace(meetingId: meetingId, workspaceId: workspaceId)
+        syncSelectedMeetingForCurrentFilter()
+    }
+
+    func assignWorkspace(meetingIds: Set<String>, workspaceId: String?) {
+        store.assignWorkspace(meetingIds: meetingIds, workspaceId: workspaceId)
+        syncSelectedMeetingForCurrentFilter()
+    }
+
     func startRecording() {
+        recorder.activeWorkspaceId = workspaceSelection.recordingWorkspaceId
         Task { await recorder.start() }
     }
 
@@ -294,6 +408,7 @@ final class AppState: ObservableObject {
         notify("Importiere „\(url.lastPathComponent)“ …", dismissAfter: 4)
         Task { [weak self] in
             guard let self else { return }
+            self.recorder.activeWorkspaceId = self.workspaceSelection.recordingWorkspaceId
             if let error = await self.recorder.importAudioFile(url: url) {
                 self.notify(error, dismissAfter: 8)
             } else {

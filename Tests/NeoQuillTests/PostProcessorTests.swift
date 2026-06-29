@@ -85,7 +85,7 @@ final class PostProcessorTests: XCTestCase {
             transcriptLines: [line],
             locale: "de",
             defaults: makeCleanDefaults(),
-            providerFactory: { StubSummaryProvider(result: summary) }
+            providerFactory: { TestSummaryProvider(result: summary) }
         )
 
         XCTAssertEqual(result.title, "Sprint-Planung")
@@ -93,6 +93,26 @@ final class PostProcessorTests: XCTestCase {
         XCTAssertEqual(result.highlights.count, 1)
         XCTAssertEqual(result.tasks.count, 1)
         XCTAssertEqual(result.chapters.count, 1)
+    }
+
+    func testPassesWorkspaceContextToProviderPromptInput() async {
+        let line = TranscriptLine(who: "ME", timestamp: "00:00", body: "Wir prüfen die Roadmap.")
+
+        let result = await PostProcessor.process(
+            meetingId: "test-\(UUID().uuidString)",
+            transcriptLines: [line],
+            locale: "de",
+            context: "Name: DAT\nArt: Organisation\nNotiz: Fokus auf Händlerprozesse.",
+            defaults: makeCleanDefaults(),
+            providerFactory: {
+                WorkspaceContextSummaryProvider(
+                    expectedContext: "Name: DAT",
+                    expectedTranscript: "Wir prüfen die Roadmap."
+                )
+            }
+        )
+
+        XCTAssertEqual(result.title, "Workspace-Kontext erkannt")
     }
 
     func testGateClosedSkipsProviderEvenWhenFactoryWouldSucceed() async {
@@ -124,8 +144,22 @@ final class PostProcessorTests: XCTestCase {
     }
 }
 
-private struct StubSummaryProvider: SummaryProvider {
+private struct TestSummaryProvider: SummaryProvider {
     let result: MeetingSummaryAI?
     func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? { result }
-    func probe() async -> ProviderProbeResult { .ok("stub") }
+    func probe() async -> ProviderProbeResult { .ok("ok") }
+}
+
+private struct WorkspaceContextSummaryProvider: SummaryProvider {
+    let expectedContext: String
+    let expectedTranscript: String
+
+    func summarize(transcript: String, locale: String) async -> MeetingSummaryAI? {
+        let title = transcript.contains(expectedContext) && transcript.contains(expectedTranscript)
+            ? "Workspace-Kontext erkannt"
+            : "Workspace-Kontext fehlt"
+        return MeetingSummaryAI(title: title, tldr: "", highlights: [], tasks: [], chapters: [])
+    }
+
+    func probe() async -> ProviderProbeResult { .ok("ok") }
 }

@@ -9,6 +9,7 @@ import SQLite3
 
 final class MeetingStore: ObservableObject {
 
+    @Published private(set) var workspaces: [MeetingWorkspace] = []
     @Published private(set) var meetings: [MeetingSummary] = []
     @Published private(set) var details: [String: MeetingDetail] = [:]
 
@@ -52,6 +53,17 @@ final class MeetingStore: ObservableObject {
 
     private func migrate() {
         runRaw("""
+            CREATE TABLE IF NOT EXISTS workspace (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                kind        TEXT NOT NULL,
+                context     TEXT NOT NULL DEFAULT '',
+                color_hex   INTEGER NOT NULL,
+                archived    INTEGER NOT NULL DEFAULT 0,
+                created_at  REAL NOT NULL
+            );
+        """)
+        runRaw("""
             CREATE TABLE IF NOT EXISTS meeting (
                 id            TEXT PRIMARY KEY,
                 title         TEXT NOT NULL,
@@ -86,6 +98,7 @@ final class MeetingStore: ObservableObject {
         // Auto-Recovery (siehe RecordingController.recoverOrphanedTranscripts),
         // damit ein dauerhaft scheiternder Lauf nicht endlos neu startet.
         runRaw("ALTER TABLE meeting ADD COLUMN transcribe_attempts INTEGER NOT NULL DEFAULT 0;")
+        runRaw("ALTER TABLE meeting ADD COLUMN workspace_id TEXT REFERENCES workspace(id) ON DELETE SET NULL;")
     }
 
     @discardableResult
@@ -109,6 +122,58 @@ final class MeetingStore: ObservableObject {
     /// Löscht alle echten Meeting-Daten ohne Demo-Re-Seed. Für Kunden-/Privacy-Reset.
     func deleteAllMeetings() {
         runRaw("DELETE FROM meeting;")
+        readBackToPublished()
+    }
+
+    @discardableResult
+    func createWorkspace(
+        name rawName: String,
+        kind: WorkspaceKind,
+        context rawContext: String = ""
+    ) -> MeetingWorkspace? {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        let context = rawContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        let workspace = MeetingWorkspace(name: name, kind: kind, context: context)
+        let sql = """
+            INSERT INTO workspace (id,name,kind,context,color_hex,archived,created_at)
+            VALUES (?,?,?,?,?,?,?)
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        bind(stmt, 1, workspace.id)
+        bind(stmt, 2, workspace.name)
+        bind(stmt, 3, workspace.kind.rawValue)
+        bind(stmt, 4, workspace.context)
+        sqlite3_bind_int64(stmt, 5, Int64(workspace.colorHex))
+        sqlite3_bind_int(stmt, 6, workspace.archived ? 1 : 0)
+        sqlite3_bind_double(stmt, 7, workspace.createdAt)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { return nil }
+        readBackToPublished()
+        return workspace
+    }
+
+    func assignWorkspace(meetingId: String, workspaceId: String?) {
+        assignWorkspace(meetingIds: [meetingId], workspaceId: workspaceId)
+    }
+
+    func assignWorkspace(meetingIds: Set<String>, workspaceId: String?) {
+        guard !meetingIds.isEmpty else { return }
+        if let workspaceId, !workspaces.contains(where: { $0.id == workspaceId }) {
+            return
+        }
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, "UPDATE meeting SET workspace_id = ? WHERE id = ?", -1, &stmt, nil) == SQLITE_OK {
+            for meetingId in meetingIds {
+                bindOptional(stmt, 1, workspaceId)
+                bind(stmt, 2, meetingId)
+                sqlite3_step(stmt)
+                sqlite3_reset(stmt)
+                sqlite3_clear_bindings(stmt)
+            }
+        }
+        sqlite3_finalize(stmt)
         readBackToPublished()
     }
 
@@ -160,10 +225,11 @@ final class MeetingStore: ObservableObject {
     }
 
     private func readBackToPublished() {
+        let workspaceList = readWorkspaces()
         var summaries: [MeetingSummary] = []
         var detailMap: [String: MeetingDetail] = [:]
         var stmt: OpaquePointer?
-        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript,audio_url,processing,lifecycle FROM meeting ORDER BY created_at DESC"
+        let sql = "SELECT id,title,date_short,date_long,time_short,time_range,duration,platform,word_count,grouping,unread,tldr,participants,highlights,tasks,chapters,transcript,audio_url,processing,lifecycle,workspace_id FROM meeting ORDER BY created_at DESC"
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             let decoder = JSONDecoder()
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -192,25 +258,29 @@ final class MeetingStore: ObservableObject {
                 let lifecycle  = textOrNil(stmt, 19)
                     .map { MeetingLifecycle(serialized: $0) }
                     ?? (processing ? .transcribing : .done)
+                let workspaceId = textOrNil(stmt, 20)
                 let platform   = Platform(rawValue: platStr) ?? .call
 
                 summaries.append(.init(
                     id: id, title: title, date: dateShort, time: timeShort,
                     duration: dur, platform: platform, wordCount: words,
-                    group: group, participantIds: participants.map(\.id), unread: unread
+                    group: group, participantIds: participants.map(\.id), unread: unread,
+                    workspaceId: workspaceId
                 ))
                 detailMap[id] = MeetingDetail(
                     id: id, title: title, dateLong: dateLong, timeRange: timeRange,
                     duration: dur, platform: platform, wordCount: words,
                     participants: participants, tldr: tldr,
                     highlights: highlights, tasks: tasks, chapters: chapters,
-                    transcript: transcript, audioURL: audioURL, lifecycle: lifecycle
+                    transcript: transcript, audioURL: audioURL, lifecycle: lifecycle,
+                    workspaceId: workspaceId
                 )
             }
         }
         sqlite3_finalize(stmt)
 
         let publish = {
+            self.workspaces = workspaceList
             self.meetings = summaries
             self.details = detailMap
         }
@@ -231,6 +301,34 @@ final class MeetingStore: ObservableObject {
         let s = String(cString: cstr)
         guard !s.isEmpty, let data = s.data(using: .utf8) else { return nil }
         return try? decoder.decode(type, from: data)
+    }
+
+    private func readWorkspaces() -> [MeetingWorkspace] {
+        var result: [MeetingWorkspace] = []
+        var stmt: OpaquePointer?
+        let sql = "SELECT id,name,kind,context,color_hex,archived,created_at FROM workspace WHERE archived = 0 ORDER BY name COLLATE NOCASE ASC"
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let id = String(cString: sqlite3_column_text(stmt, 0))
+                let name = String(cString: sqlite3_column_text(stmt, 1))
+                let kindRaw = String(cString: sqlite3_column_text(stmt, 2))
+                let context = textOrNil(stmt, 3) ?? ""
+                let colorHex = UInt32(sqlite3_column_int64(stmt, 4))
+                let archived = sqlite3_column_int(stmt, 5) == 1
+                let createdAt = sqlite3_column_double(stmt, 6)
+                result.append(MeetingWorkspace(
+                    id: id,
+                    name: name,
+                    kind: WorkspaceKind(rawValue: kindRaw) ?? .project,
+                    context: context,
+                    colorHex: colorHex,
+                    archived: archived,
+                    createdAt: createdAt
+                ))
+            }
+        }
+        sqlite3_finalize(stmt)
+        return result
     }
 
     func detail(for id: String) -> MeetingDetail? {
@@ -331,8 +429,8 @@ final class MeetingStore: ObservableObject {
     private func insertSummary(_ m: MeetingSummary) {
         let sql = """
             INSERT OR REPLACE INTO meeting
-            (id,title,date_short,date_long,time_short,duration,platform,word_count,grouping,unread,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            (id,title,date_short,date_long,time_short,duration,platform,word_count,grouping,unread,created_at,workspace_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
@@ -348,6 +446,7 @@ final class MeetingStore: ObservableObject {
         bind(stmt, 9, m.group)
         sqlite3_bind_int(stmt, 10, m.unread ? 1 : 0)
         sqlite3_bind_double(stmt, 11, Date().timeIntervalSince1970)
+        bindOptional(stmt, 12, m.workspaceId)
         sqlite3_step(stmt)
     }
 
@@ -358,7 +457,7 @@ final class MeetingStore: ObservableObject {
               title = ?, date_long = ?, time_range = ?, tldr = ?,
               word_count = ?,
               participants = ?, highlights = ?, tasks = ?, chapters = ?, transcript = ?,
-              audio_url = ?, processing = ?, lifecycle = ?
+              audio_url = ?, processing = ?, lifecycle = ?, workspace_id = ?
             WHERE id = ?
         """
         var stmt: OpaquePointer?
@@ -377,7 +476,8 @@ final class MeetingStore: ObservableObject {
         if let a = d.audioURL { bind(stmt, 11, a) } else { sqlite3_bind_null(stmt, 11) }
         sqlite3_bind_int(stmt, 12, d.processing ? 1 : 0)
         bind(stmt, 13, d.lifecycle.serialized)
-        bind(stmt, 14, d.id)
+        bindOptional(stmt, 14, d.workspaceId)
+        bind(stmt, 15, d.id)
         sqlite3_step(stmt)
     }
 
@@ -412,5 +512,13 @@ final class MeetingStore: ObservableObject {
     private func bind(_ stmt: OpaquePointer?, _ idx: Int32, _ value: String) {
         let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         sqlite3_bind_text(stmt, idx, value, -1, SQLITE_TRANSIENT)
+    }
+
+    private func bindOptional(_ stmt: OpaquePointer?, _ idx: Int32, _ value: String?) {
+        if let value, !value.isEmpty {
+            bind(stmt, idx, value)
+        } else {
+            sqlite3_bind_null(stmt, idx)
+        }
     }
 }
