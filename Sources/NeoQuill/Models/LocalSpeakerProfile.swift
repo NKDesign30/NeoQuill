@@ -19,7 +19,8 @@ enum LocalSpeakerProfile {
     static var role: String {
         let stored = UserDefaults.standard.string(forKey: AppSettings.ownerRole.key)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return stored?.isEmpty == false ? stored! : "Eigene Stimme"
+        if let stored, !stored.isEmpty { return stored }
+        return AppSettings.ownerRole.defaultValue
     }
 
     static func isLocalSpeakerId(_ speakerId: String) -> Bool {

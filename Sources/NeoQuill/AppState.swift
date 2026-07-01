@@ -71,13 +71,11 @@ final class AppState: ObservableObject {
     }
 
     private static func loadLayout() -> DetailLayout {
-        let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout.key) ?? "editorial"
-        return DetailLayout(rawValue: raw) ?? .editorial
+        DetailLayout(rawValue: UserDefaults.standard.value(for: AppSettings.detailLayout)) ?? .editorial
     }
 
     private static func loadDensity() -> SidebarDensity {
-        let raw = UserDefaults.standard.string(forKey: AppSettings.sidebarDensity.key) ?? "regular"
-        return SidebarDensity(rawValue: raw) ?? .regular
+        SidebarDensity(rawValue: UserDefaults.standard.value(for: AppSettings.sidebarDensity)) ?? .regular
     }
 
     let store = MeetingStore()

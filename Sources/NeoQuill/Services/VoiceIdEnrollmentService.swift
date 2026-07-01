@@ -191,6 +191,6 @@ final class VoiceIdEnrollmentService: ObservableObject {
 
 extension VoiceIdEnrollmentService {
     static var isEnrolled: Bool {
-        UserDefaults.standard.bool(forKey: AppSettings.voiceIdEnrolled.key)
+        UserDefaults.standard.value(for: AppSettings.voiceIdEnrolled)
     }
 }

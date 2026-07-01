@@ -106,7 +106,7 @@ final class OnboardingState: ObservableObject {
         let stored = defaults.string(forKey: AppSettings.ownerDisplayName.key) ?? ""
         let suggestion = NSFullUserName()
         self.name = stored.isEmpty ? suggestion : stored
-        self.language = defaults.string(forKey: AppSettings.language.key) ?? "auto"
+        self.language = defaults.value(for: AppSettings.language)
         self.autoDetect = defaults.value(for: AppSettings.autoDetectMeetings)
         self.liveCaptions = defaults.value(for: AppSettings.liveCaptionCapture)
         self.calendarPool = defaults.value(for: AppSettings.calendarParticipantPool)
