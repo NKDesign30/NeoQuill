@@ -9,6 +9,16 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.13.0] - 2026-07-01
+
+- Added: Neuer Meeting-Menüpunkt „An KI übergeben" kopiert einen fertigen
+  Übergabe-Prompt ins Clipboard, mit dem Neo, Chaty oder eine generische KI die
+  projektrelevanten Erkenntnisse aus dem Meeting herauspickt und ins passende
+  Projekt-Memory überträgt.
+- Added: Zwei Prompt-Varianten je Ziel-KI: ein schlanker Referenz-Prompt, der
+  die KI das Meeting selbst per lokaler `quill`-CLI laden lässt, und ein
+  Voll-Prompt mit komplettem Transkript für KIs ohne Datenbankzugriff.
+
 ## [0.12.2] - 2026-06-29
 
 - Added: Meetings können jetzt in Workspaces organisiert werden: Projekt, Team
