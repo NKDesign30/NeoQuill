@@ -22,7 +22,7 @@ enum Loc {
     }
 
     static var currentLanguage: String {
-        UserDefaults.standard.string(forKey: AppSettings.appLanguage) ?? "system"
+        UserDefaults.standard.string(forKey: AppSettings.appLanguage.key) ?? "system"
     }
 
     /// Locale für SwiftUI-eigene Formatierung (Datum, Zahlen) passend zur

@@ -6,7 +6,7 @@ enum LocalSpeakerProfile {
     static let colorHex: UInt32 = 0x2EAB73
 
     static var displayName: String {
-        let stored = UserDefaults.standard.string(forKey: AppSettings.ownerDisplayName)?
+        let stored = UserDefaults.standard.string(forKey: AppSettings.ownerDisplayName.key)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let stored, !stored.isEmpty { return stored }
 
@@ -17,7 +17,7 @@ enum LocalSpeakerProfile {
     }
 
     static var role: String {
-        let stored = UserDefaults.standard.string(forKey: AppSettings.ownerRole)?
+        let stored = UserDefaults.standard.string(forKey: AppSettings.ownerRole.key)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return stored?.isEmpty == false ? stored! : "Eigene Stimme"
     }

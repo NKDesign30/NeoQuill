@@ -4,7 +4,7 @@ struct MeetingActionQueueSection: View {
     let meeting: MeetingDetail
     var accent: Color = Neon.brandPrimary
     @EnvironmentObject private var state: AppState
-    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var neoSkillBridgeEnabled = false
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var neoSkillBridgeEnabled: Bool
 
     private var actions: [MeetingAction] {
         MeetingActionGenerator.suggest(for: meeting)

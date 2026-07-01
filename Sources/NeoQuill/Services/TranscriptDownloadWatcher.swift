@@ -42,7 +42,7 @@ enum TranscriptDownloadWatcher {
     // MARK: - Activation
 
     static func installIfEnabled() {
-        guard UserDefaults.standard.bool(forKey: AppSettings.autoWatchDownloadsForTranscripts) else { return }
+        guard UserDefaults.standard.bool(forKey: AppSettings.autoWatchDownloadsForTranscripts.key) else { return }
         startWatching()
     }
 

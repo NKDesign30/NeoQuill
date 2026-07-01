@@ -78,8 +78,8 @@ final class CloudOAuthFlowTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        defaults.set(" teams-client-id ", forKey: AppSettings.cloudTeamsClientId)
-        defaults.set("openid, profile\nOnlineMeetings.Read", forKey: AppSettings.cloudTeamsScopes)
+        defaults.set(" teams-client-id ", forKey: AppSettings.cloudTeamsClientId.key)
+        defaults.set("openid, profile\nOnlineMeetings.Read", forKey: AppSettings.cloudTeamsScopes.key)
 
         let config = CloudOAuthCatalog.config(for: .teams, defaults: defaults)
 
@@ -92,7 +92,7 @@ final class CloudOAuthFlowTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        defaults.set("  ", forKey: AppSettings.cloudZoomScopes)
+        defaults.set("  ", forKey: AppSettings.cloudZoomScopes.key)
 
         let config = CloudOAuthCatalog.config(for: .zoom, defaults: defaults)
 

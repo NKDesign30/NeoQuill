@@ -5,7 +5,7 @@ struct NeoQuillApp: App {
 
     @StateObject private var state: AppState
     @StateObject private var updater = AppUpdater()
-    @AppStorage(AppSettings.appLanguage) private var appLanguage = "system"
+    @AppStorage(AppSettings.appLanguage) private var appLanguage: String
 
     init() {
         FontRegistrar.registerAll()

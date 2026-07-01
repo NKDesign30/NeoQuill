@@ -205,13 +205,13 @@ struct SettingsView: View {
 }
 
 private struct CloudIntegrationsTab: View {
-    @AppStorage(AppSettings.localOnlyMode) private var localOnlyMode = false
-    @AppStorage(AppSettings.cloudTeamsClientId) private var teamsClientId = ""
-    @AppStorage(AppSettings.cloudTeamsScopes) private var teamsScopes = ""
-    @AppStorage(AppSettings.cloudMeetClientId) private var meetClientId = ""
-    @AppStorage(AppSettings.cloudMeetScopes) private var meetScopes = ""
-    @AppStorage(AppSettings.cloudZoomClientId) private var zoomClientId = ""
-    @AppStorage(AppSettings.cloudZoomScopes) private var zoomScopes = ""
+    @AppStorage(AppSettings.localOnlyMode) private var localOnlyMode: Bool
+    @AppStorage(AppSettings.cloudTeamsClientId) private var teamsClientId: String
+    @AppStorage(AppSettings.cloudTeamsScopes) private var teamsScopes: String
+    @AppStorage(AppSettings.cloudMeetClientId) private var meetClientId: String
+    @AppStorage(AppSettings.cloudMeetScopes) private var meetScopes: String
+    @AppStorage(AppSettings.cloudZoomClientId) private var zoomClientId: String
+    @AppStorage(AppSettings.cloudZoomScopes) private var zoomScopes: String
     @EnvironmentObject private var state: AppState
     @State private var lastError: String?
 
@@ -334,14 +334,14 @@ private struct CloudIntegrationsTab: View {
 }
 
 private struct AudioSettingsTab: View {
-    @AppStorage(AppSettings.appLanguage)  private var appLanguage: String = "system"
-    @AppStorage(AppSettings.whisperModel) private var whisperModel: String = "openai_whisper-small"
-    @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String = ""
-    @AppStorage(AppSettings.language)     private var language: String = "auto"
-    @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool = true
-    @AppStorage(AppSettings.sidebarDensity) private var density: String = "regular"
-    @AppStorage(AppSettings.ownerDisplayName) private var ownerDisplayName: String = ""
-    @AppStorage(AppSettings.ownerRole) private var ownerRole: String = "Eigene Stimme"
+    @AppStorage(AppSettings.appLanguage)  private var appLanguage: String
+    @AppStorage(AppSettings.whisperModel) private var whisperModel: String
+    @AppStorage(AppSettings.micDeviceId)  private var micDeviceId: String
+    @AppStorage(AppSettings.language)     private var language: String
+    @AppStorage(AppSettings.autoDetectMeetings) private var autoDetect: Bool
+    @AppStorage(AppSettings.sidebarDensity) private var density: String
+    @AppStorage(AppSettings.ownerDisplayName) private var ownerDisplayName: String
+    @AppStorage(AppSettings.ownerRole) private var ownerRole: String
 
     private let availableModels = [
         ("openai_whisper-tiny",   "Tiny (schnell, ~80 MB)"),
@@ -411,11 +411,11 @@ private struct AudioSettingsTab: View {
 }
 
 private struct AIIntelligenceTab: View {
-    @AppStorage(AppSettings.speakerDiarization) private var diarize: Bool = true
-    @AppStorage(AppSettings.liveCaptionCapture) private var liveCaptionCapture: Bool = false
-    @AppStorage(AppSettings.autoWatchDownloadsForTranscripts) private var watchDownloads: Bool = false
-    @AppStorage(AppSettings.voiceIdEnrolled) private var voiceIdEnrolled: Bool = false
-    @AppStorage(AppSettings.calendarParticipantPool) private var calendarPool: Bool = true
+    @AppStorage(AppSettings.speakerDiarization) private var diarize: Bool
+    @AppStorage(AppSettings.liveCaptionCapture) private var liveCaptionCapture: Bool
+    @AppStorage(AppSettings.autoWatchDownloadsForTranscripts) private var watchDownloads: Bool
+    @AppStorage(AppSettings.voiceIdEnrolled) private var voiceIdEnrolled: Bool
+    @AppStorage(AppSettings.calendarParticipantPool) private var calendarPool: Bool
     @EnvironmentObject private var state: AppState
     @State private var showVoiceIdSheet = false
 
@@ -478,14 +478,14 @@ private struct AIIntelligenceTab: View {
 }
 
 private struct ActionConnectorsTab: View {
-    @AppStorage(AppSettings.actionDefaultRecipient) private var defaultRecipient = ""
-    @AppStorage(AppSettings.actionJiraBaseURL) private var jiraBaseURL = ""
-    @AppStorage(AppSettings.actionWebhookURL) private var webhookURL = ""
-    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
-    @AppStorage(AppSettings.actionInboxEndpoint) private var inboxEndpoint = ""
-    @AppStorage(AppSettings.actionJiraMCPEnabled) private var jiraMCPEnabled = false
-    @AppStorage(AppSettings.actionJiraMCPPackage) private var jiraMCPPackage = ""
-    @AppStorage(AppSettings.actionJiraMCPCommand) private var jiraMCPCommand = NeonJiraMCPInstaller.defaultCommand
+    @AppStorage(AppSettings.actionDefaultRecipient) private var defaultRecipient: String
+    @AppStorage(AppSettings.actionJiraBaseURL) private var jiraBaseURL: String
+    @AppStorage(AppSettings.actionWebhookURL) private var webhookURL: String
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled: Bool
+    @AppStorage(AppSettings.actionInboxEndpoint) private var inboxEndpoint: String
+    @AppStorage(AppSettings.actionJiraMCPEnabled) private var jiraMCPEnabled: Bool
+    @AppStorage(AppSettings.actionJiraMCPPackage) private var jiraMCPPackage: String
+    @AppStorage(AppSettings.actionJiraMCPCommand) private var jiraMCPCommand: String
     @State private var jiraMCPStatus = NeonJiraMCPStatus.empty
     @State private var jiraMCPMessage = ""
     @State private var jiraMCPInstalling = false
@@ -652,8 +652,8 @@ private struct ActionConnectorsTab: View {
 }
 
 private struct DataPrivacyTab: View {
-    @AppStorage(AppSettings.localOnlyMode) private var localOnlyMode = false
-    @AppStorage(AppSettings.deleteAudioAfterTranscription) private var deleteAudioAfterTranscription = false
+    @AppStorage(AppSettings.localOnlyMode) private var localOnlyMode: Bool
+    @AppStorage(AppSettings.deleteAudioAfterTranscription) private var deleteAudioAfterTranscription: Bool
     @EnvironmentObject private var state: AppState
     @State private var showDeleteAllConfirm = false
     @State private var showDeleteAudioConfirm = false

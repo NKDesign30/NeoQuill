@@ -4,13 +4,13 @@ import XCTest
 final class PostProcessorTests: XCTestCase {
     func testSkipsClaudeSummaryWhenAnalysisIsDisabled() async {
         let defaults = UserDefaults.standard
-        let previous = defaults.object(forKey: AppSettings.claudeAnalysisEnabled)
-        defaults.set(false, forKey: AppSettings.claudeAnalysisEnabled)
+        let previous = defaults.object(forKey: AppSettings.claudeAnalysisEnabled.key)
+        defaults.set(false, forKey: AppSettings.claudeAnalysisEnabled.key)
         defer {
             if let previous {
-                defaults.set(previous, forKey: AppSettings.claudeAnalysisEnabled)
+                defaults.set(previous, forKey: AppSettings.claudeAnalysisEnabled.key)
             } else {
-                defaults.removeObject(forKey: AppSettings.claudeAnalysisEnabled)
+                defaults.removeObject(forKey: AppSettings.claudeAnalysisEnabled.key)
             }
         }
 
@@ -32,13 +32,13 @@ final class PostProcessorTests: XCTestCase {
 
     func testSkipsProviderSummaryInLocalOnlyMode() async {
         let defaults = UserDefaults.standard
-        let previousLocalOnly = defaults.object(forKey: AppSettings.localOnlyMode)
-        let previousClaudeEnabled = defaults.object(forKey: AppSettings.claudeAnalysisEnabled)
-        defaults.set(true, forKey: AppSettings.localOnlyMode)
-        defaults.set(true, forKey: AppSettings.claudeAnalysisEnabled)
+        let previousLocalOnly = defaults.object(forKey: AppSettings.localOnlyMode.key)
+        let previousClaudeEnabled = defaults.object(forKey: AppSettings.claudeAnalysisEnabled.key)
+        defaults.set(true, forKey: AppSettings.localOnlyMode.key)
+        defaults.set(true, forKey: AppSettings.claudeAnalysisEnabled.key)
         defer {
-            restore(previousLocalOnly, key: AppSettings.localOnlyMode)
-            restore(previousClaudeEnabled, key: AppSettings.claudeAnalysisEnabled)
+            restore(previousLocalOnly, key: AppSettings.localOnlyMode.key)
+            restore(previousClaudeEnabled, key: AppSettings.claudeAnalysisEnabled.key)
         }
 
         let body = "Bitte Follow-up Meeting erstellen."
@@ -117,7 +117,7 @@ final class PostProcessorTests: XCTestCase {
 
     func testGateClosedSkipsProviderEvenWhenFactoryWouldSucceed() async {
         let defaults = makeCleanDefaults()
-        defaults.set(true, forKey: AppSettings.localOnlyMode)
+        defaults.set(true, forKey: AppSettings.localOnlyMode.key)
         let body = "Lokal bleiben."
         let line = TranscriptLine(who: "ME", timestamp: "00:00", body: body)
 

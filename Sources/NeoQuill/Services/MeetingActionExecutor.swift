@@ -62,7 +62,7 @@ enum MeetingActionExecutor {
     static func mailtoURL(for action: MeetingAction, meeting: MeetingDetail) -> URL? {
         var components = URLComponents()
         components.scheme = "mailto"
-        components.path = UserDefaults.standard.stringOr(AppSettings.actionDefaultRecipient, default: "")
+        components.path = UserDefaults.standard.value(for: AppSettings.actionDefaultRecipient)
         components.queryItems = [
             URLQueryItem(name: "subject", value: "Follow-up: \(meeting.title)"),
             URLQueryItem(name: "body", value: action.body),
@@ -164,14 +164,14 @@ enum MeetingActionExecutor {
     }
 
     private static func configuredJiraURL() -> URL? {
-        let raw = UserDefaults.standard.stringOr(AppSettings.actionJiraBaseURL, default: "")
+        let raw = UserDefaults.standard.value(for: AppSettings.actionJiraBaseURL)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return nil }
         return URL(string: raw)
     }
 
     private static func configuredWebhookURL() -> URL? {
-        let raw = UserDefaults.standard.stringOr(AppSettings.actionWebhookURL, default: "")
+        let raw = UserDefaults.standard.value(for: AppSettings.actionWebhookURL)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return nil }
         return URL(string: raw)

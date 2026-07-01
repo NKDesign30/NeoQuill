@@ -5,7 +5,7 @@ import SwiftUI
 /// Der "Verbindung testen"-Button geht über `AIProviderSettings.makeProvider` und
 /// `SummaryProvider.probe`, kennt die einzelnen Anbieter also nicht.
 struct SummaryProviderSettingsSection: View {
-    @AppStorage(AppSettings.claudeAnalysisEnabled) private var summaryEnabled = true
+    @AppStorage(AppSettings.claudeAnalysisEnabled) private var summaryEnabled: Bool
 
     var body: some View {
         Section("Zusammenfassung") {
@@ -18,13 +18,13 @@ struct SummaryProviderSettingsSection: View {
 struct SummaryProviderConfigurationFields: View {
     var onVerificationChanged: ((Bool) -> Void)?
 
-    @AppStorage(AppSettings.aiSummaryProvider) private var providerRaw = AIProviderSettings.defaultProvider
-    @AppStorage(AppSettings.aiSummaryBaseURL) private var openAIBaseURL = AIProviderSettings.defaultOpenAIBaseURL
-    @AppStorage(AppSettings.aiSummaryModel) private var openAIModel = AIProviderSettings.defaultOpenAIModel
-    @AppStorage(AppSettings.aiAnthropicBaseURL) private var anthropicBaseURL = AIProviderSettings.defaultAnthropicBaseURL
-    @AppStorage(AppSettings.aiAnthropicModel) private var anthropicModel = AIProviderSettings.defaultAnthropicModel
-    @AppStorage(AppSettings.aiOllamaBaseURL) private var ollamaBaseURL = AIProviderSettings.defaultOllamaBaseURL
-    @AppStorage(AppSettings.aiOllamaModel) private var ollamaModel = AIProviderSettings.defaultOllamaModel
+    @AppStorage(AppSettings.aiSummaryProvider) private var providerRaw: String
+    @AppStorage(AppSettings.aiSummaryBaseURL) private var openAIBaseURL: String
+    @AppStorage(AppSettings.aiSummaryModel) private var openAIModel: String
+    @AppStorage(AppSettings.aiAnthropicBaseURL) private var anthropicBaseURL: String
+    @AppStorage(AppSettings.aiAnthropicModel) private var anthropicModel: String
+    @AppStorage(AppSettings.aiOllamaBaseURL) private var ollamaBaseURL: String
+    @AppStorage(AppSettings.aiOllamaModel) private var ollamaModel: String
 
     @State private var apiKeyInput = ""
     @State private var hasStoredKey = false

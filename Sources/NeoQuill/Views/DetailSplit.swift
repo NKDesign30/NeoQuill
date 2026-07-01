@@ -8,7 +8,7 @@ struct DetailSplit: View {
 
     @StateObject private var playback = AudioPlaybackController()
     @EnvironmentObject private var state: AppState
-    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled: Bool
     @State private var visibleTranscriptCount = TranscriptPaging.pageSize
     @State private var pagedTranscriptMeetingId: String?
 

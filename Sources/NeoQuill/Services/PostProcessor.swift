@@ -59,10 +59,10 @@ enum PostProcessor {
     /// nutzer-konfigurierten Schalter (Local-Only, KI-Analyse); das Lizenz-Gate
     /// bleibt bewusst die injizierte Closure des Aufrufers.
     private static func summarySkipReason(defaults: UserDefaults) -> String? {
-        if defaults.boolOr(AppSettings.localOnlyMode, default: false) {
+        if defaults.value(for: AppSettings.localOnlyMode) {
             return "Local-Only-Modus aktiv"
         }
-        if !defaults.boolOr(AppSettings.claudeAnalysisEnabled, default: true) {
+        if !defaults.value(for: AppSettings.claudeAnalysisEnabled) {
             return "KI-Analyse in den Einstellungen deaktiviert"
         }
         return nil

@@ -98,8 +98,10 @@ struct MeetingTranscriber {
                 NSLog("[NeoQuill] Final-STT Fallback auf WhisperKit (\(speaker)/\(stem)): \(error)")
             }
         }
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: language)
+        let model = UserDefaults.standard.value(for: AppSettings.whisperModel)
+        // Fallback ist hier bewusst der Call-Parameter, NICHT der Setting-Default:
+        // der Aufrufer hat die Sprache bereits aufgelöst.
+        let lang = UserDefaults.standard.string(forKey: AppSettings.language.key) ?? language
         _ = await whisperKitFallback.loadModel(model: model, language: lang)
         let lines = await whisperKitFallback.transcribeFull(audioData: audioData, speaker: speaker)
         let duration = TimeInterval(audioData.count) / AudioImporter.targetSampleRate

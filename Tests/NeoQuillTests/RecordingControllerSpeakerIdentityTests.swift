@@ -105,7 +105,7 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("RecordingControllerSpeakerIdentityTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        UserDefaults.standard.set(false, forKey: AppSettings.autoDetectMeetings)
+        UserDefaults.standard.set(false, forKey: AppSettings.autoDetectMeetings.key)
 
         let meetingStore = MeetingStore(url: tempDirectory.appendingPathComponent("meetings.sqlite"))
         let speakerStore = SpeakerStore(url: tempDirectory.appendingPathComponent("speakers.sqlite"))
@@ -177,7 +177,7 @@ final class RecordingControllerSpeakerIdentityTests: XCTestCase {
 
         func cleanup() {
             try? FileManager.default.removeItem(at: tempDirectory)
-            UserDefaults.standard.removeObject(forKey: AppSettings.autoDetectMeetings)
+            UserDefaults.standard.removeObject(forKey: AppSettings.autoDetectMeetings.key)
         }
     }
 }

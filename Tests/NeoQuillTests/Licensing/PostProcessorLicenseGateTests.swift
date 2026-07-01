@@ -11,15 +11,15 @@ final class PostProcessorLicenseGateTests: XCTestCase {
     func test_blocked_returnsFallback_andSkipsSummary() async {
         // Setup: Default-Defaults so dass ohne Gate ein Summary-Versuch laufen würde.
         let defaults = UserDefaults.standard
-        let prevClaude = defaults.object(forKey: AppSettings.claudeAnalysisEnabled)
-        let prevLocalOnly = defaults.object(forKey: AppSettings.localOnlyMode)
-        defaults.set(true, forKey: AppSettings.claudeAnalysisEnabled)
-        defaults.set(false, forKey: AppSettings.localOnlyMode)
+        let prevClaude = defaults.object(forKey: AppSettings.claudeAnalysisEnabled.key)
+        let prevLocalOnly = defaults.object(forKey: AppSettings.localOnlyMode.key)
+        defaults.set(true, forKey: AppSettings.claudeAnalysisEnabled.key)
+        defaults.set(false, forKey: AppSettings.localOnlyMode.key)
         defer {
-            if let prevClaude { defaults.set(prevClaude, forKey: AppSettings.claudeAnalysisEnabled) }
-            else { defaults.removeObject(forKey: AppSettings.claudeAnalysisEnabled) }
-            if let prevLocalOnly { defaults.set(prevLocalOnly, forKey: AppSettings.localOnlyMode) }
-            else { defaults.removeObject(forKey: AppSettings.localOnlyMode) }
+            if let prevClaude { defaults.set(prevClaude, forKey: AppSettings.claudeAnalysisEnabled.key) }
+            else { defaults.removeObject(forKey: AppSettings.claudeAnalysisEnabled.key) }
+            if let prevLocalOnly { defaults.set(prevLocalOnly, forKey: AppSettings.localOnlyMode.key) }
+            else { defaults.removeObject(forKey: AppSettings.localOnlyMode.key) }
         }
 
         let body = "Lizenz abgelaufen, keine Summary erlaubt."

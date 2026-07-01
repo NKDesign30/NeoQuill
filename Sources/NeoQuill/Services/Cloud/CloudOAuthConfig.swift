@@ -82,23 +82,23 @@ enum CloudOAuthCatalog {
     }
 
     private static func clientId(
-        defaultsKey: String,
+        defaultsKey: AppSetting<String>,
         bundleKey: String,
         bundle: Bundle,
         defaults: UserDefaults
     ) -> String {
-        if let configured = defaults.trimmedString(forKey: defaultsKey) {
+        if let configured = defaults.trimmedString(forKey: defaultsKey.key) {
             return configured
         }
         return bundle.string(forKey: bundleKey) ?? ""
     }
 
     private static func scopes(
-        defaultsKey: String,
+        defaultsKey: AppSetting<String>,
         defaults: UserDefaults,
         fallback: [String]
     ) -> [String] {
-        guard let configured = defaults.trimmedString(forKey: defaultsKey) else {
+        guard let configured = defaults.trimmedString(forKey: defaultsKey.key) else {
             return fallback
         }
         let parsed = configured

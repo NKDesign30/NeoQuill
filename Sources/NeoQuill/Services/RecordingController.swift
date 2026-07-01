@@ -133,7 +133,7 @@ final class RecordingController: ObservableObject {
     /// Detector bleibt waehrend Recording AKTIV — Auto-Stop bei Aufgelegt
     /// soll funktionieren. Self-Trigger wird durch State-Check verhindert.
     func applyAutoDetectSetting() {
-        let wantOn = UserDefaults.standard.boolOr(AppSettings.autoDetectMeetings, default: false)
+        let wantOn = UserDefaults.standard.value(for: AppSettings.autoDetectMeetings)
         if wantOn && !autoDetectActive {
             detector.startMonitoring()
             autoDetectActive = true
@@ -204,8 +204,8 @@ final class RecordingController: ObservableObject {
         let speech: RuntimePreparationStatus.RequiredAsset
 
         if !FinalSTTTranscriber.isAvailable {
-            let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-            let lang  = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+            let model = UserDefaults.standard.value(for: AppSettings.whisperModel)
+            let lang  = UserDefaults.standard.value(for: AppSettings.language)
             let loaded = await transcriber.loadModel(model: model, language: lang)
             speech = loaded
                 ? .ready("WhisperKit ist bereit (\(model), Sprache: \(lang)).")
@@ -215,7 +215,7 @@ final class RecordingController: ObservableObject {
         }
 
         let diarization: RuntimePreparationStatus.OptionalAsset
-        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
+        if UserDefaults.standard.value(for: AppSettings.speakerDiarization) {
             modelPreparation = RuntimePreparationStatus(
                 speech: speech,
                 diarization: .preparing("Bereite Speaker-Diarization vor ...")
@@ -283,8 +283,8 @@ final class RecordingController: ObservableObject {
         }
 
         // Modell + Sprache aus Settings, sonst Defaults.
-        let model = UserDefaults.standard.stringOr(AppSettings.whisperModel, default: "openai_whisper-small")
-        let lang  = UserDefaults.standard.stringOr(AppSettings.language,     default: "auto")
+        let model = UserDefaults.standard.value(for: AppSettings.whisperModel)
+        let lang  = UserDefaults.standard.value(for: AppSettings.language)
         if !FinalSTTTranscriber.isAvailable {
             let loaded = await transcriber.loadModel(model: model, language: lang)
             guard loaded else {
@@ -296,7 +296,7 @@ final class RecordingController: ObservableObject {
 
         // Diarization warm-up nur wenn aktiviert (lädt ~140 MB beim ersten Mal).
         // Bekannte Sprecher werden gleich als Bias mitgegeben — Re-Identification.
-        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false) {
+        if UserDefaults.standard.value(for: AppSettings.speakerDiarization) {
             await diarizer.warmUp()
             if let known = speakerStore?.fluidAudioSpeakers(), !known.isEmpty {
                 await diarizer.loadKnownSpeakers(known)
@@ -539,7 +539,7 @@ final class RecordingController: ObservableObject {
 
         let audioURL = persistCapturedAudio(meetingId: id, session: session)
 
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let lang = UserDefaults.standard.value(for: AppSettings.language)
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
         var allLines = await meetingTranscriber.transcribe(
@@ -555,7 +555,7 @@ final class RecordingController: ObservableObject {
         var diarizationSegments: [DiarizedSpeakerSegment] = []
         // FluidAudio-Diarize auf System-Audio (>= 5s) — labelt S1 ggf. um in S2/S3
         // bzw. matcht gegen bekannte Speaker (Re-ID via SpeakerStore).
-        if UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false), diarizer.isReady {
+        if UserDefaults.standard.value(for: AppSettings.speakerDiarization), diarizer.isReady {
             if session.sys.count > 16_000 * 5 {
                 statusText = "Erkenne Sprecher"
                 diarizationSegments = await runDiarization(samples: session.sys)
@@ -619,7 +619,7 @@ final class RecordingController: ObservableObject {
         )
 
         let finalAudioPath = audioURL?.path
-        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
+        let shouldDeleteAudio = UserDefaults.standard.value(for: AppSettings.deleteAudioAfterTranscription)
         let finalDetail = MeetingDetail(
             id: id,
             title: summary.title.isEmpty ? provisionalTitle : summary.title,
@@ -662,9 +662,9 @@ final class RecordingController: ObservableObject {
         let durationShort = timeline.durationShort
         let dateLong = timeline.dateLong
         let timeRange = timeline.timeRange
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let lang = UserDefaults.standard.value(for: AppSettings.language)
         let audioPath = AudioWriter.url(id: meetingId, stem: .mix).path
-        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
+        let shouldDeleteAudio = UserDefaults.standard.value(for: AppSettings.deleteAudioAfterTranscription)
 
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
         let lines = await meetingTranscriber.transcribe(
@@ -760,7 +760,7 @@ final class RecordingController: ObservableObject {
         store.updateDetail(detail.with(tldr: "Zusatz-Audio wird eingearbeitet…", lifecycle: .transcribing))
         statusText = FinalSTTTranscriber.isAvailable ? "Final-STT läuft" : "Transkribiere"
 
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let lang = UserDefaults.standard.value(for: AppSettings.language)
         let incoming = await meetingTranscriber.transcribe(
             meetingId: meetingId,
             mic: samples,
@@ -925,7 +925,7 @@ final class RecordingController: ObservableObject {
         statusText = "Final-STT läuft"
 
         let storedAudio = readStoredAudio(meetingId: meetingId, detail: detail)
-        let lang = UserDefaults.standard.stringOr(AppSettings.language, default: "auto")
+        let lang = UserDefaults.standard.value(for: AppSettings.language)
         var allLines = await meetingTranscriber.transcribe(
             meetingId: meetingId,
             mic: storedAudio.mic,
@@ -938,7 +938,7 @@ final class RecordingController: ObservableObject {
             ? detail.participants
             : collectParticipants(lines: allLines, baseDuration: detail.duration)
 
-        let diarizationEnabled = UserDefaults.standard.boolOr(AppSettings.speakerDiarization, default: false)
+        let diarizationEnabled = UserDefaults.standard.value(for: AppSettings.speakerDiarization)
         let diarSamplesAvailable = diarizationEnabled && diarizer.isReady && storedAudio.system.count > 16_000 * 5
         var diarSegments: [DiarizedSpeakerSegment] = []
         if diarSamplesAvailable {
@@ -969,7 +969,7 @@ final class RecordingController: ObservableObject {
 
         let summaryLines = TranscriptNoiseFilter.filtered(allLines)
         let wordCount = TranscriptNoiseFilter.wordCount(allLines)
-        let shouldDeleteAudio = UserDefaults.standard.boolOr(AppSettings.deleteAudioAfterTranscription, default: false)
+        let shouldDeleteAudio = UserDefaults.standard.value(for: AppSettings.deleteAudioAfterTranscription)
         guard !allLines.isEmpty else {
             let empty = detail.with(
                 title: "Aufnahme ohne Sprache",

@@ -6,7 +6,7 @@ struct SummaryPane: View {
     let meeting: MeetingDetail
     var accent: Color = Neon.brandPrimary
     @EnvironmentObject private var state: AppState
-    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled = false
+    @AppStorage(AppSettings.actionNeoSkillBridgeEnabled) private var inboxBridgeEnabled: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 32) {

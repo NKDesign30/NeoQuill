@@ -13,14 +13,14 @@ final class SupportDiagnosticsServiceTests: XCTestCase {
         try Data([6, 7, 8, 9]).write(to: recordings.appendingPathComponent("meeting-1.wav"))
 
         let defaults = UserDefaults(suiteName: "SupportDiagnosticsServiceTests-\(UUID().uuidString)")!
-        defaults.set("Private Speaker", forKey: AppSettings.ownerDisplayName)
-        defaults.set("https://jira.secret.local", forKey: AppSettings.actionJiraBaseURL)
-        defaults.set("https://hooks.secret.local", forKey: AppSettings.actionWebhookURL)
-        defaults.set("speaker@example.com", forKey: AppSettings.actionDefaultRecipient)
-        defaults.set("hardware-id-123", forKey: AppSettings.micDeviceId)
-        defaults.set("openai_whisper-small", forKey: AppSettings.whisperModel)
-        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel)
-        defaults.set(true, forKey: AppSettings.speakerDiarization)
+        defaults.set("Private Speaker", forKey: AppSettings.ownerDisplayName.key)
+        defaults.set("https://jira.secret.local", forKey: AppSettings.actionJiraBaseURL.key)
+        defaults.set("https://hooks.secret.local", forKey: AppSettings.actionWebhookURL.key)
+        defaults.set("speaker@example.com", forKey: AppSettings.actionDefaultRecipient.key)
+        defaults.set("hardware-id-123", forKey: AppSettings.micDeviceId.key)
+        defaults.set("openai_whisper-small", forKey: AppSettings.whisperModel.key)
+        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel.key)
+        defaults.set(true, forKey: AppSettings.speakerDiarization.key)
 
         let report = try SupportDiagnosticsService.makeReport(
             appVersion: appVersion,
@@ -55,7 +55,7 @@ final class SupportDiagnosticsServiceTests: XCTestCase {
         XCTAssertNil(unreadableAudio.channels)
         XCTAssertNil(unreadableAudio.frames)
         XCTAssertNil(unreadableAudio.durationSeconds)
-        XCTAssertTrue(json.contains(AppSettings.whisperModel))
+        XCTAssertTrue(json.contains(AppSettings.whisperModel.key))
         XCTAssertTrue(json.contains("mic_device_selected"))
         XCTAssertFalse(json.contains("Private Speaker"))
         XCTAssertFalse(json.contains("jira.secret"))

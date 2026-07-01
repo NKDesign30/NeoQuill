@@ -161,7 +161,7 @@ enum AIProviderSettings {
     static let defaultOllamaModel = "llama3.1"
 
     static func selectedProvider(defaults: UserDefaults = .standard) -> AISummaryProvider {
-        let raw = defaults.stringOr(AppSettings.aiSummaryProvider, default: defaultProvider)
+        let raw = defaults.value(for: AppSettings.aiSummaryProvider)
         // Unbekannter rawValue fällt auf denselben Default wie "nicht gesetzt" —
         // vorher zwei verschiedene Fallbacks (.openAICompatible vs .claudeCLI)
         // für zwei Spielarten von "nicht gesetzt".
@@ -201,8 +201,8 @@ enum AIProviderSettings {
     ) -> Result<OpenAICompatibleSummaryConfig, ProviderConfigError> {
         openAIStyleConfig(
             provider: .openAICompatible,
-            rawBaseURL: defaults.stringOr(AppSettings.aiSummaryBaseURL, default: defaultOpenAIBaseURL),
-            rawModel: defaults.stringOr(AppSettings.aiSummaryModel, default: defaultOpenAIModel),
+            rawBaseURL: defaults.value(for: AppSettings.aiSummaryBaseURL),
+            rawModel: defaults.value(for: AppSettings.aiSummaryModel),
             apiKey: secretStore.apiKey(for: .openAICompatible)
         )
     }
@@ -212,8 +212,8 @@ enum AIProviderSettings {
     ) -> Result<OpenAICompatibleSummaryConfig, ProviderConfigError> {
         openAIStyleConfig(
             provider: .ollama,
-            rawBaseURL: defaults.stringOr(AppSettings.aiOllamaBaseURL, default: defaultOllamaBaseURL),
-            rawModel: defaults.stringOr(AppSettings.aiOllamaModel, default: defaultOllamaModel),
+            rawBaseURL: defaults.value(for: AppSettings.aiOllamaBaseURL),
+            rawModel: defaults.value(for: AppSettings.aiOllamaModel),
             apiKey: "ollama"
         )
     }
@@ -222,8 +222,8 @@ enum AIProviderSettings {
         defaults: UserDefaults,
         secretStore: AIProviderSecretPersisting
     ) -> Result<AnthropicSummaryConfig, ProviderConfigError> {
-        let rawBaseURL = defaults.stringOr(AppSettings.aiAnthropicBaseURL, default: defaultAnthropicBaseURL)
-        let rawModel = defaults.stringOr(AppSettings.aiAnthropicModel, default: defaultAnthropicModel)
+        let rawBaseURL = defaults.value(for: AppSettings.aiAnthropicBaseURL)
+        let rawModel = defaults.value(for: AppSettings.aiAnthropicModel)
         guard let baseURL = URL(string: normalizeBaseURL(rawBaseURL)) else {
             return .failure(.invalidBaseURL(.anthropicAPI))
         }

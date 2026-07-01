@@ -103,22 +103,22 @@ final class OnboardingState: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
-        let stored = defaults.string(forKey: AppSettings.ownerDisplayName) ?? ""
+        let stored = defaults.string(forKey: AppSettings.ownerDisplayName.key) ?? ""
         let suggestion = NSFullUserName()
         self.name = stored.isEmpty ? suggestion : stored
-        self.language = defaults.string(forKey: AppSettings.language) ?? "auto"
-        self.autoDetect = defaults.boolOr(AppSettings.autoDetectMeetings, default: true)
-        self.liveCaptions = defaults.boolOr(AppSettings.liveCaptionCapture, default: true)
-        self.calendarPool = defaults.boolOr(AppSettings.calendarParticipantPool, default: true)
-        self.watchDownloads = defaults.boolOr(AppSettings.autoWatchDownloadsForTranscripts, default: false)
-        self.claudeAnalysisEnabled = defaults.boolOr(AppSettings.claudeAnalysisEnabled, default: true)
-        self.captureTeams  = defaults.boolOr(AppSettings.captureSourceTeams,  default: true)
-        self.captureZoom   = defaults.boolOr(AppSettings.captureSourceZoom,   default: true)
-        self.captureMeet   = defaults.boolOr(AppSettings.captureSourceMeet,   default: true)
-        self.captureSystem = defaults.boolOr(AppSettings.captureSourceSystem, default: true)
-        self.captureLocal  = defaults.boolOr(AppSettings.captureSourceLocal,  default: true)
-        self.selectedMicId = defaults.string(forKey: AppSettings.micDeviceId) ?? ""
-        if let raw = defaults.string(forKey: AppSettings.recordHotkey), !raw.isEmpty {
+        self.language = defaults.string(forKey: AppSettings.language.key) ?? "auto"
+        self.autoDetect = defaults.value(for: AppSettings.autoDetectMeetings)
+        self.liveCaptions = defaults.value(for: AppSettings.liveCaptionCapture)
+        self.calendarPool = defaults.value(for: AppSettings.calendarParticipantPool)
+        self.watchDownloads = defaults.value(for: AppSettings.autoWatchDownloadsForTranscripts)
+        self.claudeAnalysisEnabled = defaults.value(for: AppSettings.claudeAnalysisEnabled)
+        self.captureTeams  = defaults.value(for: AppSettings.captureSourceTeams)
+        self.captureZoom   = defaults.value(for: AppSettings.captureSourceZoom)
+        self.captureMeet   = defaults.value(for: AppSettings.captureSourceMeet)
+        self.captureSystem = defaults.value(for: AppSettings.captureSourceSystem)
+        self.captureLocal  = defaults.value(for: AppSettings.captureSourceLocal)
+        self.selectedMicId = defaults.string(forKey: AppSettings.micDeviceId.key) ?? ""
+        if let raw = defaults.string(forKey: AppSettings.recordHotkey.key), !raw.isEmpty {
             self.hotkeyParts = raw.split(separator: "+").map { String($0).trimmingCharacters(in: .whitespaces) }
         }
         refreshMicList()
@@ -185,21 +185,21 @@ final class OnboardingState: ObservableObject {
 
     func persistAll() {
         let defaults = UserDefaults.standard
-        defaults.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerDisplayName)
-        defaults.set(language, forKey: AppSettings.language)
-        defaults.set(autoDetect, forKey: AppSettings.autoDetectMeetings)
-        defaults.set(liveCaptions, forKey: AppSettings.liveCaptionCapture)
-        defaults.set(calendarPool, forKey: AppSettings.calendarParticipantPool)
-        defaults.set(watchDownloads, forKey: AppSettings.autoWatchDownloadsForTranscripts)
-        defaults.set(claudeAnalysisEnabled, forKey: AppSettings.claudeAnalysisEnabled)
-        defaults.set(captureTeams,  forKey: AppSettings.captureSourceTeams)
-        defaults.set(captureZoom,   forKey: AppSettings.captureSourceZoom)
-        defaults.set(captureMeet,   forKey: AppSettings.captureSourceMeet)
-        defaults.set(captureSystem, forKey: AppSettings.captureSourceSystem)
-        defaults.set(captureLocal,  forKey: AppSettings.captureSourceLocal)
-        defaults.set(selectedMicId, forKey: AppSettings.micDeviceId)
-        defaults.set(hotkeyParts.joined(separator: "+"), forKey: AppSettings.recordHotkey)
-        defaults.set(true, forKey: AppSettings.profileOnboarded)
+        defaults.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: AppSettings.ownerDisplayName.key)
+        defaults.set(language, forKey: AppSettings.language.key)
+        defaults.set(autoDetect, forKey: AppSettings.autoDetectMeetings.key)
+        defaults.set(liveCaptions, forKey: AppSettings.liveCaptionCapture.key)
+        defaults.set(calendarPool, forKey: AppSettings.calendarParticipantPool.key)
+        defaults.set(watchDownloads, forKey: AppSettings.autoWatchDownloadsForTranscripts.key)
+        defaults.set(claudeAnalysisEnabled, forKey: AppSettings.claudeAnalysisEnabled.key)
+        defaults.set(captureTeams,  forKey: AppSettings.captureSourceTeams.key)
+        defaults.set(captureZoom,   forKey: AppSettings.captureSourceZoom.key)
+        defaults.set(captureMeet,   forKey: AppSettings.captureSourceMeet.key)
+        defaults.set(captureSystem, forKey: AppSettings.captureSourceSystem.key)
+        defaults.set(captureLocal,  forKey: AppSettings.captureSourceLocal.key)
+        defaults.set(selectedMicId, forKey: AppSettings.micDeviceId.key)
+        defaults.set(hotkeyParts.joined(separator: "+"), forKey: AppSettings.recordHotkey.key)
+        defaults.set(true, forKey: AppSettings.profileOnboarded.key)
     }
 
     // MARK: - Permission queries

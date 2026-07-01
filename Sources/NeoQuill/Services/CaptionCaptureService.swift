@@ -42,7 +42,7 @@ final class CaptionCaptureService: ObservableObject {
 
     func start(for app: CallApp, startedAt: Date) {
         stop()
-        guard UserDefaults.standard.boolOr(AppSettings.liveCaptionCapture, default: false) else {
+        guard UserDefaults.standard.value(for: AppSettings.liveCaptionCapture) else {
             state = .disabled
             return
         }

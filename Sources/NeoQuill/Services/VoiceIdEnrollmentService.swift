@@ -167,7 +167,7 @@ final class VoiceIdEnrollmentService: ObservableObject {
                 embedding: embedding,
                 colorHex: LocalSpeakerProfile.colorHex
             )
-            UserDefaults.standard.set(true, forKey: AppSettings.voiceIdEnrolled)
+            UserDefaults.standard.set(true, forKey: AppSettings.voiceIdEnrolled.key)
             phase = .saved
         } catch {
             phase = .failed("Embedding konnte nicht berechnet werden: \(error.localizedDescription)")
@@ -191,6 +191,6 @@ final class VoiceIdEnrollmentService: ObservableObject {
 
 extension VoiceIdEnrollmentService {
     static var isEnrolled: Bool {
-        UserDefaults.standard.bool(forKey: AppSettings.voiceIdEnrolled)
+        UserDefaults.standard.bool(forKey: AppSettings.voiceIdEnrolled.key)
     }
 }

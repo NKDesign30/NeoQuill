@@ -67,12 +67,12 @@ final class AppState: ObservableObject {
     }
 
     private static func loadLayout() -> DetailLayout {
-        let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout) ?? "editorial"
+        let raw = UserDefaults.standard.string(forKey: AppSettings.detailLayout.key) ?? "editorial"
         return DetailLayout(rawValue: raw) ?? .editorial
     }
 
     private static func loadDensity() -> SidebarDensity {
-        let raw = UserDefaults.standard.string(forKey: AppSettings.sidebarDensity) ?? "regular"
+        let raw = UserDefaults.standard.string(forKey: AppSettings.sidebarDensity.key) ?? "regular"
         return SidebarDensity(rawValue: raw) ?? .regular
     }
 
@@ -194,10 +194,10 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         $detailLayout
-            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.detailLayout) }
+            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.detailLayout.key) }
             .store(in: &cancellables)
         $density
-            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.sidebarDensity) }
+            .sink { UserDefaults.standard.set($0.rawValue, forKey: AppSettings.sidebarDensity.key) }
             .store(in: &cancellables)
 
         // Settings → AppState reaktiv (User schaltet Density in Settings, Sidebar reagiert).
@@ -216,7 +216,7 @@ final class AppState: ObservableObject {
         // in Detail/Empty waehrend des Recordings. Der Aufnahme-Status
         // wird ueber die Floating-Pille (NSPanel) angezeigt, nicht im
         // Hauptfenster.
-        showProfileOnboarding = !UserDefaults.standard.boolOr(AppSettings.profileOnboarded, default: false)
+        showProfileOnboarding = !UserDefaults.standard.value(for: AppSettings.profileOnboarded)
         CaptionDebugDumper.installIfEnabled()
         TranscriptDownloadWatcher.installIfEnabled()
 

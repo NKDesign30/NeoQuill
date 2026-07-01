@@ -5,8 +5,8 @@ final class AIProviderSettingsTests: XCTestCase {
     func testBuildsOpenAICompatibleConfigFromDefaultsAndSecret() throws {
         let defaults = try makeDefaults()
         let store = InMemoryAIProviderSecretStore()
-        defaults.set("https://api.openai.com/v1/", forKey: AppSettings.aiSummaryBaseURL)
-        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel)
+        defaults.set("https://api.openai.com/v1/", forKey: AppSettings.aiSummaryBaseURL.key)
+        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel.key)
         try store.setAPIKey("sk-test", for: .openAICompatible)
 
         let config = try XCTUnwrap(
@@ -21,8 +21,8 @@ final class AIProviderSettingsTests: XCTestCase {
 
     func testOpenAICompatibleConfigRequiresSecret() throws {
         let defaults = try makeDefaults()
-        defaults.set("https://api.openai.com/v1", forKey: AppSettings.aiSummaryBaseURL)
-        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel)
+        defaults.set("https://api.openai.com/v1", forKey: AppSettings.aiSummaryBaseURL.key)
+        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel.key)
 
         XCTAssertNil(
             AIProviderSettings.openAICompatibleConfig(defaults: defaults, secretStore: InMemoryAIProviderSecretStore())
@@ -32,8 +32,8 @@ final class AIProviderSettingsTests: XCTestCase {
     func testBuildsAnthropicConfigFromDefaultsAndSecret() throws {
         let defaults = try makeDefaults()
         let store = InMemoryAIProviderSecretStore()
-        defaults.set("https://api.anthropic.com/v1/", forKey: AppSettings.aiAnthropicBaseURL)
-        defaults.set("claude-haiku-4-5", forKey: AppSettings.aiAnthropicModel)
+        defaults.set("https://api.anthropic.com/v1/", forKey: AppSettings.aiAnthropicBaseURL.key)
+        defaults.set("claude-haiku-4-5", forKey: AppSettings.aiAnthropicModel.key)
         try store.setAPIKey("sk-ant-test", for: .anthropic)
 
         let config = try XCTUnwrap(
@@ -48,7 +48,7 @@ final class AIProviderSettingsTests: XCTestCase {
 
     func testAnthropicConfigRequiresSecret() throws {
         let defaults = try makeDefaults()
-        defaults.set("claude-haiku-4-5", forKey: AppSettings.aiAnthropicModel)
+        defaults.set("claude-haiku-4-5", forKey: AppSettings.aiAnthropicModel.key)
 
         XCTAssertNil(
             AIProviderSettings.anthropicConfig(defaults: defaults, secretStore: InMemoryAIProviderSecretStore())
@@ -57,8 +57,8 @@ final class AIProviderSettingsTests: XCTestCase {
 
     func testBuildsOllamaConfigWithoutAPIKey() throws {
         let defaults = try makeDefaults()
-        defaults.set("http://localhost:11434/v1/", forKey: AppSettings.aiOllamaBaseURL)
-        defaults.set("llama3.1", forKey: AppSettings.aiOllamaModel)
+        defaults.set("http://localhost:11434/v1/", forKey: AppSettings.aiOllamaBaseURL.key)
+        defaults.set("llama3.1", forKey: AppSettings.aiOllamaModel.key)
 
         let config = try XCTUnwrap(AIProviderSettings.ollamaConfig(defaults: defaults))
 
@@ -90,32 +90,32 @@ final class AIProviderSettingsTests: XCTestCase {
 
     func testMakeProviderReturnsClaudeCLIWithoutConfig() throws {
         let defaults = try makeDefaults()
-        defaults.set(AISummaryProvider.claudeCLI.rawValue, forKey: AppSettings.aiSummaryProvider)
+        defaults.set(AISummaryProvider.claudeCLI.rawValue, forKey: AppSettings.aiSummaryProvider.key)
         let provider = AIProviderSettings.makeProvider(defaults: defaults, secretStore: InMemoryAIProviderSecretStore())
         XCTAssertTrue(provider is ClaudeCLISummaryProvider)
     }
 
     func testMakeProviderReturnsNilForOpenAIWithoutKey() throws {
         let defaults = try makeDefaults()
-        defaults.set(AISummaryProvider.openAICompatible.rawValue, forKey: AppSettings.aiSummaryProvider)
-        defaults.set("https://api.openai.com/v1", forKey: AppSettings.aiSummaryBaseURL)
-        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel)
+        defaults.set(AISummaryProvider.openAICompatible.rawValue, forKey: AppSettings.aiSummaryProvider.key)
+        defaults.set("https://api.openai.com/v1", forKey: AppSettings.aiSummaryBaseURL.key)
+        defaults.set("gpt-5.1", forKey: AppSettings.aiSummaryModel.key)
         let provider = AIProviderSettings.makeProvider(defaults: defaults, secretStore: InMemoryAIProviderSecretStore())
         XCTAssertNil(provider)
     }
 
     func testMakeProviderReturnsOllamaWithoutKey() throws {
         let defaults = try makeDefaults()
-        defaults.set(AISummaryProvider.ollama.rawValue, forKey: AppSettings.aiSummaryProvider)
-        defaults.set("http://localhost:11434/v1", forKey: AppSettings.aiOllamaBaseURL)
-        defaults.set("llama3.1", forKey: AppSettings.aiOllamaModel)
+        defaults.set(AISummaryProvider.ollama.rawValue, forKey: AppSettings.aiSummaryProvider.key)
+        defaults.set("http://localhost:11434/v1", forKey: AppSettings.aiOllamaBaseURL.key)
+        defaults.set("llama3.1", forKey: AppSettings.aiOllamaModel.key)
         let provider = AIProviderSettings.makeProvider(defaults: defaults, secretStore: InMemoryAIProviderSecretStore())
         XCTAssertTrue(provider is OpenAICompatibleSummaryProvider)
     }
 
     func testMakeProviderReturnsAnthropicWithKey() throws {
         let defaults = try makeDefaults()
-        defaults.set(AISummaryProvider.anthropicAPI.rawValue, forKey: AppSettings.aiSummaryProvider)
+        defaults.set(AISummaryProvider.anthropicAPI.rawValue, forKey: AppSettings.aiSummaryProvider.key)
         let store = InMemoryAIProviderSecretStore()
         try store.setAPIKey("sk-ant", for: .anthropic)
         let provider = AIProviderSettings.makeProvider(defaults: defaults, secretStore: store)

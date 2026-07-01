@@ -176,18 +176,18 @@ enum SupportDiagnosticsService {
             boolSetting(AppSettings.profileOnboarded, defaults: defaults),
             SupportDiagnosticsSetting(
                 key: "mic_device_selected",
-                value: (defaults.string(forKey: AppSettings.micDeviceId)?.isEmpty == false).description
+                value: (defaults.string(forKey: AppSettings.micDeviceId.key)?.isEmpty == false).description
             ),
         ]
         .sorted { $0.key < $1.key }
     }
 
-    private static func stringSetting(_ key: String, defaults: UserDefaults) -> SupportDiagnosticsSetting {
-        SupportDiagnosticsSetting(key: key, value: defaults.string(forKey: key) ?? "")
+    private static func stringSetting(_ setting: AppSetting<String>, defaults: UserDefaults) -> SupportDiagnosticsSetting {
+        SupportDiagnosticsSetting(key: setting.key, value: defaults.string(forKey: setting.key) ?? "")
     }
 
-    private static func boolSetting(_ key: String, defaults: UserDefaults) -> SupportDiagnosticsSetting {
-        SupportDiagnosticsSetting(key: key, value: defaults.bool(forKey: key).description)
+    private static func boolSetting(_ setting: AppSetting<Bool>, defaults: UserDefaults) -> SupportDiagnosticsSetting {
+        SupportDiagnosticsSetting(key: setting.key, value: defaults.bool(forKey: setting.key).description)
     }
 
     private static func fileSnapshot(
