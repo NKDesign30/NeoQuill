@@ -25,12 +25,16 @@ enum SidebarDensity: String, CaseIterable {
 @MainActor
 final class AppState: ObservableObject {
 
-    @Published var viewMode: ViewMode = .empty
+    /// Selection-State-Machine als Value-Type — die Anchor-/Range-/Filter-
+    /// Reduktion lebt (getestet) in `MeetingSelection`, AppState published nur.
+    @Published private(set) var selection = MeetingSelection()
     @Published var detailLayout: DetailLayout = AppState.loadLayout()
     @Published var density: SidebarDensity = AppState.loadDensity()
-    @Published var selectedMeetingId: String? = nil
-    @Published var selectedMeetingIds: Set<String> = []
     @Published var query: String = ""
+
+    var viewMode: ViewMode { selection.viewMode }
+    var selectedMeetingId: String? { selection.primaryId }
+    var selectedMeetingIds: Set<String> { selection.ids }
     @Published var workspaceSelection: WorkspaceSelection = .all {
         didSet { syncSelectedMeetingForCurrentFilter() }
     }
@@ -262,77 +266,23 @@ final class AppState: ObservableObject {
     // MARK: - Actions
 
     func select(_ meetingId: String) {
-        selectedMeetingId = meetingId
-        selectedMeetingIds = [meetingId]
-        viewMode = .detail
+        selection.select(meetingId)
     }
 
     private func syncSelectedMeetingForCurrentFilter() {
-        let visible = visibleMeetings
-        let visibleIds = Set(visible.map(\.id))
-        let filteredSelection = selectedMeetingIds.intersection(visibleIds)
-        if filteredSelection != selectedMeetingIds {
-            selectedMeetingIds = filteredSelection
-        }
-        if visible.isEmpty {
-            selectedMeetingId = nil
-            selectedMeetingIds = []
-            if viewMode == .detail { viewMode = .empty }
-        } else if selectedMeetingId == nil
-                  || !visible.contains(where: { $0.id == selectedMeetingId }) {
-            selectedMeetingId = visible.first?.id
-            selectedMeetingIds = selectedMeetingId.map { [$0] } ?? []
-            if viewMode == .empty { viewMode = .detail }
-        } else if selectedMeetingIds.isEmpty, let selectedMeetingId {
-            selectedMeetingIds = [selectedMeetingId]
-        }
-        objectWillChange.send()
+        selection.sync(visible: visibleMeetings.map(\.id))
     }
 
     func toggleMeetingSelection(_ meetingId: String) {
-        var selection = selectedMeetingIds
-        if selection.isEmpty, let selectedMeetingId {
-            selection.insert(selectedMeetingId)
-        }
-        let wasSelected = selection.contains(meetingId)
-        if wasSelected {
-            selection.remove(meetingId)
-        } else {
-            selection.insert(meetingId)
-        }
-        guard !selection.isEmpty else {
-            select(meetingId)
-            return
-        }
-        selectedMeetingIds = selection
-        if wasSelected, selectedMeetingId == meetingId {
-            selectedMeetingId = visibleMeetings.first(where: { selection.contains($0.id) })?.id
-        } else {
-            selectedMeetingId = meetingId
-        }
-        viewMode = .detail
+        selection.toggle(meetingId, visible: visibleMeetings.map(\.id))
     }
 
     func extendMeetingSelection(to meetingId: String) {
-        let ids = visibleMeetings.map(\.id)
-        guard let targetIndex = ids.firstIndex(of: meetingId),
-              let anchorId = selectedMeetingId,
-              let anchorIndex = ids.firstIndex(of: anchorId) else {
-            select(meetingId)
-            return
-        }
-        let lower = min(anchorIndex, targetIndex)
-        let upper = max(anchorIndex, targetIndex)
-        selectedMeetingIds = Set(ids[lower...upper])
-        selectedMeetingId = meetingId
-        viewMode = .detail
+        selection.extend(to: meetingId, visible: visibleMeetings.map(\.id))
     }
 
     func contextMeetingIds(anchorMeetingId: String) -> Set<String> {
-        if selectedMeetingIds.contains(anchorMeetingId) {
-            return selectedMeetingIds
-        }
-        return [anchorMeetingId]
+        selection.contextIds(anchor: anchorMeetingId)
     }
 
     func selectWorkspace(_ selection: WorkspaceSelection) {
@@ -470,8 +420,7 @@ final class AppState: ObservableObject {
     }
 
     func showEmpty() {
-        viewMode = .empty
-        selectedMeetingId = nil
+        selection.showEmpty()
     }
 
     var statusLabel: String { recorder.statusText }
