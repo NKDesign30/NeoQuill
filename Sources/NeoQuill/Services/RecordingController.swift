@@ -555,17 +555,15 @@ final class RecordingController: ObservableObject {
         var diarizationSegments: [DiarizedSpeakerSegment] = []
         // FluidAudio-Diarize auf System-Audio (>= 5s) — labelt S1 ggf. um in S2/S3
         // bzw. matcht gegen bekannte Speaker (Re-ID via SpeakerStore).
-        if UserDefaults.standard.value(for: AppSettings.speakerDiarization), diarizer.isReady {
-            if session.sys.count > 16_000 * 5 {
-                statusText = "Erkenne Sprecher"
-                diarizationSegments = await runDiarization(samples: session.sys)
-                for entry in diarizationSegments {
-                    if pendingEmbeddings[entry.speakerId] == nil {
-                        pendingEmbeddings[entry.speakerId] = entry.embedding
-                    }
-                }
-                persistMeetingEmbeddings(meetingId: id, embeddings: pendingEmbeddings)
-            }
+        if DiarizationStep.shouldRun(
+            enabled: UserDefaults.standard.value(for: AppSettings.speakerDiarization),
+            diarizerReady: diarizer.isReady,
+            sampleCount: session.sys.count
+        ) {
+            statusText = "Erkenne Sprecher"
+            diarizationSegments = await runDiarization(samples: session.sys)
+            pendingEmbeddings = DiarizationStep.collectEmbeddings(from: diarizationSegments)
+            persistMeetingEmbeddings(meetingId: id, embeddings: pendingEmbeddings)
         }
         if !captionEvents.isEmpty || !diarizationSegments.isEmpty {
             allLines = mergeSpeakers(lines: allLines, captionEvents: captionEvents, diarization: diarizationSegments)
@@ -938,17 +936,19 @@ final class RecordingController: ObservableObject {
             ? detail.participants
             : collectParticipants(lines: allLines, baseDuration: detail.duration)
 
-        let diarizationEnabled = UserDefaults.standard.value(for: AppSettings.speakerDiarization)
-        let diarSamplesAvailable = diarizationEnabled && diarizer.isReady && storedAudio.system.count > 16_000 * 5
+        let diarSamplesAvailable = DiarizationStep.shouldRun(
+            enabled: UserDefaults.standard.value(for: AppSettings.speakerDiarization),
+            diarizerReady: diarizer.isReady,
+            sampleCount: storedAudio.system.count
+        )
         var diarSegments: [DiarizedSpeakerSegment] = []
         if diarSamplesAvailable {
             statusText = "Erkenne Sprecher"
             diarSegments = await runDiarization(samples: storedAudio.system)
-            var freshEmbeddings: [String: [Float]] = [:]
-            for segment in diarSegments where freshEmbeddings[segment.speakerId] == nil {
-                freshEmbeddings[segment.speakerId] = segment.embedding
-            }
-            persistMeetingEmbeddings(meetingId: meetingId, embeddings: freshEmbeddings)
+            persistMeetingEmbeddings(
+                meetingId: meetingId,
+                embeddings: DiarizationStep.collectEmbeddings(from: diarSegments)
+            )
         }
         if diarSamplesAvailable || !platformEvents.isEmpty {
             allLines = mergeSpeakers(
