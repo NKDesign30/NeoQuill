@@ -3,13 +3,13 @@
     <channel>
         <title>NeoQuill</title>
         <item>
-            <title>0.12.2</title>
-            <pubDate>Mon, 29 Jun 2026 14:03:53 +0200</pubDate>
-            <sparkle:version>165</sparkle:version>
-            <sparkle:shortVersionString>0.12.2</sparkle:shortVersionString>
+            <title>0.13.0</title>
+            <pubDate>Wed, 01 Jul 2026 18:21:11 +0200</pubDate>
+            <sparkle:version>168</sparkle:version>
+            <sparkle:shortVersionString>0.13.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/NKDesign30/NeoQuill/releases/download/v0.12.2/NeoQuill-v0.12.2-build165-a3e5e45.dmg" length="1516008223" type="application/octet-stream" sparkle:edSignature="rK8mZazPy4qOZwllKcCZoyVR1dDeLm8aKDeUVCdudE2r18YJOHgSLGFcajEvXx1vZtzxiRfoXCPv7lrxp5umCQ=="/>
+            <enclosure url="https://github.com/NKDesign30/NeoQuill/releases/download/v0.13.0/NeoQuill-v0.13.0-build168-68eac14.dmg" length="1516059464" type="application/octet-stream" sparkle:edSignature="IQjsKfWlXPw1QObvosll3evnHWwD/iZvOnacWmgqQo71GnxUPvIV1MX9jUpqNLNe/L3xGe1WC2rhTnsEEjDcDw=="/>
         </item>
     </channel>
 </rss>
