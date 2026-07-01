@@ -54,13 +54,27 @@ enum PostProcessor {
         )
     }
 
+    /// `nil` = Summary darf laufen. Sonst der konkrete Grund fürs Überspringen —
+    /// landet im Log statt eines stummen `return nil`. Hier leben die beiden
+    /// nutzer-konfigurierten Schalter (Local-Only, KI-Analyse); das Lizenz-Gate
+    /// bleibt bewusst die injizierte Closure des Aufrufers.
+    private static func summarySkipReason(defaults: UserDefaults) -> String? {
+        if defaults.boolOr(AppSettings.localOnlyMode, default: false) {
+            return "Local-Only-Modus aktiv"
+        }
+        if !defaults.boolOr(AppSettings.claudeAnalysisEnabled, default: true) {
+            return "KI-Analyse in den Einstellungen deaktiviert"
+        }
+        return nil
+    }
+
     private static func summarize(
         transcript: String,
         locale: String,
         defaults: UserDefaults,
         providerFactory: () -> SummaryProvider?
     ) async -> MeetingSummaryAI? {
-        if let reason = SummaryGate.skipReason(defaults: defaults) {
+        if let reason = summarySkipReason(defaults: defaults) {
             NSLog("[PostProcessor] summary skipped: \(reason)")
             return nil
         }

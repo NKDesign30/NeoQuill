@@ -43,7 +43,8 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
             name: "Morgan",
             colorHex: 0x2EAB73,
             cachedEmbedding: staleCache,
-            allowCrossMeetingBackfill: false
+            allowCrossMeetingBackfill: false,
+            migratingIn: nil
         )
 
         let viaMeetingScoped = speakerStore.bestMatch(for: meetingScoped)
@@ -62,7 +63,8 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
             name: "Anna",
             colorHex: 0x7C8AFF,
             cachedEmbedding: cached,
-            allowCrossMeetingBackfill: false
+            allowCrossMeetingBackfill: false,
+            migratingIn: nil
         )
         XCTAssertEqual(speakerStore.bestMatch(for: cached)?.id, "speaker-anna")
     }
@@ -78,7 +80,8 @@ final class SpeakerIdentityCoordinatorTests: XCTestCase {
             internalId: "S1",
             name: "Morgan",
             colorHex: 0x2EAB73,
-            allowCrossMeetingBackfill: false
+            allowCrossMeetingBackfill: false,
+            migratingIn: nil
         )
 
         XCTAssertEqual(migrated, 0)

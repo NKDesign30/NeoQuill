@@ -22,15 +22,20 @@ enum AISummaryProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Braucht der Provider einen API-Key in der Keychain?
-    var requiresAPIKey: Bool {
+    /// Welcher Keychain-Scope den Key dieses Providers hält — `nil` für
+    /// Provider ohne eigenen Key (Claude CLI nutzt OAuth, Ollama ignoriert
+    /// den Bearer-Header). Die EINE Wahrheit für "Provider ↔ Keychain":
+    /// `requiresAPIKey` und die Settings-UI leiten beide hieraus ab.
+    var keyScope: AIProviderKeyScope? {
         switch self {
-        case .claudeCLI, .ollama:
-            return false
-        case .openAICompatible, .anthropicAPI:
-            return true
+        case .openAICompatible: return .openAICompatible
+        case .anthropicAPI: return .anthropic
+        case .claudeCLI, .ollama: return nil
         }
     }
+
+    /// Braucht der Provider einen API-Key in der Keychain?
+    var requiresAPIKey: Bool { keyScope != nil }
 }
 
 /// Welcher Keychain-Eintrag ein Provider-Key belegt. Ein Store, mehrere Scopes,

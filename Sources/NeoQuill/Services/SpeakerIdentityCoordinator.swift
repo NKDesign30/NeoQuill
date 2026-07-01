@@ -15,12 +15,6 @@ import Foundation
 /// macht den Kern ohne den `@MainActor`-Controller testbar.
 struct SpeakerIdentityCoordinator {
     let speakerStore: SpeakerStore
-    let store: MeetingStore?
-
-    init(speakerStore: SpeakerStore, store: MeetingStore? = nil) {
-        self.speakerStore = speakerStore
-        self.store = store
-    }
 
     /// Woher die Identität einer Zeile stammt — Plattform-Caption (live im
     /// Meeting getippt) oder Plattform-API (nachträglich importiert). Die einzige
@@ -114,6 +108,12 @@ struct SpeakerIdentityCoordinator {
     /// schreiben und cross-meeting backfillen — der historische Bug.
     ///
     /// Gibt zurück, wie viele weitere Meetings migriert wurden (UI-Feedback).
+    ///
+    /// `migratingIn` ist die EINE Stelle, die den MeetingStore braucht — nur
+    /// Relabel/Backfill schreiben in Meetings. `nil` heißt bewusst: Profil
+    /// upserten, aber keine Meeting-Migration (0 als Rückgabewert). Vorher hing
+    /// diese Fähigkeit an einem optionalen Konstruktor-Argument, das drei von
+    /// vier Call-Sites still wegließen.
     @discardableResult
     func label(
         meetingId: String?,
@@ -122,7 +122,8 @@ struct SpeakerIdentityCoordinator {
         colorHex: UInt32,
         knownSpeakerId: String? = nil,
         cachedEmbedding: [Float]? = nil,
-        allowCrossMeetingBackfill: Bool
+        allowCrossMeetingBackfill: Bool,
+        migratingIn store: MeetingStore?
     ) -> Int {
         let embedding = meetingId.flatMap { speakerStore.meetingEmbedding(meetingId: $0, internalId: internalId) }
             ?? cachedEmbedding
@@ -137,16 +138,17 @@ struct SpeakerIdentityCoordinator {
         } else {
             speakerStore.upsertIdentity(id: canonicalId, name: name, colorHex: colorHex)
         }
-        if let meetingId {
-            migrate(meetingId: meetingId, from: internalId, to: canonicalId, name: name, colorHex: colorHex)
+        if let meetingId, let store {
+            migrate(meetingId: meetingId, from: internalId, to: canonicalId, name: name, colorHex: colorHex, in: store)
         }
-        guard allowCrossMeetingBackfill else { return 0 }
+        guard allowCrossMeetingBackfill, let store else { return 0 }
         return backfillCrossMeetings(
             embedding: embedding,
             canonicalId: canonicalId,
             name: name,
             colorHex: colorHex,
-            currentMeetingId: meetingId
+            currentMeetingId: meetingId,
+            in: store
         )
     }
 
@@ -160,9 +162,10 @@ struct SpeakerIdentityCoordinator {
         from internalId: String,
         to canonicalId: String,
         name: String,
-        colorHex: UInt32
+        colorHex: UInt32,
+        in store: MeetingStore
     ) {
-        store?.relabelSpeaker(
+        store.relabelSpeaker(
             meetingId: meetingId,
             from: internalId,
             to: canonicalId,
@@ -220,9 +223,10 @@ struct SpeakerIdentityCoordinator {
         canonicalId: String,
         name: String,
         colorHex: UInt32,
-        currentMeetingId: String?
+        currentMeetingId: String?,
+        in store: MeetingStore
     ) -> Int {
-        guard !embedding.isEmpty, store != nil else { return 0 }
+        guard !embedding.isEmpty else { return 0 }
         let matches = speakerStore.meetingMatches(for: embedding, excluding: currentMeetingId)
         var seenMeetings: Set<String> = []
         var migrated = 0
@@ -237,7 +241,8 @@ struct SpeakerIdentityCoordinator {
                 from: match.internalId,
                 to: canonicalId,
                 name: name,
-                colorHex: colorHex
+                colorHex: colorHex,
+                in: store
             )
             seenMeetings.insert(match.meetingId)
             migrated += 1

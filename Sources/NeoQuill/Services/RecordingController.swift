@@ -1082,14 +1082,15 @@ final class RecordingController: ObservableObject {
         knownSpeakerId: String? = nil
     ) -> Int {
         guard let speakerStore else { return 0 }
-        return SpeakerIdentityCoordinator(speakerStore: speakerStore, store: store).label(
+        return SpeakerIdentityCoordinator(speakerStore: speakerStore).label(
             meetingId: meetingId,
             internalId: internalId,
             name: name,
             colorHex: colorHex,
             knownSpeakerId: knownSpeakerId,
             cachedEmbedding: lastEmbeddings[internalId],
-            allowCrossMeetingBackfill: licenseAllowsCrossMeetingSpeakerID()
+            allowCrossMeetingBackfill: licenseAllowsCrossMeetingSpeakerID(),
+            migratingIn: store
         )
     }
 

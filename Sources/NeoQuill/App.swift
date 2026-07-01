@@ -93,17 +93,13 @@ struct NeoQuillApp: App {
 struct RootView: View {
 
     @EnvironmentObject private var state: AppState
-    @State private var snapshot: LicenseSnapshot = LicenseSnapshot(
-        status: .notRequired, mode: .disabled,
-        firstLaunchDate: nil, cutoffDate: nil, activation: nil
-    )
 
     var body: some View {
         ZStack {
             QuillWindow {
                 Sidebar()
                 VStack(spacing: 0) {
-                    TrialBannerView(snapshot: snapshot) {
+                    LicenseTrialBanner(license: state.license) {
                         state.showLicenseGate = true
                     }
                     .padding(.horizontal, 16)
@@ -135,12 +131,17 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.16), value: state.isSettingsPresented)
-        .task {
-            // Initial sync + dann auf License-Service-Änderungen reagieren.
-            snapshot = state.license.snapshot
-            for await s in state.license.$snapshot.values {
-                snapshot = s
-            }
+    }
+
+    /// Beobachtet den LicenseService direkt — RootView hält keine
+    /// handgespiegelte Snapshot-Kopie mehr (vorher: @State + for-await-Loop,
+    /// ein zweiter Read-Pfad neben den direkten `license.snapshot`-Lesern).
+    private struct LicenseTrialBanner: View {
+        @ObservedObject var license: LicenseService
+        let onTap: () -> Void
+
+        var body: some View {
+            TrialBannerView(snapshot: license.snapshot, onTap: onTap)
         }
     }
 

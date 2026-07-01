@@ -36,13 +36,9 @@ struct SummaryProviderConfigurationFields: View {
         AISummaryProvider(rawValue: providerRaw) ?? .openAICompatible
     }
 
-    private var keyScope: AIProviderKeyScope? {
-        switch provider {
-        case .openAICompatible: return .openAICompatible
-        case .anthropicAPI: return .anthropic
-        case .claudeCLI, .ollama: return nil
-        }
-    }
+    /// Provider ↔ Keychain-Scope lebt am Enum (`AISummaryProvider.keyScope`) —
+    /// die View trägt kein eigenes Mapping mehr.
+    private var keyScope: AIProviderKeyScope? { provider.keyScope }
 
     var body: some View {
         Group {
