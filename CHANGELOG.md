@@ -9,6 +9,19 @@ GitHub Release und dieser Changelog müssen für jedes Release zusammenpassen.
 
 - Nächste Änderungen werden hier gesammelt, bis `VERSION` erhöht wird.
 
+## [0.13.1] - 2026-07-02
+
+- Changed: Einstellungen haben jetzt genau eine Default-Quelle — Key und
+  Vorbelegung sind eine typisierte Definition. Widersprüchliche Vorbelegungen
+  zwischen Einstellungs-UI, Registrierung und internen Lesepfaden (z. B. bei
+  der Sprechererkennung) sind damit konstruktiv ausgeschlossen.
+- Changed: Meeting-Auswahl der Sidebar (Einzel-, Cmd- und Shift-Selektion,
+  Workspace-Filter-Abgleich) und das Start-Gate der Sprechererkennung sind
+  eigenständige, getestete Module — 21 neue Tests sichern das Verhalten ab.
+- Changed: Interne Aufräumarbeiten ohne Verhaltensänderung: Summary-Gate in
+  den PostProcessor gefaltet, Provider-Key-Zuordnung als eine Wahrheit am
+  Provider-Modell, Lizenz-Banner beobachtet den Lizenz-Service direkt.
+
 ## [0.13.0] - 2026-07-01
 
 - Added: Neuer Meeting-Menüpunkt „An KI übergeben" kopiert einen fertigen
